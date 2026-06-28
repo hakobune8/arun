@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	agentosgh "github.com/kazyamaz200/agentos/internal/github"
 	"github.com/kazyamaz200/agentos/internal/llm"
 	"github.com/kazyamaz200/agentos/internal/profile"
 	"github.com/kazyamaz200/agentos/internal/runtime"
@@ -15,10 +16,12 @@ import (
 )
 
 var (
-	taskFile    string
-	profileFile string
-	dryRun      bool
-	verbose     bool
+	taskFile       string
+	profileFile    string
+	dryRun         bool
+	verbose        bool
+	runCreatePR    bool
+	runPRRepo      string
 )
 
 var runCmd = &cobra.Command{
@@ -43,6 +46,8 @@ func init() {
 	runCmd.Flags().StringVar(&profileFile, "profile", "", "Path to profile YAML file")
 	runCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview actions without making changes")
 	runCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
+	runCmd.Flags().BoolVar(&runCreatePR, "pr", false, "Create a PR after successful run")
+	runCmd.Flags().StringVar(&runPRRepo, "pr-repo", "", "GitHub repo for PR (owner/name)")
 	runCmd.MarkFlagRequired("task")
 	runCmd.MarkFlagRequired("profile")
 }
@@ -89,5 +94,58 @@ func runTask() error {
 	}
 
 	rt := runtime.NewRuntime(llmClient, prof, ws, cfg)
-	return rt.Run(context.Background(), tk)
+	if err := rt.Run(context.Background(), tk); err != nil {
+		return err
+	}
+
+	if runCreatePR {
+		if runPRRepo == "" {
+			return fmt.Errorf("--pr-repo is required when --pr is set")
+		}
+		if err := createPRFromRun(tk); err != nil {
+			return fmt.Errorf("create PR: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func createPRFromRun(tk *task.Task) error {
+	owner, name, err := parseRepo(runPRRepo)
+	if err != nil {
+		return err
+	}
+
+	prBody := readRunArtifact(tk, "pr_body.md")
+	if prBody == "" {
+		prBody = tk.Description
+	}
+
+	client := agentosgh.NewClient(owner, name)
+	pr, err := client.CreatePR(agentosgh.CreatePRRequest{
+		Title: tk.Title,
+		Body:  prBody,
+		Head:  tk.Branch,
+		Base:  tk.BaseBranch,
+	})
+	if err != nil {
+		return fmt.Errorf("create PR: %w", err)
+	}
+
+	fmt.Printf("Pull Request created: #%d\n", pr.Number)
+	fmt.Printf("URL: %s\n", pr.HTMLURL)
+	return nil
+}
+
+func readRunArtifact(tk *task.Task, name string) string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	path := filepath.Join(homeDir, ".agentos", "runs", tk.ID, name)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }
