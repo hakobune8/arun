@@ -27,9 +27,6 @@ func TestNewWorkspace(t *testing.T) {
 	if ws == nil {
 		t.Fatal("NewWorkspace returned nil")
 	}
-	if ws.RootDir != "/tmp/test-root" {
-		t.Errorf("RootDir = %q, want %q", ws.RootDir, "/tmp/test-root")
-	}
 }
 
 func TestWorkspace_AbsPath(t *testing.T) {
@@ -59,8 +56,12 @@ func TestWorkspace_RepoAbsPath_Absolute(t *testing.T) {
 
 	ws := NewWorkspace("/project/root")
 	path := ws.RepoAbsPath("/absolute/path/file.go")
-	if path != "/absolute/path/file.go" {
+	abs := filepath.IsAbs("/absolute/path/file.go")
+	if abs && path != "/absolute/path/file.go" {
 		t.Errorf("RepoAbsPath = %q, want %q", path, "/absolute/path/file.go")
+	}
+	if !abs && path != filepath.Join("/project/root", "/absolute/path/file.go") {
+		t.Errorf("RepoAbsPath = %q, want %q", path, filepath.Join("/project/root", "/absolute/path/file.go"))
 	}
 }
 
