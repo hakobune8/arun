@@ -75,7 +75,7 @@ func TestLocalStore_Search_ReturnsSortedByCosineSimilarity(t *testing.T) {
 	store := NewLocalStore(t.TempDir())
 	ctx := context.Background()
 
-	store.Upsert(ctx, "sim_coll", []Point{
+	store.Upsert(ctx, "sim_coll", []Point{ //nolint:errcheck // test helper, error checked via search
 		{ID: "close", Vector: []float32{0.9, 0.1, 0}},
 		{ID: "far", Vector: []float32{0.1, 0.9, 0}},
 	})
@@ -116,7 +116,7 @@ func TestLocalStore_DeleteCollection_RemovesFile(t *testing.T) {
 	store := NewLocalStore(t.TempDir())
 	ctx := context.Background()
 
-	store.Upsert(ctx, "del_coll", []Point{
+	store.Upsert(ctx, "del_coll", []Point{ //nolint:errcheck // test helper, error checked via search
 		{ID: "p1", Vector: []float32{1, 0, 0}},
 	})
 

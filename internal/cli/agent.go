@@ -79,8 +79,8 @@ func init() {
 	agentRunCmd.Flags().StringVarP(&agentTemplate, "template", "t", "profiles/agents/template.yaml", "Agent template file")
 	agentRunCmd.Flags().StringVarP(&agentName, "agent", "a", "", "Agent name to run")
 	agentRunCmd.Flags().StringVarP(&agentTask, "task", "", "", "Task description")
-	agentRunCmd.MarkFlagRequired("agent")
-	agentRunCmd.MarkFlagRequired("task")
+	_ = agentRunCmd.MarkFlagRequired("agent")  //nolint:errcheck // cobra returns error only for invalid flag name
+	_ = agentRunCmd.MarkFlagRequired("task")    //nolint:errcheck // cobra returns error only for invalid flag name
 }
 
 func runAgentList() error {

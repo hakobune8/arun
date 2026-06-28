@@ -202,7 +202,7 @@ func TestRunStore_FilePermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode()&0444 == 0 {
+	if info.Mode()&0o444 == 0 {
 		t.Error("file should be readable")
 	}
 }

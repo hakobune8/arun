@@ -92,7 +92,7 @@ func TestLiteLLMClient_HTTPError(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"bad request"}`))
+		w.Write([]byte(`{"error":"bad request"}`)) //nolint:errcheck // test mock handler
 	}))
 	defer srv.Close()
 
@@ -108,7 +108,7 @@ func TestLiteLLMClient_NoChoices(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"choices":[]}`))
+		w.Write([]byte(`{"choices":[]}`)) //nolint:errcheck // test mock handler
 	}))
 	defer srv.Close()
 
@@ -124,7 +124,7 @@ func TestLiteLLMClient_InvalidJSON(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`not json`))
+		w.Write([]byte(`not json`)) //nolint:errcheck // test mock handler
 	}))
 	defer srv.Close()
 
@@ -142,7 +142,7 @@ func TestLiteLLMClient_AuthHeader(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader = r.Header.Get("Authorization")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(ChatResponse{
+		json.NewEncoder(w).Encode(ChatResponse{ //nolint:errcheck // test mock handler
 			Choices: []Choice{{Message: Message{Role: RoleAssistant, Content: "ok"}}},
 		})
 	}))

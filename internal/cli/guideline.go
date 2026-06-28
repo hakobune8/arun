@@ -66,7 +66,7 @@ func init() {
 	glLoadCmd.Flags().StringVarP(&glDir, "dir", "d", "guidelines", "Guidelines directory")
 	glSearchCmd.Flags().StringVarP(&glQuery, "query", "q", "", "Search query")
 	glSearchCmd.Flags().IntVarP(&glLimit, "limit", "l", 10, "Max results")
-	glSearchCmd.MarkFlagRequired("query")
+	_ = glSearchCmd.MarkFlagRequired("query") //nolint:errcheck // cobra returns error only for invalid flag name
 }
 
 func runGlLoad() error {

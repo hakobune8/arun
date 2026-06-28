@@ -31,6 +31,7 @@ type SearchResult struct {
 }
 
 // VectorStore defines the interface for vector database operations.
+//nolint:revive // stutter is acceptable for package-level interface
 type VectorStore interface {
 	Name() string
 	Upsert(ctx context.Context, collection string, points []Point) error

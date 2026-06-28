@@ -72,11 +72,11 @@ func (t *WriteFileTool) Run(ctx context.Context, input ToolInput) ToolOutput {
 
 	fullPath := filepath.Join(t.Workspace, filePath)
 	dir := filepath.Dir(fullPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return ToolOutput{Success: false, Error: fmt.Sprintf("create dir: %v", err)}
 	}
 
-	if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(fullPath, []byte(content), 0o600); err != nil {
 		return ToolOutput{Success: false, Error: fmt.Sprintf("write file: %v", err)}
 	}
 

@@ -65,10 +65,10 @@ func init() {
 
 	issueListCmd.Flags().StringVarP(&issueRepo, "repo", "r", "", "Repository (owner/name)")
 	issueListCmd.Flags().StringVarP(&issueState, "state", "s", "open", "Issue state (open/closed/all)")
-	issueListCmd.MarkFlagRequired("repo")
+	_ = issueListCmd.MarkFlagRequired("repo")  //nolint:errcheck // cobra returns error only for invalid flag name
 
 	issueFetchCmd.Flags().StringVarP(&issueRepo, "repo", "r", "", "Repository (owner/name)")
-	issueFetchCmd.MarkFlagRequired("repo")
+	_ = issueFetchCmd.MarkFlagRequired("repo") //nolint:errcheck // cobra returns error only for invalid flag name
 }
 
 func parseRepo(repo string) (owner, name string, err error) {
@@ -143,7 +143,7 @@ func fetchIssue(numberStr string) error {
 	t := task.FromGitHubIssue(issue, repoPath)
 
 	taskDir := ".agentos/tasks"
-	if err := os.MkdirAll(taskDir, 0755); err != nil {
+	if err := os.MkdirAll(taskDir, 0o755); err != nil {
 		return fmt.Errorf("create task dir: %w", err)
 	}
 
@@ -152,7 +152,7 @@ func fetchIssue(numberStr string) error {
 	if err != nil {
 		return fmt.Errorf("marshal task: %w", err)
 	}
-	if err := os.WriteFile(taskFile, data, 0644); err != nil {
+	if err := os.WriteFile(taskFile, data, 0o600); err != nil {
 		return fmt.Errorf("write task: %w", err)
 	}
 

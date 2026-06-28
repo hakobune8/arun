@@ -92,7 +92,7 @@ func (c *Client) Connect(ctx context.Context) error {
 		JSONRPC: "2.0",
 		Method:  "notifications/initialized",
 	}
-	c.send(notif)
+	_ = c.send(notif)
 
 	return nil
 }
@@ -137,8 +137,8 @@ func (c *Client) CallTool(ctx context.Context, name string, args map[string]inte
 func (c *Client) Close() error {
 	c.connected = false
 	if c.cmd != nil && c.cmd.Process != nil {
-		c.cmd.Process.Kill()
-		c.cmd.Wait()
+		_ = c.cmd.Process.Kill() //nolint:errcheck // best-effort cleanup
+		_ = c.cmd.Wait()         //nolint:errcheck // best-effort cleanup
 	}
 	return nil
 }

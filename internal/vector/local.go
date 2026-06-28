@@ -33,7 +33,7 @@ type LocalStore struct {
 
 // NewLocalStore creates a new LocalStore that stores data in the given directory.
 func NewLocalStore(dir string) *LocalStore {
-	os.MkdirAll(dir, 0755)
+	_ = os.MkdirAll(dir, 0o755)
 	return &LocalStore{dir: dir}
 }
 
@@ -131,7 +131,7 @@ func (s *LocalStore) saveCollection(name string, points []Point) error {
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0o600)
 }
 
 func cosineSimilarity(a, b []float32) float64 {

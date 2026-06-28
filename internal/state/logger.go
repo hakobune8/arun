@@ -108,7 +108,7 @@ func (l *Logger) appendJSON(filename string, entry any) error {
 	if err != nil {
 		return fmt.Errorf("marshal log entry: %w", err)
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("open log file: %w", err)
 	}
@@ -116,7 +116,7 @@ func (l *Logger) appendJSON(filename string, entry any) error {
 	if _, err := f.Write(data); err != nil {
 		return fmt.Errorf("write log: %w", err)
 	}
-	if _, err := f.Write([]byte("\n")); err != nil {
+	if _, err := f.WriteString("\n"); err != nil {
 		return fmt.Errorf("write newline: %w", err)
 	}
 	return nil

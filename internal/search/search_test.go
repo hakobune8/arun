@@ -67,8 +67,8 @@ func TestService_Search_TypeAll(t *testing.T) {
 	svc := NewService(vs, emb)
 	ctx := context.Background()
 
-	svc.MemoryStore().Save(ctx, memory.Entry{ID: "mem1", Content: "memory entry"})
-	svc.GuidelineStore().Add(ctx, guideline.Guideline{ID: "gl1", Title: "guideline", Rule: "do things"})
+	svc.MemoryStore().Save(ctx, &memory.Entry{ID: "mem1", Content: "memory entry"})             //nolint:errcheck // test helper, error checked via search
+	svc.GuidelineStore().Add(ctx, &guideline.Guideline{ID: "gl1", Title: "guideline", Rule: "do things"}) //nolint:errcheck // test helper, error checked via search
 
 	results, err := svc.Search(ctx, "test", TypeAll, 10)
 	if err != nil {
@@ -87,7 +87,7 @@ func TestService_Search_TypeGuideline(t *testing.T) {
 	svc := NewService(vs, emb)
 	ctx := context.Background()
 
-	svc.GuidelineStore().Add(ctx, guideline.Guideline{ID: "gl1", Title: "Test GL", Rule: "testing"})
+	svc.GuidelineStore().Add(ctx, &guideline.Guideline{ID: "gl1", Title: "Test GL", Rule: "testing"}) //nolint:errcheck // test helper, error checked via search
 
 	results, err := svc.Search(ctx, "test", TypeGuideline, 10)
 	if err != nil {
@@ -111,7 +111,7 @@ func TestService_Search_TypeMemory(t *testing.T) {
 	svc := NewService(vs, emb)
 	ctx := context.Background()
 
-	svc.MemoryStore().Save(ctx, memory.Entry{ID: "mem1", Content: "my memory"})
+	svc.MemoryStore().Save(ctx, &memory.Entry{ID: "mem1", Content: "my memory"})  //nolint:errcheck // test helper, error checked via search
 
 	results, err := svc.Search(ctx, "memory", TypeMemory, 10)
 	if err != nil {
@@ -135,7 +135,7 @@ func TestService_Search_TypePR(t *testing.T) {
 	svc := NewService(vs, emb)
 	ctx := context.Background()
 
-	svc.MemoryStore().Save(ctx, memory.Entry{ID: "pr1", Content: "PR content", Type: "pr"})
+	svc.MemoryStore().Save(ctx, &memory.Entry{ID: "pr1", Content: "PR content", Type: "pr"}) //nolint:errcheck // test helper, error checked via search
 
 	results, err := svc.Search(ctx, "PR", TypePR, 10)
 	if err != nil {

@@ -78,11 +78,11 @@ func init() {
 
 	memSaveCmd.Flags().StringVarP(&memContent, "content", "c", "", "Content to save")
 	memSaveCmd.Flags().StringVarP(&memType, "type", "t", "note", "Entry type")
-	memSaveCmd.MarkFlagRequired("content")
+	_ = memSaveCmd.MarkFlagRequired("content") //nolint:errcheck // cobra returns error only for invalid flag name
 
 	memSearchCmd.Flags().StringVarP(&memSearchQ, "query", "q", "", "Search query")
 	memSearchCmd.Flags().IntVarP(&memLimit, "limit", "l", 10, "Max results")
-	memSearchCmd.MarkFlagRequired("query")
+	_ = memSearchCmd.MarkFlagRequired("query") //nolint:errcheck // cobra returns error only for invalid flag name
 }
 
 func runMemSave() error {
@@ -98,7 +98,7 @@ func runMemSave() error {
 		},
 	}
 
-	if err := store.Save(context.Background(), entry); err != nil {
+	if err := store.Save(context.Background(), &entry); err != nil {
 		return fmt.Errorf("save memory: %w", err)
 	}
 

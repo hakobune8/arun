@@ -63,13 +63,13 @@ func init() {
 	rootCmd.AddCommand(mcpCmd)
 
 	mcpConnectCmd.Flags().StringVarP(&mcpCommand, "command", "c", "", "MCP server command (e.g., npx @anthropic/mcp-serve)")
-	mcpConnectCmd.MarkFlagRequired("command")
+	_ = mcpConnectCmd.MarkFlagRequired("command") //nolint:errcheck // cobra returns error only for invalid flag name
 
 	mcpCallCmd.Flags().StringVarP(&mcpCommand, "command", "c", "", "MCP server command")
 	mcpCallCmd.Flags().StringVarP(&mcpTool, "tool", "t", "", "Tool name to call")
 	mcpCallCmd.Flags().StringArrayVar(&mcpArgs, "arg", nil, "Arguments (key=value)")
-	mcpCallCmd.MarkFlagRequired("command")
-	mcpCallCmd.MarkFlagRequired("tool")
+	_ = mcpCallCmd.MarkFlagRequired("command") //nolint:errcheck // cobra returns error only for invalid flag name
+	_ = mcpCallCmd.MarkFlagRequired("tool")    //nolint:errcheck // cobra returns error only for invalid flag name
 }
 
 func runMCPConnect() error {

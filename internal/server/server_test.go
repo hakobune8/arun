@@ -73,7 +73,7 @@ func TestServer_HealthEndpoint(t *testing.T) {
 
 	s := NewServer(0)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/api/health", nil)
+	req := httptest.NewRequest("GET", "/api/health", http.NoBody)
 	s.server.Handler.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Errorf("health status = %d, want %d", w.Code, http.StatusOK)
@@ -85,7 +85,7 @@ func TestServer_SearchEndpoint_NoQuery(t *testing.T) {
 
 	s := NewServer(0)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/api/search", nil)
+	req := httptest.NewRequest("GET", "/api/search", http.NoBody)
 	s.server.Handler.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("search status = %d, want %d", w.Code, http.StatusBadRequest)

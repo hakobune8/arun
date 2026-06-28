@@ -81,9 +81,9 @@ func (s *Store) LoadDirectory(dir string) error {
 			guidelines = []Guideline{single}
 		}
 
-		for _, g := range guidelines {
-			if err := s.Add(context.Background(), g); err != nil {
-				return fmt.Errorf("add guideline %s: %w", g.ID, err)
+		for i := range guidelines {
+			if err := s.Add(context.Background(), &guidelines[i]); err != nil {
+				return fmt.Errorf("add guideline %s: %w", guidelines[i].ID, err)
 			}
 		}
 	}
@@ -92,7 +92,7 @@ func (s *Store) LoadDirectory(dir string) error {
 }
 
 // Add stores a guideline entry, embedding its content for later search.
-func (s *Store) Add(ctx context.Context, g Guideline) error {
+func (s *Store) Add(ctx context.Context, g *Guideline) error {
 	if g.ID == "" {
 		g.ID = fmt.Sprintf("gl-%d", len(g.Title))
 	}

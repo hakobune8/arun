@@ -84,7 +84,7 @@ func TestClient_GetCheckRuns(t *testing.T) {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string][]CheckRun{
+		json.NewEncoder(w).Encode(map[string][]CheckRun{ //nolint:errcheck // test helper
 			"check_runs": {
 				{ID: 1, Name: "test", Conclusion: "success", Status: "completed"},
 				{ID: 2, Name: "lint", Conclusion: "failure", Status: "completed"},
@@ -119,7 +119,7 @@ func TestClient_GetCheckRuns_Error(t *testing.T) {
 	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"message":"Not Found"}`))
+		w.Write([]byte(`{"message":"Not Found"}`)) //nolint:errcheck // test helper
 	}))
 	defer ts.Close()
 
@@ -146,7 +146,7 @@ func TestClient_GetCheckRunAnnotations(t *testing.T) {
 			t.Errorf("expected GET, got %s", r.Method)
 		}
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode([]map[string]string{
+		json.NewEncoder(w).Encode([]map[string]string{ //nolint:errcheck // test helper
 			{"path": "main.go", "message": "issue found", "annotation_level": "warning"},
 		})
 	}))
@@ -192,7 +192,7 @@ func TestClient_GetCheckSuites(t *testing.T) {
 	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string][]CheckSuite{
+		json.NewEncoder(w).Encode(map[string][]CheckSuite{ //nolint:errcheck // test helper
 			"check_suites": {
 				{ID: 1, Status: "completed", Conclusion: "success", HeadSHA: "abc123"},
 			},
@@ -223,7 +223,7 @@ func TestClient_GetWorkflowRunLogs(t *testing.T) {
 	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("step 1: build\nstep 2: test\n"))
+		w.Write([]byte("step 1: build\nstep 2: test\n")) //nolint:errcheck // test helper
 	}))
 	defer ts.Close()
 
@@ -270,7 +270,7 @@ func TestClient_CreatePR(t *testing.T) {
 			t.Errorf("expected POST, got %s", r.Method)
 		}
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck // test helper
 			"number":  1,
 			"title":   "Test PR",
 			"html_url": "https://github.com/owner/repo/pull/1",
@@ -313,7 +313,7 @@ func TestClient_CreatePR_Error(t *testing.T) {
 	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		w.Write([]byte(`{"message":"Validation failed"}`))
+		w.Write([]byte(`{"message":"Validation failed"}`)) //nolint:errcheck // test helper
 	}))
 	defer ts.Close()
 
@@ -339,7 +339,7 @@ func TestClient_ListPRs(t *testing.T) {
 	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode([]map[string]interface{}{
+		json.NewEncoder(w).Encode([]map[string]interface{}{ //nolint:errcheck // test helper
 			{
 				"number":  1,
 				"title":   "First PR",
@@ -378,7 +378,7 @@ func TestClient_ListIssues(t *testing.T) {
 			t.Errorf("expected state=open, got %q", r.URL.Query().Get("state"))
 		}
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode([]map[string]interface{}{
+		json.NewEncoder(w).Encode([]map[string]interface{}{ //nolint:errcheck // test helper
 			{
 				"number":  42,
 				"title":   "Bug report",
@@ -416,7 +416,7 @@ func TestClient_ListIssues_DefaultState(t *testing.T) {
 			t.Errorf("expected state=open, got %q", r.URL.Query().Get("state"))
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`[]`))
+		w.Write([]byte(`[]`)) //nolint:errcheck // test helper
 	}))
 	defer ts.Close()
 
@@ -440,7 +440,7 @@ func TestClient_GetIssue(t *testing.T) {
 	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck // test helper
 			"number":  7,
 			"title":   "Feature request",
 			"body":    "Please add feature",
@@ -470,7 +470,7 @@ func TestClient_GetIssue_Error(t *testing.T) {
 	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"message":"Not Found"}`))
+		w.Write([]byte(`{"message":"Not Found"}`)) //nolint:errcheck // test helper
 	}))
 	defer ts.Close()
 
@@ -491,7 +491,7 @@ func TestClient_NonJSONResponse(t *testing.T) {
 	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`this is not json`))
+		w.Write([]byte(`this is not json`)) //nolint:errcheck // test helper
 	}))
 	defer ts.Close()
 

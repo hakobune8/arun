@@ -64,8 +64,8 @@ func init() {
 	runCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
 	runCmd.Flags().BoolVar(&runCreatePR, "pr", false, "Create a PR after successful run")
 	runCmd.Flags().StringVar(&runPRRepo, "pr-repo", "", "GitHub repo for PR (owner/name)")
-	runCmd.MarkFlagRequired("task")
-	runCmd.MarkFlagRequired("profile")
+	_ = runCmd.MarkFlagRequired("task")    //nolint:errcheck // cobra returns error only for invalid flag name
+	_ = runCmd.MarkFlagRequired("profile") //nolint:errcheck // cobra returns error only for invalid flag name
 }
 
 func runTask() error {

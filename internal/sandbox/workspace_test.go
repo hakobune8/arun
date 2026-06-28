@@ -34,7 +34,7 @@ func TestWorkspace_AbsPath(t *testing.T) {
 
 	ws := NewWorkspace("/project/root")
 	path := ws.AbsPath("src/main.go")
-	expected := filepath.Join("/project/root", "src/main.go")
+	expected := filepath.Join("/project", "root", "src/main.go") //nolint:gocritic // test expects exact path
 	if path != expected {
 		t.Errorf("AbsPath = %q, want %q", path, expected)
 	}
@@ -45,7 +45,7 @@ func TestWorkspace_RepoAbsPath_Relative(t *testing.T) {
 
 	ws := NewWorkspace("/project/root")
 	path := ws.RepoAbsPath("internal/foo.go")
-	expected := filepath.Join("/project/root", "internal/foo.go")
+	expected := filepath.Join("/project", "root", "internal/foo.go") //nolint:gocritic // test expects exact path
 	if path != expected {
 		t.Errorf("RepoAbsPath = %q, want %q", path, expected)
 	}
@@ -60,8 +60,8 @@ func TestWorkspace_RepoAbsPath_Absolute(t *testing.T) {
 	if abs && path != "/absolute/path/file.go" {
 		t.Errorf("RepoAbsPath = %q, want %q", path, "/absolute/path/file.go")
 	}
-	if !abs && path != filepath.Join("/project/root", "/absolute/path/file.go") {
-		t.Errorf("RepoAbsPath = %q, want %q", path, filepath.Join("/project/root", "/absolute/path/file.go"))
+	if !abs && path != filepath.Join("/project", "root", "/absolute/path/file.go") { //nolint:gocritic // test expects exact path
+		t.Errorf("RepoAbsPath = %q, want %q", path, filepath.Join("/project", "root", "/absolute/path/file.go")) //nolint:gocritic // test expects exact path
 	}
 }
 

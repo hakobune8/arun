@@ -69,7 +69,7 @@ func TestStore_Add(t *testing.T) {
 		Tags:  []string{"testing", "go"},
 	}
 
-	err := s.Add(ctx, g)
+	err := s.Add(ctx, &g)
 	if err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -100,8 +100,8 @@ func TestStore_Search_ReturnsMatchingGuidelines(t *testing.T) {
 	s := NewStore(vs, emb)
 	ctx := context.Background()
 
-	s.Add(ctx, Guideline{ID: "gl-1", Title: "One", Rule: "Rule one"})
-	s.Add(ctx, Guideline{ID: "gl-2", Title: "Two", Rule: "Rule two"})
+	s.Add(ctx, &Guideline{ID: "gl-1", Title: "One", Rule: "Rule one"})  //nolint:errcheck // test helper, error checked via search
+	s.Add(ctx, &Guideline{ID: "gl-2", Title: "Two", Rule: "Rule two"})  //nolint:errcheck // test helper, error checked via search
 
 	results, err := s.Search(ctx, "query", 10)
 	if err != nil {
@@ -116,7 +116,7 @@ func TestStore_Add_EmptyIDGeneratesOne(t *testing.T) {
 	t.Parallel()
 
 	s := NewStore(vector.NewLocalStore(t.TempDir()), &mockEmbedder{fixedVec: []float32{0.1, 0.2, 0.3}})
-	err := s.Add(context.Background(), Guideline{Title: "No ID", Rule: "foo"})
+	err := s.Add(context.Background(), &Guideline{Title: "No ID", Rule: "foo"})
 	if err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestStore_Add_WithExample(t *testing.T) {
 	t.Parallel()
 
 	s := NewStore(vector.NewLocalStore(t.TempDir()), &mockEmbedder{fixedVec: []float32{0.1, 0.2, 0.3}})
-	err := s.Add(context.Background(), Guideline{
+	err := s.Add(context.Background(), &Guideline{
 		ID:      "gl-ex",
 		Title:   "Example",
 		Rule:    "Include examples",
@@ -166,7 +166,7 @@ func TestLoadDirectory_LoadsYAMLFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "guidelines.yaml"), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "guidelines.yaml"), data, 0o600); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
 
@@ -198,7 +198,7 @@ func TestLoadDirectory_SkipsNonYAMLFiles(t *testing.T) {
 
 	dir := t.TempDir()
 	s := NewStore(vector.NewLocalStore(t.TempDir()), &mockEmbedder{fixedVec: []float32{0.1, 0.2, 0.3}})
-	os.WriteFile(filepath.Join(dir, "readme.txt"), []byte("hello"), 0644)
+	os.WriteFile(filepath.Join(dir, "readme.txt"), []byte("hello"), 0o600) //nolint:errcheck // test helper, error checked via search
 
 	err := s.LoadDirectory(dir)
 	if err != nil {

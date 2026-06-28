@@ -69,13 +69,13 @@ func init() {
 	prCreateCmd.Flags().StringVarP(&prBody, "body", "b", "", "PR body (or path to file)")
 	prCreateCmd.Flags().StringVarP(&prHead, "head", "H", "", "Head branch")
 	prCreateCmd.Flags().StringVarP(&prBase, "base", "B", "main", "Base branch")
-	prCreateCmd.MarkFlagRequired("repo")
-	prCreateCmd.MarkFlagRequired("title")
-	prCreateCmd.MarkFlagRequired("head")
+	_ = prCreateCmd.MarkFlagRequired("repo")  //nolint:errcheck // cobra returns error only for invalid flag name
+	_ = prCreateCmd.MarkFlagRequired("title") //nolint:errcheck // cobra returns error only for invalid flag name
+	_ = prCreateCmd.MarkFlagRequired("head")  //nolint:errcheck // cobra returns error only for invalid flag name
 
 	prListCmd.Flags().StringVarP(&prRepo, "repo", "r", "", "Repository (owner/name)")
 	prListCmd.Flags().StringVarP(&prState, "state", "s", "open", "PR state (open/closed/all)")
-	prListCmd.MarkFlagRequired("repo")
+	_ = prListCmd.MarkFlagRequired("repo") //nolint:errcheck // cobra returns error only for invalid flag name
 }
 
 func createPR() error {

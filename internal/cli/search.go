@@ -49,7 +49,7 @@ func init() {
 	searchCmd.Flags().StringVarP(&searchQuery, "query", "q", "", "Search query")
 	searchCmd.Flags().StringVarP(&searchType, "type", "t", "all", "Search type (memory/guideline/pr/all)")
 	searchCmd.Flags().IntVarP(&searchLimit, "limit", "l", 10, "Max results")
-	searchCmd.MarkFlagRequired("query")
+	_ = searchCmd.MarkFlagRequired("query") //nolint:errcheck // cobra returns error only for invalid flag name
 }
 
 func newVectorStore() vector.VectorStore {

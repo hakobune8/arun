@@ -26,7 +26,7 @@ func TestReadFileTool_Success(t *testing.T) {
 
 	dir := t.TempDir()
 	content := "hello world"
-	os.WriteFile(filepath.Join(dir, "test.txt"), []byte(content), 0644)
+	os.WriteFile(filepath.Join(dir, "test.txt"), []byte(content), 0o600) //nolint:errcheck // test helper, error checked via tool output
 
 	tool := NewReadFileTool(dir)
 	out := tool.Run(context.Background(), ToolInput{"file": "test.txt"})
@@ -81,7 +81,7 @@ func TestWriteFileTool_Success(t *testing.T) {
 		t.Fatalf("unexpected error: %s", out.Error)
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, "subdir/out.txt"))
+	data, err := os.ReadFile(filepath.Join(dir, "subdir", "out.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestWriteFileTool_Overwrite(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "existing.txt"), []byte("old"), 0644)
+	os.WriteFile(filepath.Join(dir, "existing.txt"), []byte("old"), 0o600) //nolint:errcheck // test helper, error checked via tool output
 
 	tool := NewWriteFileTool(dir)
 	out := tool.Run(context.Background(), ToolInput{

@@ -50,7 +50,7 @@ limits:
 output:
   mode: diff
 `)
-	if err := os.WriteFile(path, content, 0644); err != nil {
+	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -122,7 +122,7 @@ func TestLoad_InvalidYAML(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bad.yaml")
-	if err := os.WriteFile(path, []byte(`: invalid: [yaml`), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(`: invalid: [yaml`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -141,7 +141,7 @@ func TestLoad_MinimalValidProfile(t *testing.T) {
 llm:
   model: claude-3
 `)
-	if err := os.WriteFile(path, content, 0644); err != nil {
+	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -175,7 +175,7 @@ func TestLoad_MissingName(t *testing.T) {
 llm:
   model: gpt-4
 `)
-	if err := os.WriteFile(path, content, 0644); err != nil {
+	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -194,7 +194,7 @@ func TestLoad_MissingModel(t *testing.T) {
 llm:
   model: ""
 `)
-	if err := os.WriteFile(path, content, 0644); err != nil {
+	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 

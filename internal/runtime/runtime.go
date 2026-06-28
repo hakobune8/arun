@@ -102,8 +102,8 @@ func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 		ProfileName: r.Profile.Name,
 		Branch:      tk.Branch,
 	}
-	r.Store.Save(record)
-	r.Logger.Log("info", "runtime", "starting run", map[string]interface{}{
+	_ = r.Store.Save(record) //nolint:errcheck // best-effort save
+	_ = r.Logger.Log("info", "runtime", "starting run", map[string]interface{}{ //nolint:errcheck // best-effort log
 		"task_id": tk.ID,
 		"profile": r.Profile.Name,
 		"repo":    tk.Repo,
@@ -117,85 +117,85 @@ func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 	}
 
 	record.Status = state.RunStatusPlanning
-	r.Store.Save(record)
+	_ = r.Store.Save(record) //nolint:errcheck // best-effort save
 
 	rctx := NewRunContext(ctx, tk, r)
 	plan, err := r.Planner.Plan(rctx)
 	if err != nil {
 		record.Status = state.RunStatusFailed
 		record.Error = err.Error()
-		r.Store.Save(record)
+		_ = r.Store.Save(record) //nolint:errcheck // best-effort save
 		return fmt.Errorf("create plan: %w", err)
 	}
 
-	r.Workspace.SaveFile("plan.json", mustMarshalJSON(plan))
-	r.Logger.Log("info", "runtime", "plan created", map[string]interface{}{
+	_ = r.Workspace.SaveFile("plan.json", mustMarshalJSON(plan)) //nolint:errcheck // best-effort save
+	_ = r.Logger.Log("info", "runtime", "plan created", map[string]interface{}{ //nolint:errcheck // best-effort log
 		"summary":              plan.Summary,
 		"steps":                len(plan.Steps),
 		"estimated_files":      plan.EstimatedFilesChanged,
 	})
 
 	record.Status = state.RunStatusExecuting
-	r.Store.Save(record)
+	_ = r.Store.Save(record) //nolint:errcheck // best-effort save
 
 	result, err := r.executePlan(ctx, tk, plan)
 	if err != nil {
 		record.Status = state.RunStatusFailed
 		record.Error = err.Error()
-		r.Store.Save(record)
+		_ = r.Store.Save(record) //nolint:errcheck // best-effort save
 		return fmt.Errorf("execute plan: %w", err)
 	}
 
 	if result.Diff != "" {
-		r.Workspace.SaveFile("diff.patch", []byte(result.Diff))
+		_ = r.Workspace.SaveFile("diff.patch", []byte(result.Diff)) //nolint:errcheck // best-effort save
 	}
 
 	record.Status = state.RunStatusTesting
-	r.Store.Save(record)
+	_ = r.Store.Save(record) //nolint:errcheck // best-effort save
 
 	testResult := r.runTests(ctx, tk)
 	if testResult != "" {
-		r.Workspace.SaveFile("test.log", []byte(testResult))
+		_ = r.Workspace.SaveFile("test.log", []byte(testResult)) //nolint:errcheck // best-effort save
 	}
 
 	lintResult := r.runLint(ctx, tk)
 	if lintResult != "" {
-		r.Workspace.SaveFile("lint.log", []byte(lintResult))
+		_ = r.Workspace.SaveFile("lint.log", []byte(lintResult)) //nolint:errcheck // best-effort save
 	}
 
 	retryCount := 0
 	maxRetries := r.Profile.Limits.MaxRetries
 	for (testResult != "" || lintResult != "") && retryCount < maxRetries {
 		retryCount++
-		r.Logger.Log("info", "runtime", "retry attempt", map[string]interface{}{
+		_ = r.Logger.Log("info", "runtime", "retry attempt", map[string]interface{}{ //nolint:errcheck // best-effort log
 			"attempt": retryCount,
 			"max":     maxRetries,
 		})
 
 		record.Iteration = retryCount
 		record.Status = state.RunStatusExecuting
-		r.Store.Save(record)
+		_ = r.Store.Save(record) //nolint:errcheck // best-effort save
 
 		result, err = r.executePlan(ctx, tk, plan)
 		if err != nil {
 			continue
 		}
 		if result.Diff != "" {
-			r.Workspace.SaveFile("diff.patch", []byte(result.Diff))
+		_ = r.Workspace.SaveFile("diff.patch", []byte(result.Diff)) //nolint:errcheck // best-effort save
 		}
 
 		testResult = r.runTests(ctx, tk)
 		if testResult != "" {
-			r.Workspace.SaveFile("test.log", []byte(testResult))
+			_ = r.Workspace.SaveFile("test.log", []byte(testResult)) //nolint:errcheck // best-effort save
 		}
 		lintResult = r.runLint(ctx, tk)
 		if lintResult != "" {
-			r.Workspace.SaveFile("lint.log", []byte(lintResult))
+			_ = r.Workspace.SaveFile("lint.log", []byte(lintResult)) //nolint:errcheck // best-effort save
 		}
 	}
 
 	record.Status = state.RunStatusReviewing
-	r.Store.Save(record)
+	_ = r.Store.Save(record) //nolint:errcheck // best-effort save
 
 	diffContent := ""
 	if result != nil {
@@ -203,21 +203,21 @@ func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 	}
 	reviewResult, err := r.reviewResults(ctx, tk, diffContent, testResult)
 	if err != nil {
-		r.Logger.Log("warn", "runtime", "review failed", err.Error())
+		_ = r.Logger.Log("warn", "runtime", "review failed", err.Error()) //nolint:errcheck // best-effort log
 	}
 
 	summary := r.generateSummary(tk, record, diffContent, reviewResult)
-	r.Workspace.SaveFile("summary.md", []byte(summary))
+	_ = r.Workspace.SaveFile("summary.md", []byte(summary)) //nolint:errcheck // best-effort save
 
 	prBody := r.generatePRBody(tk, plan, diffContent, reviewResult)
-	r.Workspace.SaveFile("pr_body.md", []byte(prBody))
+	_ = r.Workspace.SaveFile("pr_body.md", []byte(prBody)) //nolint:errcheck // best-effort save
 
 	record.Status = state.RunStatusCompleted
 	record.FinishedAt = time.Now()
-	r.Store.Save(record)
+	_ = r.Store.Save(record) //nolint:errcheck // best-effort save
 
 	duration := time.Since(startTime)
-	r.Logger.Log("info", "runtime", "run completed", map[string]interface{}{
+	_ = r.Logger.Log("info", "runtime", "run completed", map[string]interface{}{ //nolint:errcheck // best-effort log
 		"duration": duration.String(),
 		"retries":  retryCount,
 	})
@@ -239,12 +239,12 @@ func (r *Runtime) executePlan(ctx context.Context, tk *task.Task, plan *Plan) (*
 			"args":       tk.Branch,
 		})
 		if !coResult.Success {
-			r.Logger.Log("warn", "runtime", "branch checkout", coResult.Error)
+			_ = r.Logger.Log("warn", "runtime", "branch checkout", coResult.Error) //nolint:errcheck // best-effort log
 		}
 	}
 
 	for _, step := range plan.Steps {
-		r.Logger.Log("info", "executor", fmt.Sprintf("step %d: %s", step.StepNumber, step.Description), nil)
+		_ = r.Logger.Log("info", "executor", fmt.Sprintf("step %d: %s", step.StepNumber, step.Description), nil) //nolint:errcheck // best-effort log
 
 		stepResult := StepResult{
 			StepNumber: step.StepNumber,
@@ -316,7 +316,7 @@ func (r *Runtime) executePlan(ctx context.Context, tk *task.Task, plan *Plan) (*
 		stepResult.Duration = time.Since(stepStart)
 		result.StepResults = append(result.StepResults, stepResult)
 
-		r.Logger.LogTool(step.Action, step, stepResult, stepResult.Duration)
+		_ = r.Logger.LogTool(step.Action, step, stepResult, stepResult.Duration) //nolint:errcheck // best-effort log
 	}
 
 	diffContent, err := gitTool.Diff(ctx)
@@ -333,7 +333,7 @@ func (r *Runtime) runTests(ctx context.Context, tk *task.Task) string {
 		testCmd = "go test ./..."
 	}
 
-	r.Logger.Log("info", "tester", "running tests", map[string]string{"command": testCmd})
+	_ = r.Logger.Log("info", "tester", "running tests", map[string]string{"command": testCmd}) //nolint:errcheck // best-effort log
 
 	tool := tools.NewTestTool(r.Workspace.RootDir)
 	output := tool.Run(ctx, tools.ToolInput{"command": testCmd})
@@ -344,14 +344,14 @@ func (r *Runtime) runTests(ctx context.Context, tk *task.Task) string {
 	}
 
 	if !output.Success {
-		r.Logger.Log("warn", "tester", "tests failed", map[string]string{
+		_ = r.Logger.Log("warn", "tester", "tests failed", map[string]string{ //nolint:errcheck // best-effort log
 			"output": logData,
 			"error":  output.Error,
 		})
 		return logData
 	}
 
-	r.Logger.Log("info", "tester", "tests passed", nil)
+	_ = r.Logger.Log("info", "tester", "tests passed", nil) //nolint:errcheck // best-effort log
 	return ""
 }
 
@@ -361,7 +361,7 @@ func (r *Runtime) runLint(ctx context.Context, tk *task.Task) string {
 		return ""
 	}
 
-	r.Logger.Log("info", "linter", "running lint", map[string]string{"command": lintCmd})
+	_ = r.Logger.Log("info", "linter", "running lint", map[string]string{"command": lintCmd}) //nolint:errcheck // best-effort log
 
 	tool := tools.NewShellTool(r.Policy, r.Workspace.RootDir)
 	output := tool.Run(ctx, tools.ToolInput{"command": lintCmd})
@@ -372,18 +372,18 @@ func (r *Runtime) runLint(ctx context.Context, tk *task.Task) string {
 	}
 
 	if !output.Success {
-		r.Logger.Log("warn", "linter", "lint failed", map[string]string{
+		_ = r.Logger.Log("warn", "linter", "lint failed", map[string]string{ //nolint:errcheck // best-effort log
 			"output": logData,
 			"error":  output.Error,
 		})
 		return logData
 	}
 
-	r.Logger.Log("info", "linter", "lint passed", nil)
+	_ = r.Logger.Log("info", "linter", "lint passed", nil) //nolint:errcheck // best-effort log
 	return ""
 }
 
-func (r *Runtime) reviewResults(ctx context.Context, tk *task.Task, diff string, testLog string) (*ReviewResult, error) {
+func (r *Runtime) reviewResults(ctx context.Context, tk *task.Task, diff, testLog string) (*ReviewResult, error) {
 	if diff == "" {
 		return &ReviewResult{Approved: true, Summary: "No changes to review"}, nil
 	}
@@ -528,5 +528,5 @@ func stripJSONFences(s string) string {
 }
 
 func init() {
-	_ = os.MkdirAll(filepath.Join(os.TempDir(), ".agentos", "runs"), 0755)
+	_ = os.MkdirAll(filepath.Join(os.TempDir(), ".agentos", "runs"), 0o755)
 }

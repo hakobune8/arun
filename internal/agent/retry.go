@@ -31,7 +31,7 @@ func NewRetryHandler(config RetryConfig) *RetryHandler {
 }
 
 // ShouldRetry returns true if the task should be retried based on the current attempt count and failure status.
-func (h *RetryHandler) ShouldRetry(attempt int, testFailed bool, lintFailed bool) bool {
+func (h *RetryHandler) ShouldRetry(attempt int, testFailed, lintFailed bool) bool {
 	if attempt >= h.config.MaxRetries {
 		return false
 	}

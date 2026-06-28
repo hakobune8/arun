@@ -57,7 +57,7 @@ func TestMemoryStore_Save_StoresEntry(t *testing.T) {
 		},
 	}
 
-	err := ms.Save(ctx, entry)
+	err := ms.Save(ctx, &entry)
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestMemoryStore_Save_EmptyIDGeneratesOne(t *testing.T) {
 
 	ms := NewMemoryStore(vector.NewLocalStore(t.TempDir()), &mockEmbedder{fixedVec: []float32{0.1, 0.2, 0.3}})
 
-	err := ms.Save(context.Background(), Entry{Content: "no-id"})
+	err := ms.Save(context.Background(), &Entry{Content: "no-id"})
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestMemoryStore_Save_ZeroTimestampSetsOne(t *testing.T) {
 	ms := NewMemoryStore(vector.NewLocalStore(t.TempDir()), &mockEmbedder{fixedVec: []float32{0.1, 0.2, 0.3}})
 	ctx := context.Background()
 
-	err := ms.Save(ctx, Entry{Content: "timestamp-test"})
+	err := ms.Save(ctx, &Entry{Content: "timestamp-test"})
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -142,8 +142,8 @@ func TestMemoryStore_Search_ReturnsSortedBySimilarity(t *testing.T) {
 	ms := NewMemoryStore(vs, emb)
 	ctx := context.Background()
 
-	ms.Save(ctx, Entry{ID: "mem1", Content: "first entry"})
-	ms.Save(ctx, Entry{ID: "mem2", Content: "second entry"})
+	ms.Save(ctx, &Entry{ID: "mem1", Content: "first entry"})  //nolint:errcheck // test helper, error checked via search
+	ms.Save(ctx, &Entry{ID: "mem2", Content: "second entry"}) //nolint:errcheck // test helper, error checked via search
 
 	results, err := ms.Search(ctx, "query", 10)
 	if err != nil {
@@ -162,7 +162,7 @@ func TestMemoryStore_Clear_RemovesAllEntries(t *testing.T) {
 	ms := NewMemoryStore(vs, emb)
 	ctx := context.Background()
 
-	ms.Save(ctx, Entry{Content: "something"})
+	ms.Save(ctx, &Entry{Content: "something"}) //nolint:errcheck // test helper, error checked via search
 	results, _ := ms.Search(ctx, "something", 10)
 	if len(results) == 0 {
 		t.Fatal("expected entries before clear")

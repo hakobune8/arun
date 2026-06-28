@@ -47,7 +47,7 @@ func NewCommandPolicy(denyCommands []string) *CommandPolicy {
 
 // Check verifies whether command is allowed by the policy. It returns true if
 // the command is permitted, along with the matched pattern if it was denied.
-func (p *CommandPolicy) Check(command string) (bool, string) {
+func (p *CommandPolicy) Check(command string) (ok bool, denied string) {
 	cmdLower := strings.TrimSpace(strings.ToLower(command))
 	for _, denied := range p.DenyCommands {
 		if strings.Contains(cmdLower, strings.ToLower(denied)) {

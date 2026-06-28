@@ -74,7 +74,7 @@ func (t *GitTool) Run(ctx context.Context, input ToolInput) ToolOutput {
 		if v, ok := input["count"].(int); ok && v > 0 {
 			count = v
 		}
-		cmd = exec.CommandContext(ctx, "git", "log", "--oneline", fmt.Sprintf("-%d", count))
+		cmd = exec.CommandContext(ctx, "git", "log", "--oneline", fmt.Sprintf("-%d", count)) //nolint:gosec // Git commands are safe
 	case "add":
 		parts := strings.Fields(args)
 		if len(parts) == 0 {

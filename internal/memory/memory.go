@@ -35,6 +35,7 @@ type Entry struct {
 }
 
 // MemoryStore provides persistent memory storage for agents using vector search.
+//nolint:revive // stutter is acceptable for package-level interface
 type MemoryStore struct {
 	vs         vector.VectorStore
 	embed      embedding.Embedder
@@ -51,7 +52,7 @@ func NewMemoryStore(vs vector.VectorStore, embed embedding.Embedder) *MemoryStor
 }
 
 // Save stores a memory entry, embedding its content for later search.
-func (m *MemoryStore) Save(ctx context.Context, entry Entry) error {
+func (m *MemoryStore) Save(ctx context.Context, entry *Entry) error {
 	if entry.ID == "" {
 		entry.ID = fmt.Sprintf("mem-%d", time.Now().UnixNano())
 	}

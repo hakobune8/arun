@@ -52,7 +52,7 @@ func init() {
 	orchestrateCmd.Flags().StringVarP(&orchTemplate, "template", "t", "profiles/agents/template.yaml", "Agent template file")
 	orchestrateCmd.Flags().StringVarP(&orchTask, "task", "", "", "Task description")
 	orchestrateCmd.Flags().StringVarP(&orchStrategy, "strategy", "s", "sequential", "Coordination strategy (sequential/parallel)")
-	orchestrateCmd.MarkFlagRequired("task")
+	_ = orchestrateCmd.MarkFlagRequired("task") //nolint:errcheck // cobra returns error only for invalid flag name
 }
 
 func runOrchestrate() error {
@@ -101,7 +101,7 @@ func runOrchestrate() error {
 	fmt.Println(summary)
 
 	outputFile := "orchestration_result.md"
-	if err := os.WriteFile(outputFile, []byte(summary), 0644); err != nil {
+	if err := os.WriteFile(outputFile, []byte(summary), 0o600); err != nil {
 		return fmt.Errorf("write result: %w", err)
 	}
 	fmt.Printf("Result saved to %s\n", outputFile)

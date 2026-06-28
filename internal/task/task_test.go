@@ -33,7 +33,7 @@ branch: fix/thing
 title: Fix the thing
 description: This fixes the thing
 `)
-	if err := os.WriteFile(path, content, 0644); err != nil {
+	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -78,7 +78,7 @@ func TestLoad_InvalidYAML(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bad.yaml")
-	if err := os.WriteFile(path, []byte(`: invalid yaml [`), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(`: invalid yaml [`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -96,7 +96,7 @@ func TestLoad_DefaultsApplied(t *testing.T) {
 	content := []byte(`id: test-2
 repo: org/repo
 `)
-	if err := os.WriteFile(path, content, 0644); err != nil {
+	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -122,7 +122,7 @@ func TestLoad_MissingID(t *testing.T) {
 	path := filepath.Join(dir, "noid.yaml")
 	content := []byte(`repo: org/repo
 `)
-	if err := os.WriteFile(path, content, 0644); err != nil {
+	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -139,7 +139,7 @@ func TestLoad_MissingRepo(t *testing.T) {
 	path := filepath.Join(dir, "norepo.yaml")
 	content := []byte(`id: test-3
 `)
-	if err := os.WriteFile(path, content, 0644); err != nil {
+	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 

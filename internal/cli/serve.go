@@ -56,7 +56,7 @@ func runServe() error {
 	go func() {
 		<-sigCh
 		fmt.Println("\nShutting down...")
-		srv.Shutdown(ctx)
+		_ = srv.Shutdown(ctx) //nolint:errcheck // best-effort shutdown
 		cancel()
 	}()
 

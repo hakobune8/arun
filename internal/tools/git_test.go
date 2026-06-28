@@ -31,7 +31,7 @@ func initGitRepo(t *testing.T, dir string) {
 		{"git", "config", "user.name", "Test"},
 	}
 	for _, args := range cmds {
-		cmd := exec.Command(args[0], args[1:]...)
+		cmd := exec.Command(args[0], args[1:]...) //nolint:gosec // Test code for git operations
 		cmd.Dir = dir
 		if err := cmd.Run(); err != nil {
 			t.Fatalf("git init failed: %v", err)
@@ -69,7 +69,7 @@ func TestGitTool_AddAndCommit(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)
 
-	os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0644)
+	os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0o600) //nolint:errcheck // test helper, error checked via tool output
 
 	tool := NewGitTool(dir)
 
@@ -99,7 +99,7 @@ func TestGitTool_Diff(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)
 
-	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("hello"), 0644)
+	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("hello"), 0o600) //nolint:errcheck // test helper, error checked via tool output
 
 	tool := NewGitTool(dir)
 	out := tool.Run(context.Background(), ToolInput{"subcommand": "add", "args": "f.txt"})
@@ -111,7 +111,7 @@ func TestGitTool_Diff(t *testing.T) {
 		t.Fatal(out.Error)
 	}
 
-	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("world"), 0644)
+	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("world"), 0o600) //nolint:errcheck // test helper, error checked via tool output
 
 	diff, err := tool.Diff(context.Background())
 	if err != nil {

@@ -64,6 +64,7 @@ type ChatResponse struct {
 }
 
 // LLMClient defines the interface for interacting with a language model.
+//nolint:revive // stutter is acceptable for package-level interface
 type LLMClient interface {
 	Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error)
 	ModelName() string

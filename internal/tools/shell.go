@@ -64,6 +64,7 @@ func (t *ShellTool) Run(ctx context.Context, input ToolInput) ToolOutput {
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
+	//nolint:gosec // Shell intentionally used for pipe/redirect support; security enforced by CommandPolicy
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	if t.WorkDir != "" {
 		cmd.Dir = t.WorkDir

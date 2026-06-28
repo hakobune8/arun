@@ -1,8 +1,32 @@
 linters:
   disable-all: true
   enable:
+    - errcheck
+    - gocritic
+    - gosec
     - gosimple
     - govet
     - ineffassign
+    - misspell
+    - revive
     - staticcheck
     - unused
+
+linters-settings:
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+    disabled-checks:
+      - ifElseChain
+  revive:
+    rules:
+      - name: exported
+        severity: warning
+      - name: package-comments
+        severity: warning
+      - name: var-naming
+        severity: warning
+  misspell:
+    locale: US

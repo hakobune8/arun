@@ -53,8 +53,8 @@ Example:
 func init() {
 	reviewCmd.Flags().StringVar(&reviewRepo, "repo", "", "Path to the repository")
 	reviewCmd.Flags().StringVar(&reviewProfile, "profile", "", "Path to profile YAML file")
-	reviewCmd.MarkFlagRequired("repo")
-	reviewCmd.MarkFlagRequired("profile")
+	_ = reviewCmd.MarkFlagRequired("repo")    //nolint:errcheck // cobra returns error only for invalid flag name
+	_ = reviewCmd.MarkFlagRequired("profile") //nolint:errcheck // cobra returns error only for invalid flag name
 }
 
 func runReview() error {

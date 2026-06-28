@@ -36,7 +36,7 @@ const (
 	RunStatusReviewing  RunStatus = "reviewing"
 	RunStatusCompleted  RunStatus = "completed"
 	RunStatusFailed     RunStatus = "failed"
-	RunStatusCancelled  RunStatus = "cancelled"
+	RunStatusCancelled  RunStatus = "canceled"
 )
 
 // RunRecord stores the metadata and current status of an agent run.
@@ -69,7 +69,7 @@ func (s *RunStore) Save(record *RunRecord) error {
 	if err != nil {
 		return fmt.Errorf("marshal run record: %w", err)
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0o600)
 }
 
 // Load reads the run record from run_state.json inside the store directory.

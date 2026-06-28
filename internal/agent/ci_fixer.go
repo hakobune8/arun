@@ -62,7 +62,8 @@ func (f *CIFixer) AnalyzeAndFix(ctx context.Context, ref string) (*CIFixResult, 
 	}
 
 	var failed []FailedCheck
-	for _, cr := range checkRuns {
+	for i := range checkRuns {
+		cr := checkRuns[i]
 		if cr.Conclusion == "failure" || cr.Conclusion == "timed_out" || cr.Conclusion == "action_required" {
 			fc := FailedCheck{
 				Name:       cr.Name,

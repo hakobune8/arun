@@ -47,7 +47,7 @@ func (w *Workspace) PrepareRun(taskID string) error {
 	w.RunsDir = filepath.Join(homeDir, ".agentos", "runs")
 	w.RunDir = filepath.Join(w.RunsDir, taskID)
 
-	if err := os.MkdirAll(w.RunDir, 0755); err != nil {
+	if err := os.MkdirAll(w.RunDir, 0o755); err != nil {
 		return fmt.Errorf("create run dir: %w", err)
 	}
 	return nil
@@ -61,7 +61,7 @@ func (w *Workspace) RunPath() string {
 // SaveFile writes data to a file named name inside the run directory.
 func (w *Workspace) SaveFile(name string, data []byte) error {
 	path := filepath.Join(w.RunDir, name)
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0o600)
 }
 
 // AbsPath resolves a relative path against the workspace root.

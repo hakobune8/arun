@@ -51,8 +51,8 @@ func init() {
 	rootCmd.AddCommand(cifixCmd)
 	cifixCmd.Flags().StringVarP(&cifixRepo, "repo", "r", "", "Repository (owner/name)")
 	cifixCmd.Flags().StringVarP(&cifixRef, "ref", "", "", "Git ref (branch, SHA)")
-	cifixCmd.MarkFlagRequired("repo")
-	cifixCmd.MarkFlagRequired("ref")
+	_ = cifixCmd.MarkFlagRequired("repo") //nolint:errcheck // cobra returns error only for invalid flag name
+	_ = cifixCmd.MarkFlagRequired("ref")   //nolint:errcheck // cobra returns error only for invalid flag name
 }
 
 func runCIFix() error {

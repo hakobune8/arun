@@ -72,7 +72,7 @@ func TestLogger_LogWithData(t *testing.T) {
 
 	content, _ := os.ReadFile(filepath.Join(dir, "run.log"))
 	var entry LogEntry
-	json.Unmarshal(content, &entry)
+	json.Unmarshal(content, &entry) //nolint:errcheck // test helper, error checked via read // test helper, error checked via content
 
 	if entry.Data == nil {
 		t.Fatal("expected Data to be non-nil")
@@ -96,7 +96,7 @@ func TestLogger_LogTool(t *testing.T) {
 
 	content, _ := os.ReadFile(filepath.Join(dir, "tool_log.jsonl"))
 	var entry ToolLogEntry
-	json.Unmarshal(content, &entry)
+	json.Unmarshal(content, &entry) //nolint:errcheck // test helper, error checked via read // test helper, error checked via content
 
 	if entry.Tool != "read_file" {
 		t.Errorf("Tool = %q, want %q", entry.Tool, "read_file")
@@ -125,7 +125,7 @@ func TestLogger_LogLLM(t *testing.T) {
 
 	content, _ := os.ReadFile(filepath.Join(dir, "llm_log.jsonl"))
 	var entry LLMLogEntry
-	json.Unmarshal(content, &entry)
+	json.Unmarshal(content, &entry) //nolint:errcheck // test helper, error checked via read // test helper, error checked via content
 
 	if entry.Model != "gpt-4" {
 		t.Errorf("Model = %q, want %q", entry.Model, "gpt-4")
@@ -144,8 +144,8 @@ func TestLogger_AppendsToExistingFile(t *testing.T) {
 	dir := t.TempDir()
 	logger := NewLogger(dir)
 
-	logger.Log("info", "c1", "msg1", nil)
-	logger.Log("info", "c2", "msg2", nil)
+	logger.Log("info", "c1", "msg1", nil)  //nolint:errcheck // test helper, error checked via read // test helper, error checked via read
+	logger.Log("info", "c2", "msg2", nil)  //nolint:errcheck // test helper, error checked via read // test helper, error checked via read
 
 	data, _ := os.ReadFile(filepath.Join(dir, "run.log"))
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
@@ -160,9 +160,9 @@ func TestLogger_MultipleLogFiles(t *testing.T) {
 	dir := t.TempDir()
 	logger := NewLogger(dir)
 
-	logger.Log("info", "c", "m", nil)
-	logger.LogTool("tool", "in", "out", time.Second)
-	logger.LogLLM("req", "resp", "model", time.Second, 1, 2)
+	logger.Log("info", "c", "m", nil)                      //nolint:errcheck // test helper, error checked via read // test helper, error checked via read
+	logger.LogTool("tool", "in", "out", time.Second)        //nolint:errcheck // test helper, error checked via read
+	logger.LogLLM("req", "resp", "model", time.Second, 1, 2) //nolint:errcheck // test helper, error checked via read
 
 	entries, _ := os.ReadDir(dir)
 	if len(entries) != 3 {
