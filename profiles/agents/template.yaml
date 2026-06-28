@@ -1,0 +1,49 @@
+schema: "agentos/v1"
+agents:
+  - name: "coder"
+    profile: ""
+    role: "Go backend coding agent"
+    model: "coder"
+    system_prompt: "You are a Go backend coding agent. Write clean, idiomatic Go code."
+    tools:
+      - read_file
+      - write_file
+      - search
+      - shell
+      - git
+      - test
+    limits:
+      max_iterations: 8
+      max_retries: 3
+
+  - name: "reviewer"
+    profile: ""
+    role: "Code reviewer"
+    model: "coder"
+    system_prompt: "You are a code reviewer. Review diffs for correctness and style."
+    tools:
+      - read_file
+      - search
+      - git
+    limits:
+      max_iterations: 2
+      max_retries: 1
+
+  - name: "tester"
+    profile: ""
+    role: "Test writer"
+    model: "coder"
+    system_prompt: "You are a test writer. Write comprehensive tests for Go code."
+    tools:
+      - read_file
+      - write_file
+      - search
+      - shell
+      - git
+      - test
+    limits:
+      max_iterations: 5
+      max_retries: 2
+
+coordination:
+  strategy: "sequential"
