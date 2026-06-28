@@ -1,3 +1,4 @@
+// Package cli implements the command-line interface commands for AgentOS.
 package cli
 
 import (
@@ -16,6 +17,7 @@ as the LLM gateway for safe, reproducible code generation.
 Complete documentation is available at https://github.com/kazyamaz200/agentos`,
 }
 
+// Execute runs the root cobra command, parsing and dispatching CLI subcommands.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

@@ -1,3 +1,5 @@
+// Package runtime manages the execution lifecycle of coding tasks, including
+// planning, execution, testing, linting, review, and result generation.
 package runtime
 
 import (
@@ -20,10 +22,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Planner defines the interface for generating execution plans from task context.
 type Planner interface {
 	Plan(ctx *RunContext) (*Plan, error)
 }
 
+// Runtime manages the end-to-end execution of a coding task, including planning,
+// execution, testing, linting, review, and artifact generation.
 type Runtime struct {
 	LLM       llm.LLMClient
 	Registry  *tools.Registry
@@ -36,6 +41,7 @@ type Runtime struct {
 	Planner   Planner
 }
 
+// NewRuntime creates a new Runtime with the given LLM client, profile, workspace, config, and planner.
 func NewRuntime(llmClient llm.LLMClient, prof *profile.Profile, workspace *sandbox.Workspace, cfg *Config, planner Planner) *Runtime {
 	registry := tools.NewRegistry()
 	policy := safety.NewCommandPolicy(prof.Tools.DenyCommands)
@@ -67,6 +73,7 @@ func NewRuntime(llmClient llm.LLMClient, prof *profile.Profile, workspace *sandb
 	}
 }
 
+// Run executes a coding task end-to-end: plan, execute, test, lint, review, and generate artifacts.
 func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 	startTime := time.Now()
 
@@ -475,6 +482,7 @@ func mustMarshalYAML(v interface{}) []byte {
 	return data
 }
 
+// ParsePlan extracts a Plan from an LLM chat response by unmarshalling the JSON content.
 func ParsePlan(resp *llm.ChatResponse) (*Plan, error) {
 	content := resp.Choices[0].Message.Content
 	content = stripJSONFences(content)
@@ -485,6 +493,7 @@ func ParsePlan(resp *llm.ChatResponse) (*Plan, error) {
 	return &plan, nil
 }
 
+// ParseReview extracts a ReviewResult from an LLM chat response by unmarshalling the JSON content.
 func ParseReview(resp *llm.ChatResponse) (*ReviewResult, error) {
 	content := resp.Choices[0].Message.Content
 	content = stripJSONFences(content)

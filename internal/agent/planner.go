@@ -1,3 +1,4 @@
+// Package agent provides core agent interfaces and base implementations for coding agents.
 package agent
 
 import (
@@ -7,14 +8,17 @@ import (
 	"github.com/kazyamaz200/agentos/internal/runtime"
 )
 
+// Planner uses an LLM to generate execution plans for coding tasks.
 type Planner struct {
 	llm llm.LLMClient
 }
 
+// NewPlanner creates a new Planner with the given LLM client.
 func NewPlanner(llmClient llm.LLMClient) *Planner {
 	return &Planner{llm: llmClient}
 }
 
+// Plan generates a plan for the given task by sending the task context to the LLM.
 func (p *Planner) Plan(rctx *runtime.RunContext) (*runtime.Plan, error) {
 	systemMsg := llm.Message{Role: llm.RoleSystem, Content: llm.SystemPromptPlanner}
 	userMsg := llm.Message{

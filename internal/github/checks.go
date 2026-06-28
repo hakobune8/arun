@@ -2,6 +2,7 @@ package github
 
 import "fmt"
 
+// GetCheckRuns retrieves check runs for a given Git ref.
 func (c *Client) GetCheckRuns(ref string) ([]CheckRun, error) {
 	path := fmt.Sprintf("/%s/commits/%s/check-runs?per_page=50", c.RepoPath(), ref)
 
@@ -15,6 +16,7 @@ func (c *Client) GetCheckRuns(ref string) ([]CheckRun, error) {
 	return resp.CheckRuns, nil
 }
 
+// GetCheckSuites retrieves check suites for a given Git ref.
 func (c *Client) GetCheckSuites(ref string) ([]CheckSuite, error) {
 	path := fmt.Sprintf("/%s/commits/%s/check-suites", c.RepoPath(), ref)
 
@@ -28,6 +30,7 @@ func (c *Client) GetCheckSuites(ref string) ([]CheckSuite, error) {
 	return resp.CheckSuites, nil
 }
 
+// GetCheckRunAnnotations retrieves annotations for a check run.
 func (c *Client) GetCheckRunAnnotations(checkRunID int) (string, error) {
 	path := fmt.Sprintf("/%s/check-runs/%d/annotations", c.RepoPath(), checkRunID)
 
@@ -47,6 +50,7 @@ func (c *Client) GetCheckRunAnnotations(checkRunID int) (string, error) {
 	return output, nil
 }
 
+// GetWorkflowRunLogs retrieves the logs for a workflow run.
 func (c *Client) GetWorkflowRunLogs(runID int) (string, error) {
 	path := fmt.Sprintf("/%s/actions/runs/%d/logs", c.RepoPath(), runID)
 

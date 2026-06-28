@@ -1,9 +1,12 @@
+// Package llm provides LLM client interfaces and implementations for interacting
+// with language models via LiteLLM.
 package llm
 
 import (
 	"os"
 )
 
+// DefaultConfig returns a Config populated from environment variables with sensible defaults.
 func DefaultConfig() Config {
 	baseURL := os.Getenv("LITELLM_BASE_URL")
 	if baseURL == "" {

@@ -7,6 +7,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Load reads a Profile from the YAML file at path, applies defaults, and
+// validates the result.
 func Load(path string) (*Profile, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

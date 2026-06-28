@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 )
 
+// ReadFileTool reads file contents from within the configured workspace.
 type ReadFileTool struct {
 	Workspace string
 }
 
+// NewReadFileTool creates a ReadFileTool rooted at workspace.
 func NewReadFileTool(workspace string) *ReadFileTool {
 	return &ReadFileTool{Workspace: workspace}
 }
@@ -32,10 +34,12 @@ func (t *ReadFileTool) Run(ctx context.Context, input ToolInput) ToolOutput {
 	return ToolOutput{Success: true, Data: string(data)}
 }
 
+// WriteFileTool writes file contents within the configured workspace.
 type WriteFileTool struct {
 	Workspace string
 }
 
+// NewWriteFileTool creates a WriteFileTool rooted at workspace.
 func NewWriteFileTool(workspace string) *WriteFileTool {
 	return &WriteFileTool{Workspace: workspace}
 }

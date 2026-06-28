@@ -21,14 +21,20 @@ var secretPatterns = []string{
 	".token*",
 }
 
+// SecretDetector identifies files that are likely to contain secrets (e.g.
+// .env, *.pem, id_rsa) by matching their names against known patterns.
 type SecretDetector struct {
 	patterns []string
 }
 
+// NewSecretDetector returns a SecretDetector with a built-in set of secret
+// file patterns.
 func NewSecretDetector() *SecretDetector {
 	return &SecretDetector{patterns: secretPatterns}
 }
 
+// IsSecretFile returns true if the base name of filePath matches a known
+// secret file pattern.
 func (s *SecretDetector) IsSecretFile(filePath string) bool {
 	name := filepath.Base(filePath)
 	for _, pattern := range s.patterns {

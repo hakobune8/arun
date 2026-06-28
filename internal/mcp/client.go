@@ -1,3 +1,4 @@
+// Package mcp implements a Model Context Protocol client for interacting with MCP servers.
 package mcp
 
 import (
@@ -12,6 +13,7 @@ import (
 	"time"
 )
 
+// Client represents a connection to an MCP server process.
 type Client struct {
 	cmd       *exec.Cmd
 	stdin     io.WriteCloser
@@ -23,11 +25,13 @@ type Client struct {
 	info      *InitializeResult
 }
 
+// NewClient creates a new MCP client for the given command.
 func NewClient(command string, args ...string) *Client {
 	cmd := exec.Command(command, args...)
 	return &Client{cmd: cmd}
 }
 
+// Connect starts the MCP server process and performs the initialization handshake.
 func (c *Client) Connect(ctx context.Context) error {
 	stdin, err := c.cmd.StdinPipe()
 	if err != nil {
@@ -80,6 +84,7 @@ func (c *Client) Connect(ctx context.Context) error {
 	return nil
 }
 
+// ListTools retrieves the list of available tools from the MCP server.
 func (c *Client) ListTools(ctx context.Context) ([]ToolDefinition, error) {
 	req := JSONRPCRequest{
 		JSONRPC: "2.0",
@@ -95,6 +100,7 @@ func (c *Client) ListTools(ctx context.Context) ([]ToolDefinition, error) {
 	return result.Tools, nil
 }
 
+// CallTool invokes a tool on the MCP server with the given arguments.
 func (c *Client) CallTool(ctx context.Context, name string, args map[string]interface{}) (*CallToolResult, error) {
 	req := JSONRPCRequest{
 		JSONRPC: "2.0",
@@ -114,6 +120,7 @@ func (c *Client) CallTool(ctx context.Context, name string, args map[string]inte
 	return &result, nil
 }
 
+// Close terminates the MCP server process.
 func (c *Client) Close() error {
 	c.connected = false
 	if c.cmd != nil && c.cmd.Process != nil {
@@ -123,10 +130,12 @@ func (c *Client) Close() error {
 	return nil
 }
 
+// IsConnected returns whether the client is currently connected to the MCP server.
 func (c *Client) IsConnected() bool {
 	return c.connected
 }
 
+// Info returns the server info received during initialization.
 func (c *Client) Info() *InitializeResult {
 	return c.info
 }

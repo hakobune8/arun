@@ -7,11 +7,13 @@ import (
 	"github.com/kazyamaz200/agentos/internal/tools"
 )
 
+// ToolAdapter adapts an MCP tool to the local tools.Registry interface.
 type ToolAdapter struct {
 	client *Client
 	def    ToolDefinition
 }
 
+// Name returns the prefixed name of the MCP tool.
 func (a *ToolAdapter) Name() string {
 	return "mcp_" + a.def.Name
 }
@@ -41,6 +43,7 @@ func (a *ToolAdapter) Run(ctx context.Context, input tools.ToolInput) tools.Tool
 	}
 }
 
+// RegisterMCPServer connects to an MCP server and registers all its tools in the given registry.
 func RegisterMCPServer(registry *tools.Registry, client *Client) error {
 	ctx := context.Background()
 	defs, err := client.ListTools(ctx)

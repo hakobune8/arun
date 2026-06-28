@@ -1,3 +1,4 @@
+// Package search provides a unified search service across memories, guidelines, and PRs.
 package search
 
 import (
@@ -10,15 +11,21 @@ import (
 	"github.com/kazyamaz200/agentos/internal/vector"
 )
 
+// Type represents a search source type.
 type Type string
 
 const (
-	TypeMemory    Type = "memory"
+	// TypeMemory searches across agent memory entries.
+	TypeMemory Type = "memory"
+	// TypeGuideline searches across guideline entries.
 	TypeGuideline Type = "guideline"
-	TypePR        Type = "pr"
-	TypeAll       Type = "all"
+	// TypePR searches across pull request memories.
+	TypePR Type = "pr"
+	// TypeAll searches across all available sources.
+	TypeAll Type = "all"
 )
 
+// Service provides unified search across multiple data sources.
 type Service struct {
 	memStore *memory.MemoryStore
 	glStore  *guideline.Store
@@ -26,6 +33,7 @@ type Service struct {
 	embedder embedding.Embedder
 }
 
+// NewService creates a new search service with the given vector store and embedder.
 func NewService(vs vector.VectorStore, embedder embedding.Embedder) *Service {
 	return &Service{
 		memStore: memory.NewMemoryStore(vs, embedder),
@@ -35,6 +43,7 @@ func NewService(vs vector.VectorStore, embedder embedding.Embedder) *Service {
 	}
 }
 
+// Result represents a single search result from any source.
 type Result struct {
 	Source   Type                   `json:"source"`
 	ID       string                 `json:"id"`
@@ -43,6 +52,7 @@ type Result struct {
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
+// Search performs a search across the specified source type.
 func (s *Service) Search(ctx context.Context, query string, searchType Type, limit int) ([]Result, error) {
 	if limit <= 0 {
 		limit = 10
@@ -133,10 +143,12 @@ func (s *Service) searchAll(ctx context.Context, query string, limit int) ([]Res
 	return all, nil
 }
 
+// MemoryStore returns the underlying memory store.
 func (s *Service) MemoryStore() *memory.MemoryStore {
 	return s.memStore
 }
 
+// GuidelineStore returns the underlying guideline store.
 func (s *Service) GuidelineStore() *guideline.Store {
 	return s.glStore
 }

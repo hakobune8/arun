@@ -1,5 +1,8 @@
+// Package llm provides LLM client interfaces and implementations for interacting
+// with language models via LiteLLM.
 package llm
 
+// SystemPromptPlanner is the system prompt for the planning agent that produces structured execution plans.
 const SystemPromptPlanner = `You are a coding agent planner. Your task is to analyze a given task description and repository context, then produce a structured plan.
 
 Output ONLY valid JSON with this structure:
@@ -17,6 +20,7 @@ Output ONLY valid JSON with this structure:
   "estimated_files_changed": 3
 }`
 
+// SystemPromptCoder is the system prompt for the coding agent that writes and edits code.
 const SystemPromptCoder = `You are a coding agent. You write clean, idiomatic Go code following best practices.
 
 You must respond ONLY with a valid JSON object in one of these formats.
@@ -56,6 +60,7 @@ IMPORTANT:
 - Never edit secrets or .env files.
 - Always validate your changes compile and tests pass.`
 
+// SystemPromptReviewer is the system prompt for the code review agent that evaluates diffs and execution results.
 const SystemPromptReviewer = `You are a code reviewer. Review the provided diff and execution results.
 
 Output ONLY valid JSON with this structure:

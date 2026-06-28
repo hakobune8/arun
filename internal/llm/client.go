@@ -1,3 +1,5 @@
+// Package llm provides LLM client interfaces and implementations for interacting
+// with language models via LiteLLM.
 package llm
 
 import (
@@ -10,6 +12,7 @@ import (
 	"time"
 )
 
+// Config holds the configuration for connecting to a LiteLLM proxy server.
 type Config struct {
 	BaseURL    string
 	APIKey     string
@@ -17,11 +20,13 @@ type Config struct {
 	Timeout    time.Duration
 }
 
+// LiteLLMClient is an HTTP client for the LiteLLM proxy API that implements LLMClient.
 type LiteLLMClient struct {
 	config Config
 	http   *http.Client
 }
 
+// NewLiteLLMClient creates a new LiteLLMClient with the given config, defaulting to a 5-minute timeout.
 func NewLiteLLMClient(config Config) *LiteLLMClient {
 	if config.Timeout == 0 {
 		config.Timeout = 5 * time.Minute
@@ -34,6 +39,7 @@ func NewLiteLLMClient(config Config) *LiteLLMClient {
 	}
 }
 
+// Chat sends a chat completion request to the LiteLLM proxy and returns the response.
 func (c *LiteLLMClient) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -77,23 +83,28 @@ func (c *LiteLLMClient) Chat(ctx context.Context, req ChatRequest) (*ChatRespons
 	return &chatResp, nil
 }
 
+// ModelName returns the configured model name for coding tasks.
 func (c *LiteLLMClient) ModelName() string {
 	return c.config.ModelCoder
 }
 
+// Config returns the current client configuration.
 func (c *LiteLLMClient) Config() Config {
 	return c.config
 }
 
+// MockLLMClient is a test double that returns pre-configured responses in sequence.
 type MockLLMClient struct {
 	Responses []ChatResponse
 	Index     int
 }
 
+// NewMockLLMClient creates a new MockLLMClient with the given slice of responses to return in order.
 func NewMockLLMClient(responses []ChatResponse) *MockLLMClient {
 	return &MockLLMClient{Responses: responses}
 }
 
+// Chat returns the next pre-configured mock response in the sequence.
 func (m *MockLLMClient) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
 	if m.Index >= len(m.Responses) {
 		return nil, fmt.Errorf("no more mock responses")
@@ -103,6 +114,7 @@ func (m *MockLLMClient) Chat(ctx context.Context, req ChatRequest) (*ChatRespons
 	return &resp, nil
 }
 
+// ModelName returns "mock-model" as the mock client identifier.
 func (m *MockLLMClient) ModelName() string {
 	return "mock-model"
 }

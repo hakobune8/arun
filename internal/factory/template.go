@@ -7,6 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// LoadTemplate reads and parses an agent template from a YAML file.
 func LoadTemplate(path string) (*AgentTemplate, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -25,6 +26,7 @@ func LoadTemplate(path string) (*AgentTemplate, error) {
 	return &tmpl, nil
 }
 
+// DefaultTemplate returns a default agent template with coder and reviewer agents.
 func DefaultTemplate() *AgentTemplate {
 	return &AgentTemplate{
 		Schema: "agentos/v1",

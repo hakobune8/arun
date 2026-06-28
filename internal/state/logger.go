@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+// LogEntry is a generic log message with level, component, and optional
+// structured data.
 type LogEntry struct {
 	Timestamp time.Time `json:"timestamp"`
 	Level     string    `json:"level"`
@@ -16,6 +18,7 @@ type LogEntry struct {
 	Data      any       `json:"data,omitempty"`
 }
 
+// ToolLogEntry records a tool invocation, its input, output, and duration.
 type ToolLogEntry struct {
 	Timestamp time.Time `json:"timestamp"`
 	Tool      string    `json:"tool"`
@@ -24,6 +27,8 @@ type ToolLogEntry struct {
 	Duration  string    `json:"duration"`
 }
 
+// LLMLogEntry records an LLM API request/response pair including token
+// counts and duration.
 type LLMLogEntry struct {
 	Timestamp  time.Time `json:"timestamp"`
 	Request    any       `json:"request"`
@@ -34,14 +39,18 @@ type LLMLogEntry struct {
 	CompletionTokens int `json:"completion_tokens,omitempty"`
 }
 
+// Logger writes structured JSON log entries (generic logs, tool calls, LLM
+// calls) to files in a run directory.
 type Logger struct {
 	runDir string
 }
 
+// NewLogger returns a Logger that writes to files in runDir.
 func NewLogger(runDir string) *Logger {
 	return &Logger{runDir: runDir}
 }
 
+// Log appends a LogEntry to run.log.
 func (l *Logger) Log(level, component, message string, data any) error {
 	entry := LogEntry{
 		Timestamp: time.Now(),
@@ -53,6 +62,7 @@ func (l *Logger) Log(level, component, message string, data any) error {
 	return l.appendJSON("run.log", entry)
 }
 
+// LogTool appends a ToolLogEntry to tool_log.jsonl.
 func (l *Logger) LogTool(tool string, input, output any, duration time.Duration) error {
 	entry := ToolLogEntry{
 		Timestamp: time.Now(),
@@ -64,6 +74,7 @@ func (l *Logger) LogTool(tool string, input, output any, duration time.Duration)
 	return l.appendJSON("tool_log.jsonl", entry)
 }
 
+// LogLLM appends an LLMLogEntry to llm_log.jsonl.
 func (l *Logger) LogLLM(req, resp any, model string, duration time.Duration, promptTokens, completionTokens int) error {
 	entry := LLMLogEntry{
 		Timestamp:        time.Now(),

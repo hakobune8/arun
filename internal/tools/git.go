@@ -8,10 +8,13 @@ import (
 	"strings"
 )
 
+// GitTool provides a set of common git operations (diff, status, commit,
+// branch, checkout, add, log) via a single Tool interface.
 type GitTool struct {
 	RepoPath string
 }
 
+// NewGitTool creates a GitTool that operates on the repository at repoPath.
 func NewGitTool(repoPath string) *GitTool {
 	return &GitTool{RepoPath: repoPath}
 }
@@ -93,6 +96,7 @@ func (t *GitTool) Run(ctx context.Context, input ToolInput) ToolOutput {
 	return ToolOutput{Success: false, Error: "no command executed"}
 }
 
+// Diff returns the unstaged diff of the repository.
 func (t *GitTool) Diff(ctx context.Context) (string, error) {
 	result := t.Run(ctx, ToolInput{"subcommand": "diff"})
 	if !result.Success {
@@ -102,6 +106,7 @@ func (t *GitTool) Diff(ctx context.Context) (string, error) {
 	return data["stdout"], nil
 }
 
+// CurrentBranch returns the name of the currently checked-out branch.
 func (t *GitTool) CurrentBranch(ctx context.Context) (string, error) {
 	result := t.Run(ctx, ToolInput{"subcommand": "branch"})
 	if !result.Success {

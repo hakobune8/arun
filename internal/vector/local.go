@@ -11,11 +11,13 @@ import (
 	"sync"
 )
 
+// LocalStore is a file-based vector store that stores collections as JSON files.
 type LocalStore struct {
 	dir string
 	mu  sync.RWMutex
 }
 
+// NewLocalStore creates a new LocalStore that stores data in the given directory.
 func NewLocalStore(dir string) *LocalStore {
 	os.MkdirAll(dir, 0755)
 	return &LocalStore{dir: dir}

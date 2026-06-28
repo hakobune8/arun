@@ -11,12 +11,14 @@ import (
 	"github.com/kazyamaz200/agentos/internal/tools"
 )
 
+// Factory creates and manages agent instances from configuration templates.
 type Factory struct {
 	profiles   map[string]*profile.Profile
 	llmConfig  llm.Config
 	workDir    string
 }
 
+// NewFactory creates a new Factory with the given working directory.
 func NewFactory(workDir string) *Factory {
 	return &Factory{
 		profiles:  make(map[string]*profile.Profile),
@@ -25,14 +27,17 @@ func NewFactory(workDir string) *Factory {
 	}
 }
 
+// RegisterProfile registers a named profile for agent creation.
 func (f *Factory) RegisterProfile(name string, prof *profile.Profile) {
 	f.profiles[name] = prof
 }
 
+// LoadProfile loads a profile from a file path.
 func (f *Factory) LoadProfile(path string) (*profile.Profile, error) {
 	return profile.Load(path)
 }
 
+// CreateAgent creates a fully initialized agent instance from an agent definition.
 func (f *Factory) CreateAgent(def *AgentDef) (*AgentInstance, error) {
 	var prof *profile.Profile
 	var ok bool
@@ -100,6 +105,7 @@ func (f *Factory) CreateAgent(def *AgentDef) (*AgentInstance, error) {
 	}, nil
 }
 
+// CreateAgentsFromTemplate creates agent instances from a template.
 func (f *Factory) CreateAgentsFromTemplate(tmpl *AgentTemplate) ([]*AgentInstance, error) {
 	var agents []*AgentInstance
 	for _, def := range tmpl.Agents {
@@ -112,6 +118,7 @@ func (f *Factory) CreateAgentsFromTemplate(tmpl *AgentTemplate) ([]*AgentInstanc
 	return agents, nil
 }
 
+// CreateAgentsFromFile loads a template from a file and creates agent instances.
 func (f *Factory) CreateAgentsFromFile(path string) ([]*AgentInstance, error) {
 	tmpl, err := LoadTemplate(path)
 	if err != nil {
@@ -120,14 +127,17 @@ func (f *Factory) CreateAgentsFromFile(path string) ([]*AgentInstance, error) {
 	return f.CreateAgentsFromTemplate(tmpl)
 }
 
+// DefaultLLMConfig returns the default LLM configuration used by the factory.
 func (f *Factory) DefaultLLMConfig() llm.Config {
 	return f.llmConfig
 }
 
+// WorkDir returns the working directory for tool execution.
 func (f *Factory) WorkDir() string {
 	return f.workDir
 }
 
+// ListAgents returns the names of all registered profiles.
 func (f *Factory) ListAgents() ([]string, error) {
 	var names []string
 	for k := range f.profiles {
@@ -136,14 +146,17 @@ func (f *Factory) ListAgents() ([]string, error) {
 	return names, nil
 }
 
+// AgentRunner executes agents created by the factory.
 type AgentRunner struct {
 	factory *Factory
 }
 
+// NewAgentRunner creates a new AgentRunner.
 func NewAgentRunner(factory *Factory) *AgentRunner {
 	return &AgentRunner{factory: factory}
 }
 
+// RunAgent runs an agent with the given configuration and task description.
 func (r *AgentRunner) RunAgent(ctx context.Context, def *AgentDef, taskDesc string) error {
 	agent, err := r.factory.CreateAgent(def)
 	if err != nil {

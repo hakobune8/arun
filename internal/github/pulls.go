@@ -2,6 +2,7 @@ package github
 
 import "fmt"
 
+// CreatePRRequest contains the parameters for creating a pull request.
 type CreatePRRequest struct {
 	Title string `json:"title"`
 	Body  string `json:"body"`
@@ -16,6 +17,7 @@ type createPRResponse struct {
 	State   string `json:"state"`
 }
 
+// CreatePR creates a new pull request on GitHub.
 func (c *Client) CreatePR(req CreatePRRequest) (*PullRequest, error) {
 	path := fmt.Sprintf("/%s/pulls", c.RepoPath())
 
@@ -34,6 +36,7 @@ func (c *Client) CreatePR(req CreatePRRequest) (*PullRequest, error) {
 	}, nil
 }
 
+// ListPRs lists pull requests, optionally filtered by state.
 func (c *Client) ListPRs(state string) ([]PullRequest, error) {
 	if state == "" {
 		state = "open"
