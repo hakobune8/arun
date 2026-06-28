@@ -74,8 +74,7 @@ func (c *Client) Connect(ctx context.Context) error {
 	c.info = &result
 	c.connected = true
 
-	var notif JSONRPCRequest
-	notif = JSONRPCRequest{
+	notif := JSONRPCRequest{
 		JSONRPC: "2.0",
 		Method:  "notifications/initialized",
 	}

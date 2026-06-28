@@ -513,20 +513,6 @@ func stripJSONFences(s string) string {
 	return s
 }
 
-func getPromptTokens(resp *llm.ChatResponse) int {
-	if resp.Usage != nil {
-		return resp.Usage.PromptTokens
-	}
-	return 0
-}
-
-func getCompletionTokens(resp *llm.ChatResponse) int {
-	if resp.Usage != nil {
-		return resp.Usage.CompletionTokens
-	}
-	return 0
-}
-
 func init() {
 	_ = os.MkdirAll(filepath.Join(os.TempDir(), ".agentos", "runs"), 0755)
 }

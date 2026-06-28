@@ -12,7 +12,6 @@ import (
 
 var (
 	mcpCommand string
-	mcpAction  string
 	mcpTool    string
 	mcpArgs    []string
 )
