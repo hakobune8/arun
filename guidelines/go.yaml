@@ -1,0 +1,36 @@
+- id: "go-err-handling"
+  title: "Error handling"
+  rule: "Always return errors instead of ignoring them. Use fmt.Errorf for error formatting. Never use panic in library code."
+  tags: ["go", "error", "best-practice"]
+  example: |
+    if err != nil {
+        return fmt.Errorf("process data: %w", err)
+    }
+
+- id: "go-naming"
+  title: "Naming conventions"
+  rule: "Use camelCase for variables, PascalCase for exported functions/types, and lowercase for unexported. Acronyms should be all uppercase (e.g., HTTP, URL, ID)."
+  tags: ["go", "naming", "style"]
+
+- id: "go-testing"
+  title: "Testing conventions"
+  rule: "Use table-driven tests. Name test functions as TestXxx. Use t.Run for subtests. Assert errors with t.Fatal/t.Error."
+  tags: ["go", "testing", "best-practice"]
+  example: |
+    func TestAdd(t *testing.T) {
+        tests := []struct {
+            name string
+            a, b int
+            want int
+        }{
+            {"positive", 1, 2, 3},
+            {"negative", -1, 1, 0},
+        }
+        for _, tt := range tests {
+            t.Run(tt.name, func(t *testing.T) {
+                if got := Add(tt.a, tt.b); got != tt.want {
+                    t.Errorf("Add() = %d, want %d", got, tt.want)
+                }
+            })
+        }
+    }

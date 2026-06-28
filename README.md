@@ -9,6 +9,10 @@ AgentOS is a coding agent execution platform for safely producing and running co
 - **Review & Retry** — Automated code review with retry on test/lint failure
 - **GitHub Integration** — Issue fetching, PR creation, CI check inspection
 - **CI Fix Agent** — Automatic analysis and fix suggestions for CI failures
+- **Vector Search** — Local (JSON) or Qdrant vector store for semantic search
+- **Agent Memory** — Persistent memory with vector-based retrieval
+- **Coding Guidelines** — YAML-defined guidelines with semantic search
+- **Past PR Search** — Search across previous runs and PRs
 - **Safety First** — Command denylist, secret detection, main branch protection
 - **Full Audit Trail** — All LLM calls, tool executions, and artifacts saved per run
 - **Extensible** — Interface-based design for tools, LLM clients, and agents
@@ -69,6 +73,18 @@ agentos checks list --repo owner/repo --ref main
 
 # CI Fix Agent
 agentos ci-fix --repo owner/repo --ref main
+
+# Vector search across memory, guidelines, and past PRs
+agentos search --query "error handling pattern" --type all
+agentos search --query "validation logic" --type guideline
+
+# Agent memory operations
+agentos memory save --content "Fixed issue #42: added input validation" --type pr
+agentos memory search --query "input validation"
+
+# Coding guideline management
+agentos guideline load --dir guidelines/
+agentos guideline search --query "error handling"
 
 # Check version
 agentos version
@@ -158,6 +174,9 @@ pr_body.md        # Pull request body draft
 | `AGENTOS_MODEL_CODER` | `coder` | Model for coding tasks |
 | `GITHUB_TOKEN` | - | GitHub personal access token for API operations |
 | `GH_TOKEN` | - | Alternative GitHub token (fallback) |
+| `AGENTOS_MODEL_EMBEDDING` | `text-embedding-ada-002` | Model for embeddings |
+| `QDRANT_URL` | `http://localhost:6333` | Qdrant vector database URL |
+| `QDRANT_API_KEY` | - | Qdrant API key |
 
 ## Roadmap
 
@@ -177,11 +196,13 @@ pr_body.md        # Pull request body draft
 - [x] CI result fetching
 - [x] CI Fix Agent
 
-### v0.3 — Planned
-- [ ] Qdrant integration
-- [ ] Past PR search
-- [ ] Coding guideline retrieval
-- [ ] Agent memory
+### v0.3 — Current
+- [x] Vector store interface (local JSON + Qdrant)
+- [x] Embedding generation via LiteLLM
+- [x] Past PR search via vector search
+- [x] Coding guideline retrieval with semantic search
+- [x] Agent memory with save/search/clear
+- [x] Unified search command
 
 ### v0.4 — Planned
 - [ ] MCP integration
