@@ -84,8 +84,6 @@ func (f *Factory) CreateAgent(def *AgentDef) (*AgentInstance, error) {
 
 	registry := tools.NewRegistry()
 	policy := safety.NewCommandPolicy(prof.Tools.DenyCommands)
-	secretDetector := safety.NewSecretDetector()
-	_ = secretDetector
 
 	allowed := make(map[string]bool)
 	for _, t := range prof.Tools.Allow {
@@ -172,12 +170,10 @@ func NewAgentRunner(factory *Factory) *AgentRunner {
 
 // RunAgent runs an agent with the given configuration and task description.
 func (r *AgentRunner) RunAgent(ctx context.Context, def *AgentDef, taskDesc string) error {
-	agent, err := r.factory.CreateAgent(def)
+	_, err := r.factory.CreateAgent(def)
 	if err != nil {
 		return fmt.Errorf("create agent: %w", err)
 	}
-
-	_ = agent
 
 	fmt.Fprintf(os.Stdout, "Running agent %s (role: %s)\n", def.Name, def.Role)
 	fmt.Fprintf(os.Stdout, "  Model: %s\n", def.Profile)

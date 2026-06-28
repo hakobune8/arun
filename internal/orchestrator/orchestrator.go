@@ -135,16 +135,12 @@ Break this task into subtasks and assign each to the most suitable agent.`, task
 	content = strings.TrimSpace(content)
 
 	var plan TaskPlan
-	if err := jsonUnmarshal([]byte(content), &plan); err != nil {
+	if err := json.Unmarshal([]byte(content), &plan); err != nil {
 		return nil, fmt.Errorf("parse plan: %w", err)
 	}
 
 	plan.Description = taskDesc
 	return &plan, nil
-}
-
-func jsonUnmarshal(data []byte, v interface{}) error {
-	return json.Unmarshal(data, v)
 }
 
 // Execute runs all subtasks in the plan according to the configured strategy.

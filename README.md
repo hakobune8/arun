@@ -98,9 +98,6 @@ agentos memory search --query "input validation"
 agentos mcp connect --command "npx @anthropic/mcp-serve"
 agentos mcp call --command "npx @anthropic/mcp-serve" --tool read_file --arg path=main.go
 
-# Docker sandbox
-agentos run --task task.yaml --profile profile.yaml --sandbox docker
-
 # Start Web UI
 agentos serve --port 8080
 

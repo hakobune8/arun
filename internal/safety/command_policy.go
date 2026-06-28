@@ -24,7 +24,6 @@ import (
 // commands against them before execution.
 type CommandPolicy struct {
 	DenyCommands []string
-	AllowList    []string
 }
 
 // NewCommandPolicy returns a CommandPolicy pre-populated with a set of
