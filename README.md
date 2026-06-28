@@ -16,6 +16,8 @@ AgentOS is a coding agent execution platform for safely producing and running co
 - **MCP Integration** — Connect to MCP servers for external tools
 - **Docker Sandbox** — Isolated execution in Docker containers
 - **Web UI** — Built-in web dashboard for runs and search
+- **Agent Factory** — Create agents dynamically from profile templates
+- **Multi-Agent Orchestration** — Coordinate multiple agents on complex tasks
 - **Safety First** — Command denylist, secret detection, main branch protection
 - **Full Audit Trail** — All LLM calls, tool executions, and artifacts saved per run
 - **Extensible** — Interface-based design for tools, LLM clients, and agents
@@ -94,6 +96,14 @@ agentos run --task task.yaml --profile profile.yaml --sandbox docker
 
 # Start Web UI
 agentos serve --port 8080
+
+# Agent management
+agentos agent create --template profiles/agents/template.yaml
+agentos agent run --agent coder --task "Add validation"
+
+# Multi-agent orchestration
+agentos orchestrate --template profiles/agents/template.yaml --task "Implement user auth"
+agentos orchestrate --template profiles/agents/template.yaml --task "Fix all lint errors" --strategy parallel
 
 # Coding guideline management
 agentos guideline load --dir guidelines/
@@ -223,10 +233,11 @@ pr_body.md        # Pull request body draft
 - [x] Docker sandbox for isolated execution
 - [x] Web UI with dashboard, run viewer, and search
 
-### v0.5 — Planned
-- [ ] Agent Factory
-- [ ] Profile-based agent generation
-- [ ] Multi-agent coordination
+### v0.5 — Current
+- [x] Agent Factory (create agents from templates)
+- [x] Profile-based agent generation
+- [x] Multi-agent orchestration (sequential/parallel)
+- [x] Agent template system with YAML definitions
 
 ## License
 
