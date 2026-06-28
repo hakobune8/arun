@@ -46,7 +46,7 @@ jobs:
         run: go build -o agentos ./cmd/agentos
 
       - name: Test
-        run: go test ./... -v -count=1
+        run: go test ./... -v -count=1 -coverprofile=coverage.out
 
       - name: Upload coverage
         uses: codecov/codecov-action@v5
