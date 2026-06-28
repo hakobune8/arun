@@ -16,6 +16,7 @@ package tools
 
 import (
 	"context"
+	"runtime"
 	"testing"
 
 	"github.com/kazyamaz200/agentos/internal/safety"
@@ -104,6 +105,10 @@ func TestShellTool_ToolName(t *testing.T) {
 
 func TestShellTool_WorkDir(t *testing.T) {
 	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("pwd returns different path format on Windows")
+	}
 
 	dir := t.TempDir()
 	policy := safety.NewCommandPolicy(nil)
