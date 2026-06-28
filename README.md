@@ -5,6 +5,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/kazyamaz200/agentos)](https://goreportcard.com/report/github.com/kazyamaz200/agentos)
 [![Release](https://img.shields.io/github/v/release/kazyamaz200/agentos)](https://github.com/kazyamaz200/agentos/releases)
+[![Go Reference](https://pkg.go.dev/badge/github.com/kazyamaz200/agentos)](https://pkg.go.dev/github.com/kazyamaz200/agentos)
 
 AgentOS is a coding agent execution platform for safely producing and running coding agents at scale. It uses [LiteLLM](https://github.com/BerriAI/litellm) as the LLM gateway, providing a unified interface to various LLM backends.
 
