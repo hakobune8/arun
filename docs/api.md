@@ -1,0 +1,109 @@
+# API Reference
+
+AgentOS Web UI provides a minimal REST API for querying run history and search results.
+
+## Base URL
+
+By default, the server runs at `http://localhost:8080`.
+
+## Endpoints
+
+### Health Check
+
+```
+GET /api/health
+```
+
+Returns the server status.
+
+**Response** (200):
+```json
+{
+  "status": "ok",
+  "time": "2026-06-28T10:00:00Z"
+}
+```
+
+---
+
+### List Runs
+
+```
+GET /api/runs
+```
+
+Returns all completed runs.
+
+**Response** (200):
+```json
+[
+  {
+    "id": "task-001",
+    "status": "completed",
+    "started_at": "2026-06-28T09:00:00Z",
+    "completed_at": "2026-06-28T09:05:00Z",
+    "profile": "go-backend",
+    "branch": "agent/task-001"
+  }
+]
+```
+
+---
+
+### Get Run Detail
+
+```
+GET /api/runs/{id}
+```
+
+Returns detailed information about a specific run, including steps, errors, and LLM call logs.
+
+**Response** (200):
+```json
+{
+  "id": "task-001",
+  "status": "completed",
+  "plan": { ... },
+  "result": { ... },
+  "logs": [ ... ]
+}
+```
+
+---
+
+### Search
+
+```
+GET /api/search?q={query}&type={type}&limit={limit}
+```
+
+Search across memory, guidelines, and past PRs.
+
+**Parameters:**
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `q` | string | required | Search query |
+| `type` | string | `all` | Source type: `memory`, `guideline`, `pr`, `all` |
+| `limit` | int | `10` | Maximum results |
+
+**Response** (200):
+```json
+[
+  {
+    "source": "memory",
+    "content": "...",
+    "score": 0.95,
+    "metadata": { "title": "..." }
+  }
+]
+```
+
+---
+
+## Authentication
+
+The web UI has no built-in authentication. In production, use a reverse proxy (e.g., nginx, Caddy) with HTTPS and basic authentication.
+
+## Rate Limiting
+
+No rate limiting is currently implemented. Consider using a reverse proxy for production deployments.
