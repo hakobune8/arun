@@ -13,6 +13,9 @@ AgentOS is a coding agent execution platform for safely producing and running co
 - **Agent Memory** — Persistent memory with vector-based retrieval
 - **Coding Guidelines** — YAML-defined guidelines with semantic search
 - **Past PR Search** — Search across previous runs and PRs
+- **MCP Integration** — Connect to MCP servers for external tools
+- **Docker Sandbox** — Isolated execution in Docker containers
+- **Web UI** — Built-in web dashboard for runs and search
 - **Safety First** — Command denylist, secret detection, main branch protection
 - **Full Audit Trail** — All LLM calls, tool executions, and artifacts saved per run
 - **Extensible** — Interface-based design for tools, LLM clients, and agents
@@ -81,6 +84,16 @@ agentos search --query "validation logic" --type guideline
 # Agent memory operations
 agentos memory save --content "Fixed issue #42: added input validation" --type pr
 agentos memory search --query "input validation"
+
+# MCP server operations
+agentos mcp connect --command "npx @anthropic/mcp-serve"
+agentos mcp call --command "npx @anthropic/mcp-serve" --tool read_file --arg path=main.go
+
+# Docker sandbox
+agentos run --task task.yaml --profile profile.yaml --sandbox docker
+
+# Start Web UI
+agentos serve --port 8080
 
 # Coding guideline management
 agentos guideline load --dir guidelines/
@@ -204,10 +217,11 @@ pr_body.md        # Pull request body draft
 - [x] Agent memory with save/search/clear
 - [x] Unified search command
 
-### v0.4 — Planned
-- [ ] MCP integration
-- [ ] Docker sandbox
-- [ ] Web UI
+### v0.4 — Current
+- [x] MCP client (JSON-RPC stdio) with tool listing and calling
+- [x] MCP tool adapter → Tool registry integration
+- [x] Docker sandbox for isolated execution
+- [x] Web UI with dashboard, run viewer, and search
 
 ### v0.5 — Planned
 - [ ] Agent Factory

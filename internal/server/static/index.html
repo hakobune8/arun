@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AgentOS</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0d1117;color:#c9d1d9;line-height:1.6}
+.header{background:#161b22;border-bottom:1px solid #30363d;padding:16px 24px;display:flex;align-items:center;gap:16px}
+.header h1{font-size:20px;color:#f0f6fc}
+.header span{color:#8b949e;font-size:14px}
+.container{max-width:1200px;margin:0 auto;padding:24px}
+.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;margin-bottom:16px}
+.card h2{font-size:16px;margin-bottom:12px;color:#f0f6fc}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.stat{text-align:center;padding:16px}
+.stat-value{font-size:32px;font-weight:600;color:#58a6ff}
+.stat-label{font-size:12px;color:#8b949e;margin-top:4px}
+.search-box{display:flex;gap:8px;margin-bottom:16px}
+.search-box input{flex:1;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:14px}
+.search-box button{padding:8px 16px;background:#238636;border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:14px}
+.search-box button:hover{background:#2ea043}
+table{width:100%;border-collapse:collapse}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #30363d;font-size:14px}
+th{color:#8b949e;font-weight:500}
+tr:hover{background:#1c2128}
+.status{display:inline-block;padding:2px 8px;border-radius:12px;font-size:12px}
+.status-completed{background:#23863620;color:#3fb950;border:1px solid #238636}
+.status-failed{background:#da363320;color:#f85149;border:1px solid #da3633}
+a{color:#58a6ff;text-decoration:none}
+a:hover{text-decoration:underline}
+pre{background:#0d1117;padding:12px;border-radius:6px;overflow-x:auto;font-size:13px}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>AgentOS</h1>
+  <span>v0.4</span>
+</div>
+<div class="container">
+  <div class="grid">
+    <div class="card stat">
+      <div class="stat-value" id="totalRuns">-</div>
+      <div class="stat-label">Total Runs</div>
+    </div>
+    <div class="card stat">
+      <div class="stat-value" id="completedRuns">-</div>
+      <div class="stat-label">Completed</div>
+    </div>
+    <div class="card stat">
+      <div class="stat-value" id="failedRuns">-</div>
+      <div class="stat-label">Failed</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Search</h2>
+    <div class="search-box">
+      <input type="text" id="searchQuery" placeholder="Search memory, guidelines, PRs..." onkeydown="if(event.key==='Enter')doSearch()">
+      <button onclick="doSearch()">Search</button>
+    </div>
+    <div id="searchResults"></div>
+  </div>
+
+  <div class="card">
+    <h2>Recent Runs</h2>
+    <table>
+      <thead><tr><th>ID</th><th>Status</th><th>Profile</th><th>Actions</th></tr></thead>
+      <tbody id="runsTable"></tbody>
+    </table>
+  </div>
+
+  <div class="card" id="runDetail" style="display:none">
+    <h2>Run Detail</h2>
+    <div id="runDetailContent"></div>
+  </div>
+</div>
+
+<script>
+async function fetchJSON(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function loadStats() {
+  try {
+    const runs = await fetchJSON('/api/runs');
+    document.getElementById('totalRuns').textContent = runs.length;
+    const completed = runs.filter(r => r.state && r.state.status === 'completed').length;
+    const failed = runs.filter(r => r.state && r.state.status === 'failed').length;
+    document.getElementById('completedRuns').textContent = completed;
+    document.getElementById('failedRuns').textContent = failed;
+
+    const tbody = document.getElementById('runsTable');
+    tbody.innerHTML = runs.slice(0, 20).map(r => {
+      const status = r.state ? r.state.status : 'unknown';
+      const profile = r.state ? r.state.profile_name : '-';
+      const cls = status === 'completed' ? 'status-completed' : status === 'failed' ? 'status-failed' : '';
+      return `<tr>
+        <td><a href="javascript:void(0)" onclick="loadRun('${r.id}')">${r.id}</a></td>
+        <td><span class="status ${cls}">${status}</span></td>
+        <td>${profile}</td>
+        <td><a href="javascript:void(0)" onclick="loadRun('${r.id}')">View</a></td>
+      </tr>`;
+    }).join('');
+  } catch (e) { console.error(e); }
+}
+
+async function loadRun(id) {
+  try {
+    const data = await fetchJSON('/api/runs/' + id);
+    const div = document.getElementById('runDetail');
+    div.style.display = 'block';
+    const content = document.getElementById('runDetailContent');
+    let html = '<p><strong>ID:</strong> ' + data.id + '</p>';
+
+    if (data.artifacts) {
+      for (const [name, text] of Object.entries(data.artifacts)) {
+        html += '<h3 style="margin-top:12px;font-size:14px">' + name + '</h3>';
+        html += '<pre>' + escapeHtml(text.substring(0, 2000)) + '</pre>';
+      }
+    }
+    content.innerHTML = html;
+  } catch (e) { console.error(e); }
+}
+
+async function doSearch() {
+  const q = document.getElementById('searchQuery').value;
+  if (!q) return;
+  try {
+    const results = await fetchJSON('/api/search?q=' + encodeURIComponent(q));
+    const div = document.getElementById('searchResults');
+    if (results.length === 0) {
+      div.innerHTML = '<p style="color:#8b949e">No results.</p>';
+      return;
+    }
+    div.innerHTML = results.map(r =>
+      '<div style="padding:8px 0;border-bottom:1px solid #30363d">' +
+      '<span style="color:#8b949e;font-size:12px">[' + r.source + ']</span> ' +
+      escapeHtml(r.content) + '</div>'
+    ).join('');
+  } catch (e) { console.error(e); }
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+loadStats();
+</script>
+</body>
+</html>
