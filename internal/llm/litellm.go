@@ -10,9 +10,6 @@ func DefaultConfig() Config {
 		baseURL = "http://localhost:4000"
 	}
 	apiKey := os.Getenv("LITELLM_API_KEY")
-	if apiKey == "" {
-		apiKey = "sk-local"
-	}
 	modelCoder := os.Getenv("AGENTOS_MODEL_CODER")
 	if modelCoder == "" {
 		modelCoder = "coder"

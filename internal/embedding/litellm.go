@@ -24,9 +24,6 @@ func NewLiteLLMEmbedder() *LiteLLMEmbedder {
 		baseURL = "http://localhost:4000"
 	}
 	apiKey := os.Getenv("LITELLM_API_KEY")
-	if apiKey == "" {
-		apiKey = "sk-local"
-	}
 	model := os.Getenv("AGENTOS_MODEL_EMBEDDING")
 	if model == "" {
 		model = "text-embedding-ada-002"

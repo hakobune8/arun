@@ -26,7 +26,7 @@ Patch / Summary / PR Body Draft
 
 ### CLI Layer
 - `cmd/agentos/main.go` — Entry point
-- `internal/cli/` — Command definitions (root, run, review, version)
+- `internal/cli/` — Command definitions (root, agent, checks, ci-fix, guideline, issue, mcp, memory, orchestrate, pr, review, run, search, serve, version)
 
 ### Runtime Layer
 - `internal/runtime/runtime.go` — Orchestrates the full run lifecycle
