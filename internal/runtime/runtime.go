@@ -34,9 +34,6 @@ func NewRuntime(llmClient llm.LLMClient, prof *profile.Profile, workspace *sandb
 	registry := tools.NewRegistry()
 	policy := safety.NewCommandPolicy(prof.Tools.DenyCommands)
 
-	secretDetector := safety.NewSecretDetector()
-	_ = secretDetector
-
 	workDir := workspace.RootDir
 	repoPath := workspace.RootDir
 

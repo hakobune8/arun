@@ -71,7 +71,10 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {
-	runsDir, _ := os.UserHomeDir()
+	runsDir, err := os.UserHomeDir()
+	if err != nil {
+		runsDir = os.TempDir()
+	}
 	runsDir = filepath.Join(runsDir, ".agentos", "runs")
 
 	entries, err := os.ReadDir(runsDir)
@@ -151,6 +154,9 @@ func newVectorStore() vector.VectorStore {
 	if qdrantURL != "" {
 		return vector.NewQdrantClient()
 	}
-	home, _ := os.UserHomeDir()
-	return vector.NewLocalStore(home + "/.agentos/vectors")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = os.TempDir()
+	}
+	return vector.NewLocalStore(filepath.Join(home, ".agentos", "vectors"))
 }
