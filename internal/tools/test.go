@@ -8,10 +8,13 @@ import (
 	"strings"
 )
 
+// TestTool runs test commands (e.g. go test) in the configured working
+// directory.
 type TestTool struct {
 	WorkDir string
 }
 
+// NewTestTool creates a TestTool that runs commands in workDir.
 func NewTestTool(workDir string) *TestTool {
 	return &TestTool{WorkDir: workDir}
 }

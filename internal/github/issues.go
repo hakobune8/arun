@@ -2,6 +2,7 @@ package github
 
 import "fmt"
 
+// ListIssues lists GitHub issues, optionally filtered by state.
 func (c *Client) ListIssues(state string) ([]Issue, error) {
 	if state == "" {
 		state = "open"
@@ -16,6 +17,7 @@ func (c *Client) ListIssues(state string) ([]Issue, error) {
 	return issues, nil
 }
 
+// GetIssue retrieves a single GitHub issue by number.
 func (c *Client) GetIssue(number int) (*Issue, error) {
 	path := fmt.Sprintf("/%s/issues/%d", c.RepoPath(), number)
 

@@ -1,3 +1,4 @@
+// Package agent provides core agent interfaces and base implementations for coding agents.
 package agent
 
 import (
@@ -9,11 +10,13 @@ import (
 	"github.com/kazyamaz200/agentos/internal/llm"
 )
 
+// CIFixer analyzes CI check failures and generates fix suggestions using an LLM.
 type CIFixer struct {
 	llm    llm.LLMClient
 	gh     *github.Client
 }
 
+// NewCIFixer creates a new CIFixer with the given LLM and GitHub clients.
 func NewCIFixer(llmClient llm.LLMClient, ghClient *github.Client) *CIFixer {
 	return &CIFixer{
 		llm: llmClient,
@@ -21,6 +24,7 @@ func NewCIFixer(llmClient llm.LLMClient, ghClient *github.Client) *CIFixer {
 	}
 }
 
+// CIFixResult holds the outcome of CI failure analysis and any generated fix summary.
 type CIFixResult struct {
 	Success      bool
 	FailedChecks []FailedCheck
@@ -28,6 +32,7 @@ type CIFixResult struct {
 	Error        string
 }
 
+// FailedCheck describes a single CI check that failed, including its name, conclusion, and annotations.
 type FailedCheck struct {
 	Name       string
 	Conclusion string
@@ -35,6 +40,7 @@ type FailedCheck struct {
 	Annotations string
 }
 
+// AnalyzeAndFix fetches CI check runs for the given ref, identifies failures, and generates fix suggestions.
 func (f *CIFixer) AnalyzeAndFix(ctx context.Context, ref string) (*CIFixResult, error) {
 	checkRuns, err := f.gh.GetCheckRuns(ref)
 	if err != nil {
@@ -124,6 +130,7 @@ Output ONLY valid JSON with this structure:
 	return resp.Choices[0].Message.Content, nil
 }
 
+// Name returns the identifier name for the CI fixer.
 func (f *CIFixer) Name() string {
 	return "ci-fixer"
 }

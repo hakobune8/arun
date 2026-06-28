@@ -1,3 +1,4 @@
+// Package orchestrator provides multi-agent coordination and task execution.
 package orchestrator
 
 import (
@@ -11,13 +12,17 @@ import (
 	"github.com/kazyamaz200/agentos/internal/llm"
 )
 
+// Strategy defines the execution strategy for multi-agent coordination.
 type Strategy string
 
 const (
+	// StrategySequential executes subtasks one after another.
 	StrategySequential Strategy = "sequential"
-	StrategyParallel   Strategy = "parallel"
+	// StrategyParallel executes subtasks concurrently.
+	StrategyParallel Strategy = "parallel"
 )
 
+// Orchestrator coordinates multiple agents to execute a task.
 type Orchestrator struct {
 	factory  *factory.Factory
 	llm      llm.LLMClient
@@ -25,6 +30,7 @@ type Orchestrator struct {
 	strategy Strategy
 }
 
+// NewOrchestrator creates a new Orchestrator with the given factory and agents.
 func NewOrchestrator(f *factory.Factory, agents []*factory.AgentInstance) *Orchestrator {
 	llmClient := llm.NewLiteLLMClient(llm.DefaultConfig())
 	return &Orchestrator{
@@ -35,15 +41,18 @@ func NewOrchestrator(f *factory.Factory, agents []*factory.AgentInstance) *Orche
 	}
 }
 
+// SetStrategy sets the execution strategy for the orchestrator.
 func (o *Orchestrator) SetStrategy(s Strategy) {
 	o.strategy = s
 }
 
+// TaskPlan represents a breakdown of a task into subtasks.
 type TaskPlan struct {
 	Description string
 	Subtasks    []Subtask
 }
 
+// Subtask represents a single unit of work within a task plan.
 type Subtask struct {
 	ID          string
 	Description string
@@ -51,6 +60,7 @@ type Subtask struct {
 	Deps        []string
 }
 
+// SubtaskResult contains the result of executing a subtask.
 type SubtaskResult struct {
 	SubtaskID string
 	Output    string
@@ -58,6 +68,7 @@ type SubtaskResult struct {
 	Success   bool
 }
 
+// Plan uses an LLM to break a task description into a plan of subtasks.
 func (o *Orchestrator) Plan(ctx context.Context, taskDesc string) (*TaskPlan, error) {
 	systemMsg := llm.Message{
 		Role: llm.RoleSystem,
@@ -122,6 +133,7 @@ func jsonUnmarshal(data []byte, v interface{}) error {
 	return json.Unmarshal(data, v)
 }
 
+// Execute runs all subtasks in the plan according to the configured strategy.
 func (o *Orchestrator) Execute(ctx context.Context, plan *TaskPlan) ([]SubtaskResult, error) {
 	var results []SubtaskResult
 
@@ -171,6 +183,7 @@ func (o *Orchestrator) findAgent(name string) *factory.AgentInstance {
 	return nil
 }
 
+// MergeResults combines subtask results into a formatted report.
 func (o *Orchestrator) MergeResults(results []SubtaskResult) string {
 	var b strings.Builder
 	b.WriteString("# Multi-Agent Execution Results\n\n")
@@ -191,6 +204,7 @@ func (o *Orchestrator) MergeResults(results []SubtaskResult) string {
 	return b.String()
 }
 
+// Agents returns the list of agents managed by the orchestrator.
 func (o *Orchestrator) Agents() []*factory.AgentInstance {
 	return o.agents
 }

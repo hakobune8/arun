@@ -1,3 +1,4 @@
+// Package agent provides core agent interfaces and base implementations for coding agents.
 package agent
 
 import (
@@ -8,14 +9,17 @@ import (
 	"github.com/kazyamaz200/agentos/internal/runtime"
 )
 
+// Reviewer uses an LLM to review code changes and execution results.
 type Reviewer struct {
 	llm llm.LLMClient
 }
 
+// NewReviewer creates a new Reviewer with the given LLM client.
 func NewReviewer(llmClient llm.LLMClient) *Reviewer {
 	return &Reviewer{llm: llmClient}
 }
 
+// Review sends the diff and task context to the LLM and returns a structured review result.
 func (r *Reviewer) Review(ctx *runtime.RunContext, result *runtime.ExecutionResult) (*runtime.ReviewResult, error) {
 	if result.Diff == "" {
 		return &runtime.ReviewResult{Approved: true, Summary: "No changes to review"}, nil

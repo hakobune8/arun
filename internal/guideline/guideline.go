@@ -1,3 +1,4 @@
+// Package guideline provides storage and retrieval of coding guidelines using vector search.
 package guideline
 
 import (
@@ -12,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Guideline represents a single coding guideline with a title, rule, tags, and optional example.
 type Guideline struct {
 	ID      string   `yaml:"id" json:"id"`
 	Title   string   `yaml:"title" json:"title"`
@@ -20,12 +22,14 @@ type Guideline struct {
 	Example string   `yaml:"example,omitempty" json:"example,omitempty"`
 }
 
+// Store manages guideline entries with vector-based search.
 type Store struct {
 	vs         vector.VectorStore
 	embed      embedding.Embedder
 	collection string
 }
 
+// NewStore creates a new guideline store backed by the given vector store and embedder.
 func NewStore(vs vector.VectorStore, embed embedding.Embedder) *Store {
 	return &Store{
 		vs:         vs,
@@ -34,6 +38,7 @@ func NewStore(vs vector.VectorStore, embed embedding.Embedder) *Store {
 	}
 }
 
+// LoadDirectory loads all YAML guideline files from a directory into the store.
 func (s *Store) LoadDirectory(dir string) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -72,6 +77,7 @@ func (s *Store) LoadDirectory(dir string) error {
 	return nil
 }
 
+// Add stores a guideline entry, embedding its content for later search.
 func (s *Store) Add(ctx context.Context, g Guideline) error {
 	if g.ID == "" {
 		g.ID = fmt.Sprintf("gl-%d", len(g.Title))
@@ -101,6 +107,7 @@ func (s *Store) Add(ctx context.Context, g Guideline) error {
 	return s.vs.Upsert(ctx, s.collection, []vector.Point{point})
 }
 
+// Search finds guidelines similar to the given query string.
 func (s *Store) Search(ctx context.Context, query string, limit int) ([]Guideline, error) {
 	vec, err := s.embed.EmbedQuery(ctx, query)
 	if err != nil {

@@ -1,3 +1,4 @@
+// Package factory provides agent creation and configuration from templates.
 package factory
 
 import (
@@ -6,6 +7,7 @@ import (
 	"github.com/kazyamaz200/agentos/internal/tools"
 )
 
+// AgentDef defines an agent's configuration from a YAML template.
 type AgentDef struct {
 	Name        string   `yaml:"name"`
 	Profile     string   `yaml:"profile"`
@@ -19,6 +21,7 @@ type AgentDef struct {
 	} `yaml:"limits"`
 }
 
+// AgentInstance is a fully initialized agent ready for execution.
 type AgentInstance struct {
 	Def       *AgentDef
 	Profile   *profile.Profile
@@ -26,6 +29,7 @@ type AgentInstance struct {
 	Registry  *tools.Registry
 }
 
+// AgentTemplate defines a multi-agent configuration template.
 type AgentTemplate struct {
 	Schema  string                 `yaml:"schema"`
 	Agents  []AgentDef             `yaml:"agents"`

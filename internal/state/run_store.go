@@ -1,3 +1,5 @@
+// Package state provides types for persisting run state and logging agent
+// activity including tool calls and LLM interactions.
 package state
 
 import (
@@ -8,8 +10,10 @@ import (
 	"time"
 )
 
+// RunStatus represents the current phase of an agent run.
 type RunStatus string
 
+// Standard run status values.
 const (
 	RunStatusPending    RunStatus = "pending"
 	RunStatusPlanning   RunStatus = "planning"
@@ -21,6 +25,7 @@ const (
 	RunStatusCancelled  RunStatus = "cancelled"
 )
 
+// RunRecord stores the metadata and current status of an agent run.
 type RunRecord struct {
 	TaskID      string    `json:"task_id"`
 	Status      RunStatus `json:"status"`
@@ -32,14 +37,18 @@ type RunRecord struct {
 	Iteration   int       `json:"iteration"`
 }
 
+// RunStore persists and loads RunRecord data as JSON in a specified
+// directory.
 type RunStore struct {
 	runDir string
 }
 
+// NewRunStore returns a RunStore that stores records in runDir.
 func NewRunStore(runDir string) *RunStore {
 	return &RunStore{runDir: runDir}
 }
 
+// Save writes the run record as run_state.json inside the store directory.
 func (s *RunStore) Save(record *RunRecord) error {
 	path := filepath.Join(s.runDir, "run_state.json")
 	data, err := json.MarshalIndent(record, "", "  ")
@@ -49,6 +58,7 @@ func (s *RunStore) Save(record *RunRecord) error {
 	return os.WriteFile(path, data, 0644)
 }
 
+// Load reads the run record from run_state.json inside the store directory.
 func (s *RunStore) Load() (*RunRecord, error) {
 	path := filepath.Join(s.runDir, "run_state.json")
 	data, err := os.ReadFile(path)

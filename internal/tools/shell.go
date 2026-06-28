@@ -11,11 +11,14 @@ import (
 	"github.com/kazyamaz200/agentos/internal/safety"
 )
 
+// ShellTool executes shell commands subject to a command security policy.
 type ShellTool struct {
 	CommandPolicy *safety.CommandPolicy
 	WorkDir       string
 }
 
+// NewShellTool creates a ShellTool that checks commands against policy and
+// runs them in workDir.
 func NewShellTool(policy *safety.CommandPolicy, workDir string) *ShellTool {
 	return &ShellTool{
 		CommandPolicy: policy,

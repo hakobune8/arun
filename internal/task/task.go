@@ -1,3 +1,5 @@
+// Package task provides types and functions for defining and loading agent
+// tasks from YAML files or GitHub issues.
 package task
 
 import (
@@ -7,6 +9,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Task represents an agent task with its metadata, repository, branch, and
+// description.
 type Task struct {
 	ID          string `yaml:"id"`
 	Type        string `yaml:"type"`
@@ -17,6 +21,8 @@ type Task struct {
 	Description string `yaml:"description"`
 }
 
+// Load reads a Task from a YAML file at path, validates it, and returns the
+// parsed Task.
 func Load(path string) (*Task, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

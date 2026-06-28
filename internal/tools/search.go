@@ -8,10 +8,13 @@ import (
 	"strings"
 )
 
+// SearchTool performs full-text search over Go source files within a
+// workspace directory tree.
 type SearchTool struct {
 	Workspace string
 }
 
+// NewSearchTool creates a SearchTool rooted at workspace.
 func NewSearchTool(workspace string) *SearchTool {
 	return &SearchTool{Workspace: workspace}
 }

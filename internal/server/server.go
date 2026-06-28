@@ -1,3 +1,4 @@
+// Package server provides an HTTP server for the AgentOS web UI.
 package server
 
 import (
@@ -19,12 +20,14 @@ import (
 //go:embed static
 var staticFS embed.FS
 
+// Server serves the AgentOS web UI and API endpoints.
 type Server struct {
 	port    int
 	server  *http.Server
 	search  *search.Service
 }
 
+// NewServer creates a new Server listening on the given port.
 func NewServer(port int) *Server {
 	vs := newVectorStore()
 	emb := embedding.NewLiteLLMEmbedder()
@@ -54,11 +57,13 @@ func NewServer(port int) *Server {
 	return s
 }
 
+// Start starts the HTTP server and blocks until Shutdown is called.
 func (s *Server) Start() error {
 	fmt.Printf("AgentOS Web UI starting on http://localhost:%d\n", s.port)
 	return s.server.ListenAndServe()
 }
 
+// Shutdown gracefully shuts down the HTTP server.
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.server.Shutdown(ctx)
 }

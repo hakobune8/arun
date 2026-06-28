@@ -1,3 +1,4 @@
+// Package cli implements the command-line interface commands for AgentOS.
 package cli
 
 import (

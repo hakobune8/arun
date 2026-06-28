@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+// DockerConfig specifies the image, resource limits, network mode, and extra
+// arguments for a Docker sandbox container.
 type DockerConfig struct {
 	Image       string
 	WorkDir     string
@@ -17,10 +19,14 @@ type DockerConfig struct {
 	ExtraArgs   []string
 }
 
+// DockerSandbox runs commands inside a Docker container with configurable
+// resource limits and network isolation.
 type DockerSandbox struct {
 	config DockerConfig
 }
 
+// NewDockerSandbox returns a DockerSandbox with sensible defaults (golang:1.22-alpine,
+// 1 GB memory, 1.0 CPU, no network).
 func NewDockerSandbox(config DockerConfig) *DockerSandbox {
 	if config.Image == "" {
 		config.Image = "golang:1.22-alpine"
@@ -37,6 +43,8 @@ func NewDockerSandbox(config DockerConfig) *DockerSandbox {
 	return &DockerSandbox{config: config}
 }
 
+// Run executes command inside a Docker container. If workDir is non-empty it
+// is mounted at /workspace.
 func (s *DockerSandbox) Run(ctx context.Context, command string, workDir string) (stdout, stderr string, err error) {
 	args := []string{"run", "--rm"}
 
@@ -65,10 +73,14 @@ func (s *DockerSandbox) Run(ctx context.Context, command string, workDir string)
 	return strings.TrimSpace(stdoutBuf.String()), strings.TrimSpace(stderrBuf.String()), err
 }
 
+// RunScript is a convenience wrapper around Run that passes script directly
+// as the command.
 func (s *DockerSandbox) RunScript(ctx context.Context, script string, workDir string) (stdout, stderr string, err error) {
 	return s.Run(ctx, script, workDir)
 }
 
+// CheckAvailable verifies that Docker is installed and running by executing
+// docker info.
 func (s *DockerSandbox) CheckAvailable() error {
 	cmd := exec.Command("docker", "info")
 	if err := cmd.Run(); err != nil {

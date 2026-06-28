@@ -1,3 +1,5 @@
+// Package runtime manages the execution lifecycle of coding tasks, including
+// planning, execution, testing, linting, review, and result generation.
 package runtime
 
 import (
@@ -11,6 +13,7 @@ import (
 	"github.com/kazyamaz200/agentos/internal/state"
 )
 
+// RunContext holds the context for a single task execution, including task, profile, LLM, workspace, and configuration.
 type RunContext struct {
 	Context   context.Context
 	Task      *task.Task
@@ -25,11 +28,13 @@ type RunContext struct {
 	MaxRetries int
 }
 
+// Config holds runtime configuration options such as dry-run and verbose modes.
 type Config struct {
 	DryRun  bool
 	Verbose bool
 }
 
+// NewRunContext creates a new RunContext from a base context, task, and Runtime instance.
 func NewRunContext(ctx context.Context, tk *task.Task, r *Runtime) *RunContext {
 	return &RunContext{
 		Context:    ctx,

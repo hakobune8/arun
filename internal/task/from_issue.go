@@ -6,6 +6,8 @@ import (
 	gh "github.com/kazyamaz200/agentos/internal/github"
 )
 
+// FromGitHubIssue creates a Task from a GitHub issue and the target
+// repository name.
 func FromGitHubIssue(issue *gh.Issue, repo string) *Task {
 	branchName := fmt.Sprintf("agent/issue-%d", issue.Number)
 	title := issue.Title

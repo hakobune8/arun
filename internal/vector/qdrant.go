@@ -12,12 +12,14 @@ import (
 	"time"
 )
 
+// QdrantClient implements VectorStore using a Qdrant vector database.
 type QdrantClient struct {
 	baseURL string
 	apiKey  string
 	http    *http.Client
 }
 
+// NewQdrantClient creates a new QdrantClient configured from environment variables.
 func NewQdrantClient() *QdrantClient {
 	baseURL := os.Getenv("QDRANT_URL")
 	if baseURL == "" {

@@ -1,3 +1,4 @@
+// Package memory provides an agent memory store backed by a vector database.
 package memory
 
 import (
@@ -9,6 +10,7 @@ import (
 	"github.com/kazyamaz200/agentos/internal/vector"
 )
 
+// Entry represents a single memory entry with content, type, and metadata.
 type Entry struct {
 	ID        string                 `json:"id"`
 	Timestamp time.Time              `json:"timestamp"`
@@ -18,12 +20,14 @@ type Entry struct {
 	Vector    []float32              `json:"-"`
 }
 
+// MemoryStore provides persistent memory storage for agents using vector search.
 type MemoryStore struct {
-	vs      vector.VectorStore
-	embed   embedding.Embedder
+	vs         vector.VectorStore
+	embed      embedding.Embedder
 	collection string
 }
 
+// NewMemoryStore creates a new MemoryStore backed by the given vector store and embedder.
 func NewMemoryStore(vs vector.VectorStore, embed embedding.Embedder) *MemoryStore {
 	return &MemoryStore{
 		vs:         vs,
@@ -32,6 +36,7 @@ func NewMemoryStore(vs vector.VectorStore, embed embedding.Embedder) *MemoryStor
 	}
 }
 
+// Save stores a memory entry, embedding its content for later search.
 func (m *MemoryStore) Save(ctx context.Context, entry Entry) error {
 	if entry.ID == "" {
 		entry.ID = fmt.Sprintf("mem-%d", time.Now().UnixNano())
@@ -61,6 +66,7 @@ func (m *MemoryStore) Save(ctx context.Context, entry Entry) error {
 	return m.vs.Upsert(ctx, m.collection, []vector.Point{point})
 }
 
+// Search finds memory entries similar to the given query string.
 func (m *MemoryStore) Search(ctx context.Context, query string, limit int) ([]Entry, error) {
 	vec, err := m.embed.EmbedQuery(ctx, query)
 	if err != nil {
@@ -91,6 +97,7 @@ func (m *MemoryStore) Search(ctx context.Context, query string, limit int) ([]En
 	return entries, nil
 }
 
+// Clear removes all stored memory entries.
 func (m *MemoryStore) Clear(ctx context.Context) error {
 	return m.vs.DeleteCollection(ctx, m.collection)
 }

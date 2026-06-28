@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+// LiteLLMEmbedder generates embeddings using a LiteLLM proxy server.
 type LiteLLMEmbedder struct {
 	baseURL string
 	apiKey  string
@@ -18,6 +19,7 @@ type LiteLLMEmbedder struct {
 	http    *http.Client
 }
 
+// NewLiteLLMEmbedder creates a new LiteLLMEmbedder configured from environment variables.
 func NewLiteLLMEmbedder() *LiteLLMEmbedder {
 	baseURL := os.Getenv("LITELLM_BASE_URL")
 	if baseURL == "" {

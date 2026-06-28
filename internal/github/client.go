@@ -1,3 +1,4 @@
+// Package github provides a client for the GitHub REST API.
 package github
 
 import (
@@ -10,6 +11,7 @@ import (
 	"time"
 )
 
+// Client is a GitHub API client for interacting with issues, PRs, and checks.
 type Client struct {
 	BaseURL   string
 	Token     string
@@ -18,6 +20,7 @@ type Client struct {
 	http      *http.Client
 }
 
+// NewClient creates a new GitHub API client for the given repository.
 func NewClient(repoOwner, repoName string) *Client {
 	token := os.Getenv("GITHUB_TOKEN")
 	if token == "" {
@@ -97,10 +100,12 @@ func (c *Client) doJSON(method, path string, reqBody, respBody interface{}) erro
 	return nil
 }
 
+// RepoPath returns the GitHub API path for the repository.
 func (c *Client) RepoPath() string {
 	return fmt.Sprintf("repos/%s/%s", c.RepoOwner, c.RepoName)
 }
 
+// Repo returns the "owner/name" string for the repository.
 func (c *Client) Repo() string {
 	return fmt.Sprintf("%s/%s", c.RepoOwner, c.RepoName)
 }
