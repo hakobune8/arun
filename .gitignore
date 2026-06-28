@@ -1,15 +1,23 @@
 # Binaries
 agentos
 agentos.exe
+agentos-*
 *.test
+*.test.exe
 *.out
+
+# Coverage output
+coverage.out
+coverage.html
+cover.html
 
 # AgentOS runtime data
 .agentos/
 
-# Environment files
+# Environment files (but keep .env.example for documentation)
 .env
 .env.*
+!.env.example
 
 # Secrets
 *.pem
@@ -22,6 +30,7 @@ id_ed25519*
 *.swp
 *.swo
 *~
+.history/
 
 # OS
 .DS_Store
@@ -33,3 +42,4 @@ vendor/
 # Build output
 dist/
 build/
+tmp/

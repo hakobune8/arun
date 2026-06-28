@@ -3,7 +3,7 @@ type: "issue_to_patch"
 repo: "./examples/sample-repo"
 base_branch: "main"
 branch: "agent/task-001"
-title: "Go APIのバリデーションを追加"
+title: "Add input validation to Go API"
 description: |
-  users APIに入力バリデーションを追加してください。
-  既存テストを壊さないこと。
+  Add input validation to the users API endpoint.
+  Do not break existing tests.
