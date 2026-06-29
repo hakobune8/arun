@@ -17,6 +17,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -33,6 +34,16 @@ type BaseAgent struct {
 	llm      llm.LLMClient
 	planner  *Planner
 	reviewer *Reviewer
+}
+
+type codingAction struct {
+	Action    string `json:"action"`
+	File      string `json:"file,omitempty"`
+	Content   string `json:"content,omitempty"`
+	Command   string `json:"command,omitempty"`
+	Pattern   string `json:"pattern,omitempty"`
+	Path      string `json:"path,omitempty"`
+	Reasoning string `json:"reasoning,omitempty"`
 }
 
 // NewBaseAgent creates a new BaseAgent that uses the given LLM client.
@@ -75,73 +86,8 @@ func (a *BaseAgent) Execute(ctx *runtime.RunContext, plan *runtime.Plan) (*runti
 	for _, step := range plan.Steps {
 		ctx.Logger.Log("info", "executor", fmt.Sprintf("step %d: %s", step.StepNumber, step.Description), nil) //nolint:errcheck // best-effort log
 
-		stepResult := runtime.StepResult{
-			StepNumber: step.StepNumber,
-			Action:     step.Action,
-		}
 		stepStart := time.Now()
-
-		switch step.Action {
-		case "search":
-			tool, ok := ctx.Registry.Get("search")
-			if !ok {
-				stepResult.Error = "search tool not found"
-				stepResult.Success = false
-			} else {
-				pattern := ""
-				if len(step.TargetFiles) > 0 {
-					pattern = step.TargetFiles[0]
-				}
-				output := tool.Run(ctx.Context, tools.ToolInput{"pattern": pattern})
-				stepResult.Success = output.Success
-				if output.Success {
-					stepResult.Output = fmt.Sprintf("%v", output.Data)
-				} else {
-					stepResult.Error = output.Error
-				}
-			}
-
-		case "read":
-			tool, ok := ctx.Registry.Get("read_file")
-			if !ok {
-				stepResult.Error = "read_file tool not found"
-				stepResult.Success = false
-			} else {
-				for _, f := range step.TargetFiles {
-					output := tool.Run(ctx.Context, tools.ToolInput{"file": f})
-					if !output.Success {
-						stepResult.Error = output.Error
-						stepResult.Success = false
-						break
-					}
-					stepResult.Output += fmt.Sprintf("=== %s ===\n%s\n", f, output.Data)
-				}
-				stepResult.Success = true
-			}
-
-		case "shell":
-			tool, ok := ctx.Registry.Get("shell")
-			if !ok {
-				stepResult.Error = "shell tool not found"
-				stepResult.Success = false
-			} else {
-				desc := step.Description
-				output := tool.Run(ctx.Context, tools.ToolInput{"command": desc})
-				stepResult.Success = output.Success
-				if output.Success {
-					if data, ok := output.Data.(map[string]string); ok {
-						stepResult.Output = data["stdout"]
-					}
-				} else {
-					stepResult.Error = output.Error
-				}
-			}
-
-		default:
-			stepResult.Error = fmt.Sprintf("unknown action: %s", step.Action)
-			stepResult.Success = false
-		}
-
+		stepResult := a.executeStep(ctx, &step)
 		stepResult.Duration = time.Since(stepStart)
 		result.StepResults = append(result.StepResults, stepResult)
 
@@ -185,72 +131,8 @@ func (a *BaseAgent) Execute(ctx *runtime.RunContext, plan *runtime.Plan) (*runti
 		for _, step := range plan.Steps {
 			ctx.Logger.Log("info", "executor", fmt.Sprintf("retry step %d: %s", step.StepNumber, step.Description), nil) //nolint:errcheck // best-effort log
 
-			stepResult := runtime.StepResult{
-				StepNumber: step.StepNumber,
-				Action:     step.Action,
-			}
 			stepStart := time.Now()
-
-			switch step.Action {
-			case "search":
-				tool, ok := ctx.Registry.Get("search")
-				if !ok {
-					stepResult.Error = "search tool not found"
-					stepResult.Success = false
-				} else {
-					pattern := ""
-					if len(step.TargetFiles) > 0 {
-						pattern = step.TargetFiles[0]
-					}
-					output := tool.Run(ctx.Context, tools.ToolInput{"pattern": pattern})
-					if output.Success {
-						stepResult.Output = fmt.Sprintf("%v", output.Data)
-					} else {
-						stepResult.Error = output.Error
-					}
-					stepResult.Success = output.Success
-				}
-
-			case "read":
-				tool, ok := ctx.Registry.Get("read_file")
-				if !ok {
-					stepResult.Error = "read_file tool not found"
-					stepResult.Success = false
-				} else {
-					for _, f := range step.TargetFiles {
-						output := tool.Run(ctx.Context, tools.ToolInput{"file": f})
-						if !output.Success {
-							stepResult.Error = output.Error
-							stepResult.Success = false
-							break
-						}
-						stepResult.Output += fmt.Sprintf("=== %s ===\n%s\n", f, output.Data)
-					}
-					stepResult.Success = true
-				}
-
-			case "shell":
-				tool, ok := ctx.Registry.Get("shell")
-				if !ok {
-					stepResult.Error = "shell tool not found"
-					stepResult.Success = false
-				} else {
-					output := tool.Run(ctx.Context, tools.ToolInput{"command": step.Description})
-					if output.Success {
-						if data, ok := output.Data.(map[string]string); ok {
-							stepResult.Output = data["stdout"]
-						}
-					} else {
-						stepResult.Error = output.Error
-					}
-					stepResult.Success = output.Success
-				}
-
-			default:
-				stepResult.Error = fmt.Sprintf("unknown action: %s", step.Action)
-				stepResult.Success = false
-			}
-
+			stepResult := a.executeStep(ctx, &step)
 			stepResult.Duration = time.Since(stepStart)
 			result.StepResults = append(result.StepResults, stepResult)
 			ctx.Logger.LogTool(step.Action, step, stepResult, stepResult.Duration) //nolint:errcheck // best-effort log
@@ -289,6 +171,121 @@ func (a *BaseAgent) Execute(ctx *runtime.RunContext, plan *runtime.Plan) (*runti
 
 	result.Success = true
 	return result, nil
+}
+
+func (a *BaseAgent) executeStep(ctx *runtime.RunContext, step *runtime.Step) runtime.StepResult {
+	stepResult := runtime.StepResult{
+		StepNumber: step.StepNumber,
+		Action:     step.Action,
+	}
+
+	switch step.Action {
+	case "test":
+		return runToolStep(ctx, stepResult, "test", tools.ToolInput{"command": ctx.Profile.Commands.Test})
+	case "lint":
+		if ctx.Profile.Commands.Lint == "" {
+			stepResult.Success = true
+			stepResult.Output = "lint command not configured"
+			return stepResult
+		}
+		return runToolStep(ctx, stepResult, "shell", tools.ToolInput{"command": ctx.Profile.Commands.Lint})
+	case "search", "read", "edit", "shell":
+		action, err := a.planCodingAction(ctx, step)
+		if err != nil {
+			stepResult.Error = err.Error()
+			return stepResult
+		}
+		return a.runCodingAction(ctx, stepResult, action)
+	default:
+		stepResult.Error = fmt.Sprintf("unknown action: %s", step.Action)
+		return stepResult
+	}
+}
+
+func (a *BaseAgent) planCodingAction(ctx *runtime.RunContext, step *runtime.Step) (*codingAction, error) {
+	stepJSON, _ := json.Marshal(step)
+	resp, err := a.llm.Chat(ctx.Context, llm.ChatRequest{
+		Model: a.llm.ModelName(),
+		Messages: []llm.Message{
+			{Role: llm.RoleSystem, Content: llm.SystemPromptCoder},
+			{
+				Role: llm.RoleUser,
+				Content: fmt.Sprintf(`Task: %s
+Description:
+%s
+
+Repository: %s
+Base branch: %s
+
+Convert this execution plan step into exactly one concrete tool action JSON.
+Plan step:
+%s`, ctx.Task.Title, ctx.Task.Description, ctx.Task.Repo, ctx.Task.BaseBranch, string(stepJSON)),
+			},
+		},
+		Temperature: ctx.Profile.LLM.Temperature,
+		MaxTokens:   ctx.Profile.LLM.MaxTokens,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("plan coding action: %w", err)
+	}
+
+	content := strings.TrimSpace(resp.Choices[0].Message.Content)
+	content = strings.TrimPrefix(content, "```json")
+	content = strings.TrimPrefix(content, "```")
+	content = strings.TrimSuffix(content, "```")
+	content = strings.TrimSpace(content)
+
+	var action codingAction
+	if err := json.Unmarshal([]byte(content), &action); err != nil {
+		return nil, fmt.Errorf("parse coding action JSON: %w", err)
+	}
+	if action.Action == "" {
+		return nil, fmt.Errorf("coding action is required")
+	}
+	return &action, nil
+}
+
+func (a *BaseAgent) runCodingAction(ctx *runtime.RunContext, stepResult runtime.StepResult, action *codingAction) runtime.StepResult {
+	switch action.Action {
+	case "edit":
+		stepResult.Action = "edit"
+		return runToolStep(ctx, stepResult, "write_file", tools.ToolInput{"file": action.File, "content": action.Content})
+	case "shell":
+		stepResult.Action = "shell"
+		return runToolStep(ctx, stepResult, "shell", tools.ToolInput{"command": action.Command})
+	case "search":
+		stepResult.Action = "search"
+		return runToolStep(ctx, stepResult, "search", tools.ToolInput{"pattern": action.Pattern, "path": action.Path})
+	case "read":
+		stepResult.Action = "read"
+		return runToolStep(ctx, stepResult, "read_file", tools.ToolInput{"file": action.File})
+	default:
+		stepResult.Error = fmt.Sprintf("unknown coding action: %s", action.Action)
+		return stepResult
+	}
+}
+
+func runToolStep(ctx *runtime.RunContext, stepResult runtime.StepResult, toolName string, input tools.ToolInput) runtime.StepResult {
+	tool, ok := ctx.Registry.Get(toolName)
+	if !ok {
+		stepResult.Error = toolName + " tool not found"
+		return stepResult
+	}
+	output := tool.Run(ctx.Context, input)
+	stepResult.Success = output.Success
+	if output.Success {
+		switch data := output.Data.(type) {
+		case string:
+			stepResult.Output = data
+		case map[string]string:
+			stepResult.Output = strings.TrimSpace(data["stdout"] + "\n" + data["stderr"])
+		default:
+			stepResult.Output = fmt.Sprintf("%v", data)
+		}
+	} else {
+		stepResult.Error = output.Error
+	}
+	return stepResult
 }
 
 func (a *BaseAgent) runValidation(ctx *runtime.RunContext, tool tools.Tool, command, component, label string) (string, bool) {

@@ -126,6 +126,64 @@ func TestBaseAgent_ExecuteFailsAfterLintRetries(t *testing.T) {
 	}
 }
 
+func TestBaseAgent_ExecuteEditStepWritesFile(t *testing.T) {
+	t.Parallel()
+
+	rctx := newExecuteTestContext(t, "test -f generated.txt", "")
+	a := NewBaseAgent("test", llm.NewMockLLMClient([]llm.ChatResponse{
+		{
+			Choices: []llm.Choice{{
+				Message: llm.Message{Content: `{"action":"edit","file":"generated.txt","content":"hello","reasoning":"create requested file"}`},
+			}},
+		},
+	}))
+
+	result, err := a.Execute(rctx, &runtime.Plan{Steps: []runtime.Step{{
+		StepNumber:  1,
+		Action:      "edit",
+		Description: "Create generated.txt",
+		TargetFiles: []string{"generated.txt"},
+	}}})
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("result.Success = false, error=%s", result.Error)
+	}
+	if data, err := os.ReadFile(filepath.Join(rctx.Workspace.RootDir(), "generated.txt")); err != nil || string(data) != "hello" {
+		t.Fatalf("generated.txt = %q, err=%v", data, err)
+	}
+}
+
+func TestBaseAgent_ExecuteShellStepUsesStructuredCommand(t *testing.T) {
+	t.Parallel()
+
+	rctx := newExecuteTestContext(t, "test -f shell-generated.txt", "")
+	a := NewBaseAgent("test", llm.NewMockLLMClient([]llm.ChatResponse{
+		{
+			Choices: []llm.Choice{{
+				Message: llm.Message{Content: `{"action":"shell","command":"printf ok > shell-generated.txt","reasoning":"create file"}`},
+			}},
+		},
+	}))
+
+	result, err := a.Execute(rctx, &runtime.Plan{Steps: []runtime.Step{{
+		StepNumber:  1,
+		Action:      "shell",
+		Description: "Create shell-generated.txt using a shell command",
+		TargetFiles: []string{"shell-generated.txt"},
+	}}})
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("result.Success = false, error=%s", result.Error)
+	}
+	if _, err := os.Stat(filepath.Join(rctx.Workspace.RootDir(), "shell-generated.txt")); err != nil {
+		t.Fatalf("shell-generated.txt missing: %v", err)
+	}
+}
+
 func newExecuteTestContext(t *testing.T, testCmd, lintCmd string) *runtime.RunContext {
 	t.Helper()
 
@@ -141,6 +199,7 @@ func newExecuteTestContext(t *testing.T, testCmd, lintCmd string) *runtime.RunCo
 	policy := safety.NewCommandPolicy(nil)
 	registry.MustRegister(tools.NewSearchTool(repo))
 	registry.MustRegister(tools.NewReadFileTool(repo))
+	registry.MustRegister(tools.NewWriteFileTool(repo))
 	registry.MustRegister(tools.NewShellTool(policy, repo))
 	registry.MustRegister(tools.NewTestTool(repo))
 
