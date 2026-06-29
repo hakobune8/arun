@@ -533,7 +533,7 @@ func TestOrchestrationRecordStore_RoundTrip(t *testing.T) {
 	t.Setenv("AGENTOS_HOME", shortTestDir(t))
 	now := time.Now().UTC().Truncate(time.Second)
 	record := &orchestrationRecord{
-		ID:         "run-test",
+		ID:         "run-0123456789abcdef",
 		Repo:       "owner/repo",
 		BaseBranch: "main",
 		Task:       "test",
@@ -559,6 +559,16 @@ func TestOrchestrationRecordStore_RoundTrip(t *testing.T) {
 	}
 	if len(records) != 1 || records[0].ID != record.ID {
 		t.Fatalf("records = %+v, want one %s", records, record.ID)
+	}
+}
+
+func TestReadOrchestrationRecord_RejectsInvalidID(t *testing.T) {
+	t.Setenv("AGENTOS_HOME", shortTestDir(t))
+	invalid := []string{"", ".", "../run-0123456789abcdef", "run-test", "run-0123456789abcdeg"}
+	for _, id := range invalid {
+		if _, err := readOrchestrationRecord(id); err == nil {
+			t.Fatalf("readOrchestrationRecord(%q) error = nil, want error", id)
+		}
 	}
 }
 

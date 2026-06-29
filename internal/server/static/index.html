@@ -374,8 +374,9 @@ function renderRuns(r) {
   const results = r.results || [];
   const byID = {};
   results.forEach(x => { byID[x.subtask_id] = x; });
+  const runForm = renderScopedRunForm(r);
   if (subtasks.length === 0 && results.length === 0) {
-    return '<div class="card"><p class="empty">Runs will appear after planning starts.</p></div>';
+    return runForm + '<div class="card"><p class="empty">Runs will appear after planning starts.</p></div>';
   }
   const rows = (subtasks.length ? subtasks : results.map(x => ({id:x.subtask_id,description:'',agent_type:'-'}))).map(s => {
     const result = byID[s.id] || {};
@@ -383,7 +384,49 @@ function renderRuns(r) {
     return '<tr><td>' + escape(s.id) + '</td><td>' + statusSpan(status) + '</td><td>' + escape(s.agent_type || '-') + '</td><td>' + escape(s.description || '-') + '</td></tr>' +
       (result.output || result.error || result.diff ? '<tr><td colspan="4"><pre>' + escape((result.error || '') + (result.output ? '\n' + result.output : '') + (result.diff ? '\n' + result.diff : '')).slice(0, 5000) + '</pre></td></tr>' : '');
   }).join('');
-  return '<div class="card"><h2>Runs</h2><table><thead><tr><th>ID</th><th>Status</th><th>Agent</th><th>Description</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  return runForm + '<div class="card"><h2>Runs</h2><table><thead><tr><th>ID</th><th>Status</th><th>Agent</th><th>Description</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function renderScopedRunForm(r) {
+  const agents = r.agents || [];
+  const options = agents.length === 0
+    ? '<option value="">No agents</option>'
+    : agents.map(a => '<option value="' + escape(a) + '">' + escape(a) + '</option>').join('');
+  return '<div class="card"><h2>Run Agent</h2><form onsubmit="submitScopedRun(event)">' +
+    '<div class="search-row">' +
+    '<select id="scopedRunAgent" required>' + options + '</select>' +
+    '<input type="text" id="scopedRunTask" placeholder="Task for the selected agent" required>' +
+    '<button class="btn" type="submit">Run</button>' +
+    '</div>' +
+    '<div class="form-group"><label>Description</label><textarea id="scopedRunDescription" placeholder="Optional details for this partial run"></textarea></div>' +
+    '<p id="scopedRunStatus" class="muted">Repository: ' + escape(r.repo || '-') + '</p>' +
+    '</form></div>';
+}
+
+async function submitScopedRun(e) {
+  e.preventDefault();
+  if (!currentOrchestration || !currentOrchestration.repoPath) return;
+  const btn = e.target.querySelector('button[type=submit]');
+  const status = document.getElementById('scopedRunStatus');
+  btn.disabled = true;
+  status.textContent = 'Starting run...';
+  try {
+    const result = await api('/api/runs', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        agent: document.getElementById('scopedRunAgent').value,
+        task: document.getElementById('scopedRunTask').value,
+        description: document.getElementById('scopedRunDescription').value,
+        repo: currentOrchestration.repoPath
+      })
+    });
+    status.innerHTML = 'Run started: ' + escape(result.id);
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function renderSearch() {

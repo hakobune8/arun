@@ -30,6 +30,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -50,6 +51,8 @@ import (
 
 //go:embed static
 var staticFS embed.FS
+
+var runIDPattern = regexp.MustCompile(`^run-[0-9a-f]{16}$`)
 
 // Server serves the AgentOS web UI and API endpoints.
 type Server struct {
@@ -597,7 +600,7 @@ func saveOrchestrationRecord(record *orchestrationRecord) error {
 }
 
 func readOrchestrationRecord(id string) (*orchestrationRecord, error) {
-	if id == "" || id == "." || strings.Contains(id, string(os.PathSeparator)) {
+	if !isValidRunID(id) {
 		return nil, fmt.Errorf("invalid orchestration id")
 	}
 	path := filepath.Join(orchestrationsDir(), id+".json")
@@ -610,6 +613,10 @@ func readOrchestrationRecord(id string) (*orchestrationRecord, error) {
 		return nil, err
 	}
 	return &record, nil
+}
+
+func isValidRunID(id string) bool {
+	return runIDPattern.MatchString(id)
 }
 
 func listOrchestrationRecords() ([]*orchestrationRecord, error) {
