@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package cli implements the command-line interface commands for AgentOS.
 package cli
 
 import (
@@ -20,8 +19,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/kazyamaz200/agentos/internal/factory"
+	"github.com/kazyamaz200/agentos/internal/agent"
+	"github.com/kazyamaz200/agentos/internal/llm"
 	"github.com/kazyamaz200/agentos/internal/orchestrator"
+	"github.com/kazyamaz200/agentos/internal/runtime"
+	"github.com/kazyamaz200/agentos/internal/sandbox"
 	"github.com/spf13/cobra"
 )
 
@@ -29,10 +31,10 @@ var orchestrateCmd = &cobra.Command{
 	Use:   "orchestrate",
 	Short: "Run multi-agent orchestration",
 	Long: `Coordinate multiple agents to work on a complex task.
-Agents are defined in a template file and can work sequentially or in parallel.
+Agents are selected from the registry and can work sequentially or in parallel.
 
 Example:
-  agentos orchestrate --template profiles/agents/template.yaml --task "Implement user authentication"`,
+  agentos orchestrate --agents "go-backend,reviewer" --task "Implement user authentication"`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runOrchestrate(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -42,42 +44,46 @@ Example:
 }
 
 var (
-	orchTemplate string
+	orchAgents   string
 	orchTask     string
 	orchStrategy string
+	orchRepo     string
 )
 
 func init() {
 	rootCmd.AddCommand(orchestrateCmd)
-	orchestrateCmd.Flags().StringVarP(&orchTemplate, "template", "t", "profiles/agents/template.yaml", "Agent template file")
+	orchestrateCmd.Flags().StringVarP(&orchAgents, "agents", "a", "go-backend", "Comma-separated agent names from registry")
 	orchestrateCmd.Flags().StringVarP(&orchTask, "task", "", "", "Task description")
 	orchestrateCmd.Flags().StringVarP(&orchStrategy, "strategy", "s", "sequential", "Coordination strategy (sequential/parallel)")
+	orchestrateCmd.Flags().StringVarP(&orchRepo, "repo", "r", ".", "Repository path")
 	_ = orchestrateCmd.MarkFlagRequired("task") //nolint:errcheck // cobra returns error only for invalid flag name
 }
 
 func runOrchestrate() error {
-	wd, _ := os.Getwd()
-	f := factory.NewFactory(wd)
+	llmCfg := llm.DefaultConfig()
+	llmClient := llm.NewLiteLLMClient(llmCfg)
 
-	tmpl, err := factory.LoadTemplate(orchTemplate)
-	if err != nil {
-		return fmt.Errorf("load template: %w", err)
+	ws := sandbox.NewWorkspace(orchRepo)
+	cfg := &runtime.Config{Verbose: true}
+
+	reg := agent.DefaultRegistry()
+	agentNames := splitComma(orchAgents)
+	agents := make(map[string]runtime.Agent)
+
+	for _, name := range agentNames {
+		a, err := reg.Create(name, llmClient)
+		if err != nil {
+			return fmt.Errorf("lookup agent %q: %w", name, err)
+		}
+		agents[name] = a
 	}
 
-	agents, err := f.CreateAgentsFromTemplate(tmpl)
-	if err != nil {
-		return fmt.Errorf("create agents: %w", err)
-	}
-
-	orch := orchestrator.NewOrchestrator(f, agents)
+	orch := orchestrator.NewOrchestrator(llmClient, ws, agents, cfg)
 	if orchStrategy == "parallel" {
 		orch.SetStrategy(orchestrator.StrategyParallel)
 	}
 
-	fmt.Printf("Orchestrating %d agents\n", len(agents))
-	for _, a := range agents {
-		fmt.Printf("  - %s (%s)\n", a.Def.Name, a.Def.Role)
-	}
+	fmt.Printf("Orchestrating %d agents: %v\n", len(agents), agentNames)
 	fmt.Printf("Strategy: %s\n\n", orchStrategy)
 
 	plan, err := orch.Plan(context.Background(), orchTask)
@@ -107,4 +113,24 @@ func runOrchestrate() error {
 	fmt.Printf("Result saved to %s\n", outputFile)
 
 	return nil
+}
+
+func splitComma(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var result []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == ',' {
+			if i > start {
+				result = append(result, s[start:i])
+			}
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		result = append(result, s[start:])
+	}
+	return result
 }
