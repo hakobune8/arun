@@ -427,6 +427,37 @@ func TestRecoverNoOpDocs_CreatesRequiredREADME(t *testing.T) {
 	}
 }
 
+func TestRecoverNoOpCIFixer_CreatesTestsAndWorkflow(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if _, err := recoverGoBackend(context.Background(), repo, "create /healthz with net/http"); err != nil {
+		t.Fatalf("recoverGoBackend() error = %v", err)
+	}
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-step-3"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"ci-fixer": &recordingAgent{name: "ci-fixer"}},
+		&runtime.Config{},
+	)
+
+	result, ok := o.recoverNoOpBuiltInSubtask(context.Background(), Subtask{
+		ID:          "step-3",
+		AgentName:   "ci-fixer",
+		Description: "Add tests and GitHub Actions for /healthz using net/http and go test ./...",
+	}, runSandbox)
+	if !ok || !result.Success {
+		t.Fatalf("recoverNoOpBuiltInSubtask() = (%+v, %v), want success", result, ok)
+	}
+	if !ciCoversScenario(repo) {
+		t.Fatalf("CI files do not cover scenario")
+	}
+}
+
 func TestRecoverBuiltInSubtask_UsesFreshContextAfterTimeout(t *testing.T) {
 	t.Parallel()
 
