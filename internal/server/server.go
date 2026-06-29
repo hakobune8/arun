@@ -34,6 +34,7 @@ import (
 	agentosgh "github.com/kazyamaz200/agentos/internal/github"
 	"github.com/kazyamaz200/agentos/internal/llm"
 	"github.com/kazyamaz200/agentos/internal/orchestrator"
+	"github.com/kazyamaz200/agentos/internal/profile"
 	"github.com/kazyamaz200/agentos/internal/runtime"
 	"github.com/kazyamaz200/agentos/internal/sandbox"
 	"github.com/kazyamaz200/agentos/internal/search"
@@ -224,8 +225,9 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 
 	sb := sandbox.NewLocalSandbox(repo)
 	cfg := &runtime.Config{Verbose: false}
+	prof := &profile.Profile{Name: req.Agent}
 
-	rt := runtime.NewRuntime(s.llmClient, nil, sb, cfg, agt)
+	rt := runtime.NewRuntime(s.llmClient, prof, sb, cfg, agt)
 
 	go func() {
 		if err := rt.Run(context.Background(), tk); err != nil {
