@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kazyamaz200/agentos/internal/event"
 	"github.com/kazyamaz200/agentos/internal/llm"
 	"github.com/kazyamaz200/agentos/internal/profile"
 	"github.com/kazyamaz200/agentos/internal/safety"
@@ -57,7 +58,7 @@ type LifecycleHooks struct {
 }
 
 // Runtime manages the end-to-end execution of a coding task through an Agent,
-// including lifecycle hooks, state persistence, and artifact generation.
+// including lifecycle hooks, state persistence, event emission, and artifact generation.
 type Runtime struct {
 	LLM       llm.LLMClient
 	Registry  *tools.Registry
@@ -69,6 +70,7 @@ type Runtime struct {
 	Config    *Config
 	Agent     Agent
 	Hooks     LifecycleHooks
+	Events    event.Bus
 }
 
 // NewRuntime creates a new Runtime with the given dependencies.
@@ -103,6 +105,21 @@ func NewRuntime(llmClient llm.LLMClient, prof *profile.Profile, workspace *sandb
 	}
 }
 
+// emit publishes an event to the event bus if one is configured.
+func (r *Runtime) emit(ctx context.Context, runID string, t event.Type, data interface{}) {
+	if r.Events == nil {
+		return
+	}
+	_ = r.Events.Publish(ctx, &event.Event{ //nolint:errcheck // best-effort event
+		ID:        fmt.Sprintf("%s-%d", runID, time.Now().UnixNano()),
+		Type:      t,
+		Timestamp: time.Now(),
+		RunID:     runID,
+		AgentID:   r.Agent.Name(),
+		Data:      data,
+	})
+}
+
 // Run executes a coding task through the configured Agent.
 // It delegates planning, execution, and review to the Agent while
 // managing lifecycle hooks, state persistence, and artifact generation.
@@ -114,6 +131,13 @@ func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 	}
 
 	rctx := NewRunContext(ctx, tk, r)
+
+	r.emit(ctx, tk.ID, event.TypeTaskCreated, map[string]interface{}{
+		"task_id": tk.ID,
+		"title":   tk.Title,
+		"profile": r.Profile.Name,
+		"repo":    tk.Repo,
+	})
 
 	record := &state.RunRecord{
 		TaskID:      tk.ID,
@@ -146,8 +170,10 @@ func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 	record.Status = state.RunStatusPlanning
 	_ = r.Store.Save(record) //nolint:errcheck // best-effort save
 
+	r.emit(ctx, tk.ID, event.TypePlanningStarted, nil)
 	plan, err := r.Agent.Plan(rctx)
 	if err != nil {
+		r.emit(ctx, tk.ID, event.TypeRunFailed, map[string]string{"error": err.Error()})
 		record.Status = state.RunStatusFailed
 		record.Error = err.Error()
 		_ = r.Store.Save(record) //nolint:errcheck // best-effort save
@@ -156,6 +182,10 @@ func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 		}
 		return fmt.Errorf("create plan: %w", err)
 	}
+	r.emit(ctx, tk.ID, event.TypePlanningFinished, map[string]interface{}{
+		"steps":  len(plan.Steps),
+		"summary": plan.Summary,
+	})
 
 	_ = r.Workspace.SaveFile("plan.json", mustMarshalJSON(plan)) //nolint:errcheck // best-effort save
 	_ = r.Logger.Log("info", "runtime", "plan created", map[string]interface{}{ //nolint:errcheck // best-effort log
@@ -176,6 +206,7 @@ func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 
 	result, err := r.Agent.Execute(rctx, plan)
 	if err != nil {
+		r.emit(ctx, tk.ID, event.TypeRunFailed, map[string]string{"error": err.Error(), "phase": "execute"})
 		record.Status = state.RunStatusFailed
 		record.Error = err.Error()
 		_ = r.Store.Save(record) //nolint:errcheck // best-effort save
@@ -205,10 +236,15 @@ func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 	record.Status = state.RunStatusReviewing
 	_ = r.Store.Save(record) //nolint:errcheck // best-effort save
 
+	r.emit(ctx, tk.ID, event.TypeReviewStarted, nil)
 	reviewResult, err := r.Agent.Review(rctx, result)
 	if err != nil {
 		_ = r.Logger.Log("warn", "runtime", "review failed", err.Error()) //nolint:errcheck // best-effort log
 	}
+	r.emit(ctx, tk.ID, event.TypeReviewFinished, map[string]interface{}{
+		"approved": reviewResult != nil && reviewResult.Approved,
+		"summary":  reviewResult.Summary,
+	})
 
 	if h := r.Hooks.AfterReview; h != nil {
 		if err := h(ctx, rctx, reviewResult); err != nil {
@@ -232,6 +268,11 @@ func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 	_ = r.Store.Save(record) //nolint:errcheck // best-effort save
 
 	duration := time.Since(startTime)
+	r.emit(ctx, tk.ID, event.TypeRunCompleted, map[string]interface{}{
+		"duration": duration.String(),
+		"retries":  result.Retries,
+		"status":   "completed",
+	})
 	_ = r.Logger.Log("info", "runtime", "run completed", map[string]interface{}{ //nolint:errcheck // best-effort log
 		"duration": duration.String(),
 		"retries":  result.Retries,
