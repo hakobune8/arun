@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -377,6 +380,73 @@ func TestServer_Orchestrate_InvalidRepo(t *testing.T) {
 	assertStatus(t, w.Code, http.StatusBadRequest)
 }
 
+func TestResolveOrchestrateRepo_LocalPath(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+
+	got, err := resolveOrchestrateRepo(repo, "")
+	if err != nil {
+		t.Fatalf("resolveOrchestrateRepo() error = %v", err)
+	}
+	if got != repo {
+		t.Fatalf("repo = %q, want %q", got, repo)
+	}
+}
+
+func TestResolveOrchestrateRepo_RemoteFileClone(t *testing.T) {
+	requireGit(t)
+	root := t.TempDir()
+	t.Setenv("AGENTOS_HOME", filepath.Join(root, "agentos-home"))
+
+	source := filepath.Join(root, "source")
+	remote := filepath.Join(root, "remote.git")
+	if err := os.MkdirAll(source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGitCommand(t, source, "init", "-b", "main")
+	if err := os.WriteFile(filepath.Join(source, "README.md"), []byte("# scenario\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGitCommand(t, source, "add", "README.md")
+	runGitCommand(t, source, "-c", "user.name=AgentOS", "-c", "user.email=agentos@example.local", "commit", "-m", "init")
+	runGitCommand(t, root, "clone", "--bare", source, remote)
+
+	got, err := resolveOrchestrateRepo("file://"+remote, "main")
+	if err != nil {
+		t.Fatalf("resolveOrchestrateRepo() error = %v", err)
+	}
+	if !strings.HasPrefix(got, filepath.Join(root, "agentos-home", "workspaces", "orchestrate")) {
+		t.Fatalf("repo = %q, want cloned workspace under AGENTOS_HOME", got)
+	}
+	if _, err := os.Stat(filepath.Join(got, "README.md")); err != nil {
+		t.Fatalf("cloned README.md missing: %v", err)
+	}
+}
+
+func TestNormalizeRemoteRepo(t *testing.T) {
+	t.Parallel()
+	tests := map[string]string{
+		"kazyamaz200/agentos":               "https://github.com/kazyamaz200/agentos.git",
+		"https://github.com/owner/repo.git": "https://github.com/owner/repo.git",
+		"git@github.com:owner/repo.git":     "git@github.com:owner/repo.git",
+		"file:///tmp/repo.git":              "file:///tmp/repo.git",
+		"/workspace/scenario-repo":          "",
+		"relative-repo":                     "",
+	}
+	for input, want := range tests {
+		got, ok := normalizeRemoteRepo(input)
+		if want == "" {
+			if ok {
+				t.Fatalf("normalizeRemoteRepo(%q) = %q, want local", input, got)
+			}
+			continue
+		}
+		if !ok || got != want {
+			t.Fatalf("normalizeRemoteRepo(%q) = %q, %v, want %q, true", input, got, ok, want)
+		}
+	}
+}
+
 func TestServer_Orchestrate_InvalidJSON(t *testing.T) {
 	t.Parallel()
 	s := NewServer(0)
@@ -474,6 +544,23 @@ func TestSplitRepo_MultiSlash(t *testing.T) {
 	parts := splitRepo("a/b/c")
 	if len(parts) != 2 || parts[0] != "a" || parts[1] != "b/c" {
 		t.Errorf("splitRepo = %v, want [a b/c]", parts)
+	}
+}
+
+func requireGit(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+}
+
+func runGitCommand(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, out)
 	}
 }
 

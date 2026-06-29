@@ -40,12 +40,13 @@ const (
 
 // Orchestrator coordinates multiple agents to execute a task.
 type Orchestrator struct {
-	llm       llm.LLMClient
-	sandbox   sandbox.Sandbox
-	agents    map[string]runtime.Agent
-	agentDefs []agentInfo
-	strategy  Strategy
-	cfg       *runtime.Config
+	llm        llm.LLMClient
+	sandbox    sandbox.Sandbox
+	agents     map[string]runtime.Agent
+	agentDefs  []agentInfo
+	strategy   Strategy
+	cfg        *runtime.Config
+	baseBranch string
 }
 
 type agentInfo struct {
@@ -61,12 +62,13 @@ func NewOrchestrator(llmClient llm.LLMClient, sb sandbox.Sandbox, agents map[str
 		_ = a
 	}
 	return &Orchestrator{
-		llm:       llmClient,
-		sandbox:   sb,
-		agents:    agents,
-		agentDefs: infos,
-		strategy:  StrategySequential,
-		cfg:       cfg,
+		llm:        llmClient,
+		sandbox:    sb,
+		agents:     agents,
+		agentDefs:  infos,
+		strategy:   StrategySequential,
+		cfg:        cfg,
+		baseBranch: "main",
 	}
 }
 
@@ -81,6 +83,13 @@ func (o *Orchestrator) DefaultAgent() runtime.Agent {
 // SetStrategy sets the execution strategy for the orchestrator.
 func (o *Orchestrator) SetStrategy(s Strategy) {
 	o.strategy = s
+}
+
+// SetBaseBranch sets the base branch used for subtask task metadata.
+func (o *Orchestrator) SetBaseBranch(branch string) {
+	if branch != "" {
+		o.baseBranch = branch
+	}
 }
 
 // TaskPlan represents a breakdown of a task into subtasks.
@@ -221,7 +230,7 @@ func (o *Orchestrator) executeSubtask(ctx context.Context, subtask Subtask, shar
 		ID:          subtask.ID,
 		Type:        "orchestrated_subtask",
 		Repo:        o.sandbox.RootDir(),
-		BaseBranch:  "main",
+		BaseBranch:  o.baseBranch,
 		Title:       subtask.Description,
 		Description: subtask.Description,
 		Branch:      fmt.Sprintf("agentos/%s", subtask.ID),
