@@ -64,7 +64,7 @@ type Runtime struct {
 	Registry  *tools.Registry
 	Store     *state.RunStore
 	Policy    *safety.CommandPolicy
-	Workspace *sandbox.Workspace
+	Workspace sandbox.Sandbox
 	Logger    *state.Logger
 	Profile   *profile.Profile
 	Config    *Config
@@ -74,12 +74,12 @@ type Runtime struct {
 }
 
 // NewRuntime creates a new Runtime with the given dependencies.
-func NewRuntime(llmClient llm.LLMClient, prof *profile.Profile, workspace *sandbox.Workspace, cfg *Config, agent Agent) *Runtime {
+func NewRuntime(llmClient llm.LLMClient, prof *profile.Profile, workspace sandbox.Sandbox, cfg *Config, agent Agent) *Runtime {
 	registry := tools.NewRegistry()
 	policy := safety.NewCommandPolicy(prof.Tools.DenyCommands)
 
-	workDir := workspace.RootDir
-	repoPath := workspace.RootDir
+	workDir := workspace.RootDir()
+	repoPath := workspace.RootDir()
 
 	registry.MustRegister(tools.NewReadFileTool(workDir))
 	registry.MustRegister(tools.NewWriteFileTool(workDir))

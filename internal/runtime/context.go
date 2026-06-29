@@ -27,13 +27,13 @@ import (
 	"github.com/kazyamaz200/agentos/internal/state"
 )
 
-// RunContext holds the context for a single task execution, including task, profile, LLM, workspace, and configuration.
+// RunContext holds the context for a single task execution, including task, profile, LLM, sandbox, and configuration.
 type RunContext struct {
-	Context   context.Context
-	Task      *task.Task
-	Profile   *profile.Profile
-	LLM       llm.LLMClient
-	Workspace *sandbox.Workspace
+	Context    context.Context
+	Task       *task.Task
+	Profile    *profile.Profile
+	LLM        llm.LLMClient
+	Workspace  sandbox.Sandbox
 	Registry  *tools.Registry
 	Logger    *state.Logger
 	Store     *state.RunStore

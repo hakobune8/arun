@@ -58,7 +58,7 @@ func (a *BaseAgent) Execute(ctx *runtime.RunContext, plan *runtime.Plan) (*runti
 	result := &runtime.ExecutionResult{}
 	tk := ctx.Task
 
-	gitTool := &tools.GitTool{RepoPath: ctx.Workspace.RootDir}
+	gitTool := &tools.GitTool{RepoPath: ctx.Workspace.RootDir()}
 	currentBranch, _ := gitTool.CurrentBranch(ctx.Context)
 
 	if currentBranch != tk.Branch {
