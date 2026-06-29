@@ -29,10 +29,6 @@ const (
 	stateCookieName   = "agentos_oauth_state"
 )
 
-type contextKey string
-
-const authUserContextKey contextKey = "authUser"
-
 type authConfig struct {
 	Required      bool
 	ClientID      string
@@ -91,11 +87,11 @@ func loadAuthConfig() authConfig {
 	return cfg
 }
 
-func (c authConfig) enabled() bool {
+func (c *authConfig) enabled() bool {
 	return c.Required
 }
 
-func (c authConfig) oauthConfigured() bool {
+func (c *authConfig) oauthConfigured() bool {
 	return c.ClientID != "" && c.ClientSecret != "" && c.RedirectURL != "" && c.SessionSecret != ""
 }
 
