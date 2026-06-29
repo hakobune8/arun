@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/kazyamaz200/agentos/internal/llm"
+	"github.com/kazyamaz200/agentos/internal/profile"
 	"github.com/kazyamaz200/agentos/internal/runtime"
 	"github.com/kazyamaz200/agentos/internal/sandbox"
 	"github.com/kazyamaz200/agentos/internal/task"
@@ -218,12 +219,18 @@ func (o *Orchestrator) executeSubtask(ctx context.Context, subtask Subtask, shar
 
 	tk := &task.Task{
 		ID:          subtask.ID,
+		Type:        "orchestrated_subtask",
+		Repo:        o.sandbox.RootDir(),
+		BaseBranch:  "main",
 		Title:       subtask.Description,
 		Description: subtask.Description,
 		Branch:      fmt.Sprintf("agentos/%s", subtask.ID),
 	}
 
-	rt := runtime.NewRuntime(o.llm, nil, o.sandbox, o.cfg, agt)
+	prof := profile.DefaultProfile()
+	prof.Name = agt.Name()
+	runSandbox := sandbox.NewLocalSandbox(o.sandbox.RootDir())
+	rt := runtime.NewRuntime(o.llm, &prof, runSandbox, o.cfg, agt)
 	if err := rt.Run(ctx, tk); err != nil {
 		return SubtaskResult{
 			SubtaskID: subtask.ID,

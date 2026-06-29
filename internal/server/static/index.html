@@ -170,6 +170,10 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow-x:auto;font-size:
         </select>
       </div>
       <div class="form-group">
+        <label>Repository Path</label>
+        <input type="text" id="orchRepo" value="." placeholder="/workspace/scenario-repo" required>
+      </div>
+      <div class="form-group">
         <label>Task Description</label>
         <textarea id="orchTask" placeholder="Describe what the agents should accomplish..." required></textarea>
       </div>
@@ -521,6 +525,7 @@ async function submitOrchestrate(e) {
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         agents: checked,
+        repo: document.getElementById('orchRepo').value.trim() || '.',
         task: document.getElementById('orchTask').value,
         strategy: document.getElementById('orchStrategy').value,
       })

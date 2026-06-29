@@ -369,6 +369,14 @@ func TestServer_Orchestrate_InvalidAgent(t *testing.T) {
 	assertStatus(t, w.Code, http.StatusBadRequest)
 }
 
+func TestServer_Orchestrate_InvalidRepo(t *testing.T) {
+	t.Parallel()
+	s := NewServer(0)
+	body := `{"agents":["go-backend"],"repo":"/path/that/does/not/exist","task":"test"}`
+	w := serveRequest(s, "POST", "/api/orchestrate", []byte(body))
+	assertStatus(t, w.Code, http.StatusBadRequest)
+}
+
 func TestServer_Orchestrate_InvalidJSON(t *testing.T) {
 	t.Parallel()
 	s := NewServer(0)

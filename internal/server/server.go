@@ -369,6 +369,7 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 
 type orchestrateRequest struct {
 	Agents   []string `json:"agents"`
+	Repo     string   `json:"repo"`
 	Task     string   `json:"task"`
 	Strategy string   `json:"strategy"`
 }
@@ -398,6 +399,12 @@ func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	repoPath, err := resolveOrchestrateRepo(req.Repo)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	agents := make(map[string]runtime.Agent)
 	for _, name := range req.Agents {
 		a, err := s.agentReg.Create(name, s.llmClient)
@@ -409,7 +416,7 @@ func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cfg := &runtime.Config{Verbose: false}
-	orch := orchestrator.NewOrchestrator(s.llmClient, s.sandbox, agents, cfg)
+	orch := orchestrator.NewOrchestrator(s.llmClient, sandbox.NewLocalSandbox(repoPath), agents, cfg)
 
 	if req.Strategy == "parallel" {
 		orch.SetStrategy(orchestrator.StrategyParallel)
@@ -433,6 +440,26 @@ func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 		"results": results,
 		"summary": summary,
 	})
+}
+
+func resolveOrchestrateRepo(repo string) (string, error) {
+	if repo == "" {
+		repo = "."
+	}
+
+	abs, err := filepath.Abs(repo)
+	if err != nil {
+		return "", fmt.Errorf("resolve repo path: %w", err)
+	}
+
+	info, err := os.Stat(abs)
+	if err != nil {
+		return "", fmt.Errorf("repo does not exist: %s", abs)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("repo is not a directory: %s", abs)
+	}
+	return abs, nil
 }
 
 // --- Store ---
