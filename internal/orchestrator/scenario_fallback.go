@@ -67,6 +67,12 @@ func (o *Orchestrator) recoverNoOpBuiltInSubtask(ctx context.Context, subtask Su
 		}
 		out, err := recoverGoBackend(recoveryCtx, runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New("runtime completed without required Go service files"), err), err == nil
+	case "ci-fixer":
+		if ciCoversScenario(runSandbox.RootDir()) {
+			return SubtaskResult{}, false
+		}
+		out, err := recoverGoCI(recoveryCtx, runSandbox.RootDir())
+		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New("runtime completed without required CI test coverage"), err), err == nil
 	case "docs":
 		if readmeCoversScenario(runSandbox.RootDir()) {
 			return SubtaskResult{}, false
@@ -331,6 +337,23 @@ func readmeCoversScenario(root string) bool {
 	return strings.Contains(content, "go run") &&
 		strings.Contains(content, "/healthz") &&
 		strings.Contains(content, "go test")
+}
+
+func ciCoversScenario(root string) bool {
+	testData, err := os.ReadFile(filepath.Join(root, "main_test.go"))
+	if err != nil {
+		return false
+	}
+	workflowData, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "go.yml"))
+	if err != nil {
+		return false
+	}
+	testContent := strings.ToLower(string(testData))
+	workflowContent := strings.ToLower(string(workflowData))
+	return strings.Contains(testContent, "healthzhandler") &&
+		strings.Contains(testContent, "roothandler") &&
+		strings.Contains(workflowContent, "go test ./...") &&
+		strings.Contains(workflowContent, "go vet ./...")
 }
 
 func fileExists(path string) bool {
