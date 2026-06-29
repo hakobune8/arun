@@ -555,6 +555,7 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 	cfg := &runtime.Config{Verbose: false}
 	orch := orchestrator.NewOrchestrator(llmClient, sandbox.NewLocalSandbox(record.RepoPath), agents, cfg)
 	orch.SetBaseBranch(record.BaseBranch)
+	orch.SetRunID(record.ID)
 
 	if record.Strategy == "parallel" {
 		orch.SetStrategy(orchestrator.StrategyParallel)

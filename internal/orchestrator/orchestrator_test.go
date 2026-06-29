@@ -111,7 +111,8 @@ func TestPlan_EmptyLLMContentUsesFallbackPlan(t *testing.T) {
 		&runtime.Config{},
 	)
 
-	plan, err := o.Plan(context.Background(), "do work")
+	parentTask := "create a Go HTTP service with /healthz and /"
+	plan, err := o.Plan(context.Background(), parentTask)
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
@@ -123,6 +124,9 @@ func TestPlan_EmptyLLMContentUsesFallbackPlan(t *testing.T) {
 	}
 	if plan.Subtasks[3].AgentName != "reviewer" || len(plan.Subtasks[3].Deps) != 3 {
 		t.Fatalf("reviewer fallback subtask = %+v, want dependencies on implementation, docs, and CI", plan.Subtasks[3])
+	}
+	if !strings.Contains(plan.Subtasks[0].Description, parentTask) || !strings.Contains(plan.Subtasks[0].Description, "go.mod") {
+		t.Fatalf("go-backend fallback description = %q, want parent task and concrete Go files", plan.Subtasks[0].Description)
 	}
 }
 
@@ -290,6 +294,32 @@ func TestExecuteSubtask_UsesDefaultProfileAndRepo(t *testing.T) {
 	}
 }
 
+func TestExecuteSubtask_ScopesRuntimeTaskIDWithRunID(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("AGENTOS_HOME", filepath.Join(t.TempDir(), "agentos-home"))
+
+	agent := &recordingAgent{}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"test-agent": agent},
+		&runtime.Config{},
+	)
+	o.SetRunID("run-abc")
+
+	result := o.executeSubtask(context.Background(), Subtask{
+		ID:          "step-1",
+		Description: "exercise repo",
+		AgentName:   "test-agent",
+	}, "")
+	if !result.Success {
+		t.Fatalf("executeSubtask() failed: %s", result.Error)
+	}
+	if agent.taskID != "run-abc-step-1" {
+		t.Fatalf("task ID = %q, want run-scoped ID", agent.taskID)
+	}
+}
+
 func TestStrategy_Constants(t *testing.T) {
 	t.Parallel()
 
@@ -327,6 +357,7 @@ func TestSubtaskResult_Defaults(t *testing.T) {
 
 type recordingAgent struct {
 	name          string
+	taskID        string
 	taskRepo      string
 	baseBranch    string
 	profileName   string
@@ -346,6 +377,7 @@ func (a *recordingAgent) Name() string {
 func (a *recordingAgent) Plan(ctx *runtime.RunContext) (*runtime.Plan, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.taskID = ctx.Task.ID
 	a.taskRepo = ctx.Task.Repo
 	a.baseBranch = ctx.Task.BaseBranch
 	a.profileName = ctx.Profile.Name

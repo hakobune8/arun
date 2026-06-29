@@ -50,6 +50,7 @@ type Orchestrator struct {
 	cfg            *runtime.Config
 	baseBranch     string
 	subtaskTimeout time.Duration
+	runID          string
 }
 
 type agentInfo struct {
@@ -115,6 +116,11 @@ func (o *Orchestrator) SetBaseBranch(branch string) {
 	if branch != "" {
 		o.baseBranch = branch
 	}
+}
+
+// SetRunID sets the parent orchestration ID used to scope runtime artifacts.
+func (o *Orchestrator) SetRunID(id string) {
+	o.runID = id
 }
 
 // SetSubtaskTimeout sets the maximum runtime for a single subtask.
@@ -229,12 +235,12 @@ func (o *Orchestrator) fallbackPlan(taskDesc string) *TaskPlan {
 		}
 	}
 
-	add("step-1", "go-backend", "Implement the requested backend and application changes.", nil)
-	add("step-2", "docs", "Update documentation for the requested changes, usage, and verification steps.", nil)
+	add("step-1", "go-backend", fmt.Sprintf("Implement the Go backend requested by the parent task. Create or update go.mod and main.go as needed. Use net/http. Implement /healthz returning JSON {\"status\":\"ok\"} and implement /. Parent task:\n\n%s", taskDesc), nil)
+	add("step-2", "docs", fmt.Sprintf("Update README.md for the requested changes. Include startup instructions, endpoint descriptions, and test instructions. Parent task:\n\n%s", taskDesc), nil)
 	ciDeps := dependenciesForAvailable(available, "go-backend")
-	add("step-3", "ci-fixer", "Add or fix tests and CI configuration so project validation succeeds.", ciDeps)
+	add("step-3", "ci-fixer", fmt.Sprintf("Add or fix Go tests and GitHub Actions workflow so go test ./... succeeds for the implementation requested by the parent task. Parent task:\n\n%s", taskDesc), ciDeps)
 	reviewerDeps := dependenciesForAvailable(available, "go-backend", "docs", "ci-fixer")
-	add("step-4", "reviewer", "Review the final diff and summarize any release-blocking findings.", reviewerDeps)
+	add("step-4", "reviewer", fmt.Sprintf("Review the final diff for correctness, release readiness, and scenario-test coverage. Summarize release-blocking findings. Parent task:\n\n%s", taskDesc), reviewerDeps)
 
 	if len(subtasks) == 0 {
 		for i, info := range o.agentDefs {
@@ -453,13 +459,13 @@ func (o *Orchestrator) executeSubtask(ctx context.Context, subtask Subtask, shar
 	}
 
 	tk := &task.Task{
-		ID:          subtask.ID,
+		ID:          o.runtimeTaskID(subtask.ID),
 		Type:        "orchestrated_subtask",
 		Repo:        o.sandbox.RootDir(),
 		BaseBranch:  o.baseBranch,
 		Title:       subtask.Description,
 		Description: subtask.Description,
-		Branch:      fmt.Sprintf("agentos/%s", subtask.ID),
+		Branch:      fmt.Sprintf("agentos/%s", o.runtimeTaskID(subtask.ID)),
 	}
 
 	prof := subtaskProfile(agt.Name())
@@ -479,6 +485,13 @@ func (o *Orchestrator) executeSubtask(ctx context.Context, subtask Subtask, shar
 		Output:    fmt.Sprintf("Executed by %s: %s", agt.Name(), subtask.Description),
 		Diff:      sharedCtx,
 	}
+}
+
+func (o *Orchestrator) runtimeTaskID(subtaskID string) string {
+	if o.runID == "" {
+		return subtaskID
+	}
+	return o.runID + "-" + subtaskID
 }
 
 func subtaskProfile(agentName string) profile.Profile {
