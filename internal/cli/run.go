@@ -109,8 +109,8 @@ func runTask() error {
 		Verbose: verbose,
 	}
 
-	planner := agent.NewPlanner(llmClient)
-	rt := runtime.NewRuntime(llmClient, prof, ws, cfg, planner)
+	agt := agent.NewBaseAgent(prof.Name, llmClient)
+	rt := runtime.NewRuntime(llmClient, prof, ws, cfg, agt)
 	if err := rt.Run(context.Background(), tk); err != nil {
 		return err
 	}

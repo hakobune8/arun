@@ -22,13 +22,23 @@ import (
 	"github.com/kazyamaz200/agentos/internal/sandbox"
 )
 
-type mockPlanner struct {
+type mockAgent struct {
 	plan *Plan
 	err  error
 }
 
-func (m *mockPlanner) Plan(ctx *RunContext) (*Plan, error) {
+func (m *mockAgent) Name() string { return "mock-agent" }
+
+func (m *mockAgent) Plan(ctx *RunContext) (*Plan, error) {
 	return m.plan, m.err
+}
+
+func (m *mockAgent) Execute(ctx *RunContext, plan *Plan) (*ExecutionResult, error) {
+	return &ExecutionResult{Success: true}, nil
+}
+
+func (m *mockAgent) Review(ctx *RunContext, result *ExecutionResult) (*ReviewResult, error) {
+	return &ReviewResult{Approved: true, Summary: "mock review"}, nil
 }
 
 func TestNewRuntime(t *testing.T) {
@@ -38,9 +48,9 @@ func TestNewRuntime(t *testing.T) {
 	prof := profile.DefaultProfile()
 	ws := sandbox.NewWorkspace(t.TempDir())
 	cfg := &Config{DryRun: true}
-	planner := &mockPlanner{}
+	agt := &mockAgent{}
 
-	rt := NewRuntime(mockLLM, &prof, ws, cfg, planner)
+	rt := NewRuntime(mockLLM, &prof, ws, cfg, agt)
 
 	if rt.LLM != mockLLM {
 		t.Error("LLM field not set correctly")
@@ -54,8 +64,8 @@ func TestNewRuntime(t *testing.T) {
 	if rt.Config != cfg {
 		t.Error("Config field not set correctly")
 	}
-	if rt.Planner != planner {
-		t.Error("Planner field not set correctly")
+	if rt.Agent != agt {
+		t.Error("Agent field not set correctly")
 	}
 	if rt.Registry == nil {
 		t.Error("Registry should not be nil")
