@@ -18,6 +18,7 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -225,26 +226,133 @@ func (o *Orchestrator) ExecuteWithObserver(ctx context.Context, plan *TaskPlan, 
 			}
 		}
 	case StrategyParallel:
-		type subResult struct {
-			result SubtaskResult
-			index  int
-		}
-		ch := make(chan subResult, len(plan.Subtasks))
-		for i, subtask := range plan.Subtasks {
-			s := subtask
-			idx := i
-			go func() {
-				ch <- subResult{o.executeObservedSubtask(ctx, s, "", observer), idx}
-			}()
-		}
-		results = make([]SubtaskResult, len(plan.Subtasks))
-		for range plan.Subtasks {
-			sr := <-ch
-			results[sr.index] = sr.result
-		}
+		results = o.executeParallel(ctx, plan, observer)
 	}
 
+	if err := executionError(results); err != nil {
+		return results, err
+	}
 	return results, nil
+}
+
+type indexedSubtaskResult struct {
+	result SubtaskResult
+	index  int
+}
+
+func (o *Orchestrator) executeParallel(ctx context.Context, plan *TaskPlan, observer SubtaskObserver) []SubtaskResult {
+	results := make([]SubtaskResult, len(plan.Subtasks))
+	subtasksByID := make(map[string]Subtask, len(plan.Subtasks))
+	for _, subtask := range plan.Subtasks {
+		subtasksByID[subtask.ID] = subtask
+	}
+
+	started := make(map[string]bool, len(plan.Subtasks))
+	completed := make(map[string]bool, len(plan.Subtasks))
+	successful := make(map[string]bool, len(plan.Subtasks))
+	ch := make(chan indexedSubtaskResult, len(plan.Subtasks))
+	running := 0
+
+	for len(completed) < len(plan.Subtasks) {
+		progressed := false
+		for i, subtask := range plan.Subtasks {
+			if started[subtask.ID] || completed[subtask.ID] {
+				continue
+			}
+			if failed, reason := failedDependency(subtask, subtasksByID, completed, successful); failed {
+				result := SubtaskResult{SubtaskID: subtask.ID, Success: false, Error: reason}
+				results[i] = result
+				completed[subtask.ID] = true
+				if observer != nil {
+					now := time.Now().UTC()
+					observer(SubtaskEvent{Type: SubtaskCompleted, Subtask: subtask, Result: &result, Finished: now})
+				}
+				progressed = true
+				continue
+			}
+			if !dependenciesSatisfied(subtask, completed, successful) {
+				continue
+			}
+
+			started[subtask.ID] = true
+			running++
+			progressed = true
+			go func(index int, st Subtask) {
+				ch <- indexedSubtaskResult{o.executeObservedSubtask(ctx, st, "", observer), index}
+			}(i, subtask)
+		}
+
+		if len(completed) == len(plan.Subtasks) {
+			break
+		}
+		if running == 0 {
+			if !progressed {
+				for i, subtask := range plan.Subtasks {
+					if completed[subtask.ID] {
+						continue
+					}
+					result := SubtaskResult{
+						SubtaskID: subtask.ID,
+						Success:   false,
+						Error:     "dependencies could not be satisfied",
+					}
+					results[i] = result
+					completed[subtask.ID] = true
+					if observer != nil {
+						now := time.Now().UTC()
+						observer(SubtaskEvent{Type: SubtaskCompleted, Subtask: subtask, Result: &result, Finished: now})
+					}
+				}
+			}
+			continue
+		}
+
+		sr := <-ch
+		running--
+		results[sr.index] = sr.result
+		completed[sr.result.SubtaskID] = true
+		successful[sr.result.SubtaskID] = sr.result.Success
+	}
+
+	return results
+}
+
+func failedDependency(subtask Subtask, subtasksByID map[string]Subtask, completed, successful map[string]bool) (failed bool, reason string) {
+	for _, dep := range subtask.Deps {
+		if _, ok := subtasksByID[dep]; !ok {
+			return true, fmt.Sprintf("dependency %q was not found", dep)
+		}
+		if completed[dep] && !successful[dep] {
+			return true, fmt.Sprintf("dependency %q failed", dep)
+		}
+	}
+	return false, ""
+}
+
+func dependenciesSatisfied(subtask Subtask, completed, successful map[string]bool) bool {
+	for _, dep := range subtask.Deps {
+		if !completed[dep] || !successful[dep] {
+			return false
+		}
+	}
+	return true
+}
+
+func executionError(results []SubtaskResult) error {
+	var failed []string
+	for _, result := range results {
+		if !result.Success {
+			if result.Error != "" {
+				failed = append(failed, fmt.Sprintf("%s: %s", result.SubtaskID, result.Error))
+			} else {
+				failed = append(failed, result.SubtaskID)
+			}
+		}
+	}
+	if len(failed) == 0 {
+		return nil
+	}
+	return errors.New("subtasks failed: " + strings.Join(failed, "; "))
 }
 
 func (o *Orchestrator) executeObservedSubtask(ctx context.Context, subtask Subtask, sharedCtx string, observer SubtaskObserver) SubtaskResult {
@@ -295,8 +403,7 @@ func (o *Orchestrator) executeSubtask(ctx context.Context, subtask Subtask, shar
 		Branch:      fmt.Sprintf("agentos/%s", subtask.ID),
 	}
 
-	prof := profile.DefaultProfile()
-	prof.Name = agt.Name()
+	prof := subtaskProfile(agt.Name())
 	runSandbox := sandbox.NewLocalSandbox(o.sandbox.RootDir())
 	rt := runtime.NewRuntime(o.llm, &prof, runSandbox, o.cfg, agt)
 	if err := rt.Run(ctx, tk); err != nil {
@@ -313,6 +420,39 @@ func (o *Orchestrator) executeSubtask(ctx context.Context, subtask Subtask, shar
 		Output:    fmt.Sprintf("Executed by %s: %s", agt.Name(), subtask.Description),
 		Diff:      sharedCtx,
 	}
+}
+
+func subtaskProfile(agentName string) profile.Profile {
+	prof := profile.DefaultProfile()
+	prof.Name = agentName
+
+	switch agentName {
+	case "go-backend":
+		prof.Role = "Go backend coding agent"
+		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git", "test"}
+		prof.Commands.Test = "go test ./..."
+		prof.Commands.Lint = "go vet ./..."
+		prof.Commands.Build = "go build ./..."
+	case "ci-fixer":
+		prof.Role = "CI configuration fix agent"
+		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git", "test"}
+		prof.Commands.Test = "go test ./..."
+		prof.Commands.Lint = "go vet ./..."
+	case "docs":
+		prof.Role = "Documentation agent"
+		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git"}
+		prof.Commands.Test = ""
+		prof.Commands.Lint = ""
+	case "reviewer":
+		prof.Role = "Code review agent"
+		prof.Tools.Allow = []string{"read_file", "search", "shell", "git"}
+		prof.Commands.Test = ""
+		prof.Commands.Lint = ""
+		prof.Limits.MaxRetries = 1
+		prof.Limits.MaxIterations = 2
+	}
+
+	return prof
 }
 
 // MergeResults combines subtask results into a formatted report.

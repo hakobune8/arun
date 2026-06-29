@@ -91,6 +91,29 @@ func TestNewRuntime(t *testing.T) {
 	}
 }
 
+func TestNewRuntime_RespectsAllowedTools(t *testing.T) {
+	t.Parallel()
+
+	mockLLM := llm.NewMockLLMClient(nil)
+	prof := profile.DefaultProfile()
+	prof.Tools.Allow = []string{"read_file", "git"}
+	ws := sandbox.NewWorkspace(t.TempDir())
+	rt := NewRuntime(mockLLM, &prof, ws, &Config{}, &mockAgent{})
+
+	if _, ok := rt.Registry.Get("read_file"); !ok {
+		t.Fatal("read_file tool was not registered")
+	}
+	if _, ok := rt.Registry.Get("git"); !ok {
+		t.Fatal("git tool was not registered")
+	}
+	if _, ok := rt.Registry.Get("test"); ok {
+		t.Fatal("test tool was registered despite not being allowed")
+	}
+	if _, ok := rt.Registry.Get("shell"); ok {
+		t.Fatal("shell tool was registered despite not being allowed")
+	}
+}
+
 func TestRuntime_RunSavesExecutionArtifactsOnFailure(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("AGENTOS_HOME", home)

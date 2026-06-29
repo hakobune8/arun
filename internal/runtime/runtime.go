@@ -79,12 +79,30 @@ func NewRuntime(llmClient llm.LLMClient, prof *profile.Profile, workspace sandbo
 	workDir := workspace.RootDir()
 	repoPath := workspace.RootDir()
 
-	registry.MustRegister(tools.NewReadFileTool(workDir))
-	registry.MustRegister(tools.NewWriteFileTool(workDir))
-	registry.MustRegister(tools.NewSearchTool(workDir))
-	registry.MustRegister(tools.NewShellTool(policy, workDir))
-	registry.MustRegister(tools.NewGitTool(repoPath))
-	registry.MustRegister(tools.NewTestTool(workDir))
+	allowed := make(map[string]bool, len(prof.Tools.Allow))
+	for _, name := range prof.Tools.Allow {
+		allowed[name] = true
+	}
+	allowAll := len(allowed) == 0
+
+	if allowAll || allowed["read_file"] {
+		registry.MustRegister(tools.NewReadFileTool(workDir))
+	}
+	if allowAll || allowed["write_file"] {
+		registry.MustRegister(tools.NewWriteFileTool(workDir))
+	}
+	if allowAll || allowed["search"] {
+		registry.MustRegister(tools.NewSearchTool(workDir))
+	}
+	if allowAll || allowed["shell"] {
+		registry.MustRegister(tools.NewShellTool(policy, workDir))
+	}
+	if allowAll || allowed["git"] {
+		registry.MustRegister(tools.NewGitTool(repoPath))
+	}
+	if allowAll || allowed["test"] {
+		registry.MustRegister(tools.NewTestTool(workDir))
+	}
 
 	runDir := workspace.RunPath()
 	logger := state.NewLogger(runDir)

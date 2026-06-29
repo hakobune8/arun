@@ -2,7 +2,10 @@ package orchestrator
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -130,6 +133,96 @@ func TestExecuteWithObserver_EmitsSubtaskEvents(t *testing.T) {
 	}
 }
 
+func TestExecuteParallel_RespectsDependencies(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("AGENTOS_HOME", filepath.Join(t.TempDir(), "agentos-home"))
+
+	agent := &recordingAgent{delay: 10 * time.Millisecond}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"test-agent": agent},
+		&runtime.Config{},
+	)
+	o.SetStrategy(StrategyParallel)
+	o.SetSubtaskTimeout(time.Minute)
+
+	var mu sync.Mutex
+	started := make(map[string]time.Time)
+	finished := make(map[string]time.Time)
+	results, err := o.ExecuteWithObserver(context.Background(), &TaskPlan{
+		Subtasks: []Subtask{
+			{ID: "step-1", Description: "first", AgentName: "test-agent"},
+			{ID: "step-2", Description: "second", AgentName: "test-agent", Deps: []string{"step-1"}},
+			{ID: "step-3", Description: "independent", AgentName: "test-agent"},
+		},
+	}, func(event SubtaskEvent) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch event.Type {
+		case SubtaskStarted:
+			started[event.Subtask.ID] = event.Started
+		case SubtaskCompleted:
+			finished[event.Subtask.ID] = event.Finished
+		}
+	})
+	if err != nil {
+		t.Fatalf("ExecuteWithObserver() error = %v", err)
+	}
+	if len(results) != 3 {
+		t.Fatalf("got %d results, want 3", len(results))
+	}
+	if started["step-2"].Before(finished["step-1"]) {
+		t.Fatalf("dependent subtask started before dependency finished: step-2=%s step-1-finished=%s", started["step-2"], finished["step-1"])
+	}
+}
+
+func TestExecuteParallel_SkipsSubtaskWhenDependencyFails(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("AGENTOS_HOME", filepath.Join(t.TempDir(), "agentos-home"))
+
+	agent := &recordingAgent{failTasks: map[string]bool{"step-1": true}}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"test-agent": agent},
+		&runtime.Config{},
+	)
+	o.SetStrategy(StrategyParallel)
+	o.SetSubtaskTimeout(time.Minute)
+
+	var mu sync.Mutex
+	var started []string
+	results, err := o.ExecuteWithObserver(context.Background(), &TaskPlan{
+		Subtasks: []Subtask{
+			{ID: "step-1", Description: "first", AgentName: "test-agent"},
+			{ID: "step-2", Description: "second", AgentName: "test-agent", Deps: []string{"step-1"}},
+		},
+	}, func(event SubtaskEvent) {
+		if event.Type == SubtaskStarted {
+			mu.Lock()
+			defer mu.Unlock()
+			started = append(started, event.Subtask.ID)
+		}
+	})
+	if err == nil {
+		t.Fatal("ExecuteWithObserver() error = nil, want failure")
+	}
+	if len(results) != 2 {
+		t.Fatalf("got %d results, want 2", len(results))
+	}
+	if results[1].Success || !strings.Contains(results[1].Error, `dependency "step-1" failed`) {
+		t.Fatalf("dependent result = %+v, want dependency failure", results[1])
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for _, id := range started {
+		if id == "step-2" {
+			t.Fatal("dependent subtask started despite failed dependency")
+		}
+	}
+}
+
 func TestExecuteSubtask_UsesDefaultProfileAndRepo(t *testing.T) {
 	repo := t.TempDir()
 	t.Setenv("AGENTOS_HOME", filepath.Join(t.TempDir(), "agentos-home"))
@@ -205,6 +298,9 @@ type recordingAgent struct {
 	baseBranch    string
 	profileName   string
 	workspaceRoot string
+	failTasks     map[string]bool
+	delay         time.Duration
+	mu            sync.Mutex
 }
 
 func (a *recordingAgent) Name() string {
@@ -212,6 +308,8 @@ func (a *recordingAgent) Name() string {
 }
 
 func (a *recordingAgent) Plan(ctx *runtime.RunContext) (*runtime.Plan, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.taskRepo = ctx.Task.Repo
 	a.baseBranch = ctx.Task.BaseBranch
 	a.profileName = ctx.Profile.Name
@@ -219,7 +317,13 @@ func (a *recordingAgent) Plan(ctx *runtime.RunContext) (*runtime.Plan, error) {
 	return &runtime.Plan{Summary: "ok"}, nil
 }
 
-func (a *recordingAgent) Execute(_ *runtime.RunContext, _ *runtime.Plan) (*runtime.ExecutionResult, error) {
+func (a *recordingAgent) Execute(ctx *runtime.RunContext, _ *runtime.Plan) (*runtime.ExecutionResult, error) {
+	if a.delay > 0 {
+		time.Sleep(a.delay)
+	}
+	if a.failTasks[ctx.Task.ID] {
+		return &runtime.ExecutionResult{Success: false}, fmt.Errorf("forced failure")
+	}
 	return &runtime.ExecutionResult{Success: true}, nil
 }
 
