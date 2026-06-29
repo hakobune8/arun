@@ -14,8 +14,9 @@ run artifacts.
 ## Quick Install
 
 ```bash
-# Add the AgentOS Helm repository (once)
+# Add the AgentOS Helm repository
 helm repo add agentos https://kazyamaz200.github.io/agentos
+helm repo update
 
 # Install AgentOS
 helm install agentos agentos/agentos \

@@ -15,6 +15,15 @@
 
 AgentOS is not another coding agent — it is the operating system layer for autonomous coding agents. It provides a runtime, lifecycle, execution model, tool system, memory abstraction, and safety model. It uses [LiteLLM](https://github.com/BerriAI/litellm) as the LLM gateway, providing a unified interface to various LLM backends.
 
+Designed for Kubernetes deployment. Manage runs, review diffs, and
+search across agents through the [Web UI](docs/api.md).
+
+```bash
+helm repo add agentos https://kazyamaz200.github.io/agentos
+helm install agentos agentos/agentos \
+  --set env.LITELLM_BASE_URL=http://litellm:4000
+```
+
 ## Features
 
 - **Task Planning** — LLM generates structured execution plans from task descriptions
@@ -73,34 +82,30 @@ See the [Quick Start Guide](docs/quickstart.md) for a step-by-step walkthrough.
 ### CLI Reference
 
 ```bash
+# Deploy on Kubernetes
+helm install agentos agentos/agentos \
+  --set env.LITELLM_BASE_URL=http://litellm:4000
+
 # Run a coding task
 agentos run --task task.yaml --profile profiles/go_backend.yaml
 
 # Run using a definition file (v1.0 format)
 agentos run --task task.yaml --definition definitions/go-backend.yaml
 
-# View version
-agentos version
+# Start Web UI (local dev)
+agentos serve --port 8080
 
 # List registered agents
 agentos agent list
 
-# Review code changes
-agentos review --repo ./my-project --profile profiles/reviewer.yaml
-
 # Multi-agent orchestration
 agentos orchestrate --agents "go-backend,reviewer" --task "Implement user auth"
 
-# Start Web UI
-agentos serve --port 8080
-
-# Search across memory, guidelines, and past PRs
-agentos search --query "error handling pattern" --type all
-
 # GitHub operations
 agentos issue list --repo owner/repo
-agentos pr create --repo owner/repo --title "Fix bug" --head agent/fix
-agentos checks list --repo owner/repo --ref main
+
+# View version
+agentos version
 ```
 
 ## Task YAML

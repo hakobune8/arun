@@ -1,0 +1,5 @@
+owner: kazyamaz200
+name: agentos
+pages-branch: gh-pages
+pages-index-path: /index.yaml
+git-base-url: https://api.github.com/
