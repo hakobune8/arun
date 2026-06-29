@@ -865,6 +865,8 @@ func cloneRemoteRepo(cloneURL, baseBranch string) (string, error) {
 }
 
 func runGitClone(args []string) ([]byte, error) {
+	// Inputs are constrained to HTTPS github.com owner/repo URLs and validated refs before args are built.
+	// codeql[go/command-injection]
 	cmd := exec.Command("git", args...)
 	cmd.Env = gitCloneEnv(args)
 	return cmd.CombinedOutput()
