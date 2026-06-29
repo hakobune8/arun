@@ -1,0 +1,19 @@
+apiVersion: agentos.io/v1
+kind: Agent
+metadata:
+  name: reviewer
+  labels:
+    role: reviewer
+spec:
+  llm:
+    model: coder
+    temperature: 0.1
+    maxTokens: 4096
+  tools:
+    allow:
+      - read_file
+      - search
+      - git
+  limits:
+    maxRetries: 1
+    maxIterations: 2

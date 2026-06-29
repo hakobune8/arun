@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package sandbox provides execution isolation for agent tasks with pluggable
+// backends (local, Docker). Runtime does not know which backend is in use.
 package sandbox
 
 import (

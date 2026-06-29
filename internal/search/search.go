@@ -41,7 +41,7 @@ const (
 
 // Service provides unified search across multiple data sources.
 type Service struct {
-	memStore *memory.MemoryStore
+	memStore *memory.VectorStore
 	glStore  *guideline.Store
 	vs       vector.VectorStore
 	embedder embedding.Embedder
@@ -50,7 +50,7 @@ type Service struct {
 // NewService creates a new search service with the given vector store and embedder.
 func NewService(vs vector.VectorStore, embedder embedding.Embedder) *Service {
 	return &Service{
-		memStore: memory.NewMemoryStore(vs, embedder),
+		memStore: memory.NewVectorStore(vs, embedder),
 		glStore:  guideline.NewStore(vs, embedder),
 		vs:       vs,
 		embedder: embedder,
@@ -158,7 +158,7 @@ func (s *Service) searchAll(ctx context.Context, query string, limit int) ([]Res
 }
 
 // MemoryStore returns the underlying memory store.
-func (s *Service) MemoryStore() *memory.MemoryStore {
+func (s *Service) MemoryStore() *memory.VectorStore {
 	return s.memStore
 }
 

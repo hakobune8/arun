@@ -162,10 +162,10 @@ func (f *Factory) ListAgents() ([]string, error) {
 
 // CreateFromDefinition creates a fully initialized runtime.Agent from a
 // versioned agent Definition. No manual wiring of LLM, tools, or sandbox
-// is required by the caller.
-func (f *Factory) CreateFromDefinition(def *agent.Definition) (runtime.Agent, error) {
+// is required by the caller. It returns the agent and the LLM client.
+func (f *Factory) CreateFromDefinition(def *agent.Definition) (runtime.Agent, llm.LLMClient, error) {
 	if def == nil {
-		return nil, fmt.Errorf("definition is nil")
+		return nil, nil, fmt.Errorf("definition is nil")
 	}
 
 	llmCfg := llm.DefaultConfig()
@@ -202,7 +202,7 @@ func (f *Factory) CreateFromDefinition(def *agent.Definition) (runtime.Agent, er
 	}
 
 	agt := agent.NewBaseAgent(def.Metadata.Name, llmClient)
-	return agt, nil
+	return agt, llmClient, nil
 }
 
 // BuildAgentFromDefinition is a convenience function that loads a Definition
@@ -216,12 +216,12 @@ func BuildAgentFromDefinition(defPath, workDir string) (runtime.Agent, llm.LLMCl
 	}
 
 	f := NewFactory(workDir)
-	agt, err := f.CreateFromDefinition(def)
+	agt, llmClient, err := f.CreateFromDefinition(def)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create agent: %w", err)
 	}
 
-	return agt, nil, nil
+	return agt, llmClient, nil
 }
 
 // AgentRunner executes agents created by the factory.

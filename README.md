@@ -7,7 +7,13 @@
 [![Release](https://img.shields.io/github/v/release/kazyamaz200/agentos)](https://github.com/kazyamaz200/agentos/releases)
 [![Go Reference](https://pkg.go.dev/badge/github.com/kazyamaz200/agentos)](https://pkg.go.dev/github.com/kazyamaz200/agentos)
 
-AgentOS is a coding agent execution platform for safely producing and running coding agents at scale. It uses [LiteLLM](https://github.com/BerriAI/litellm) as the LLM gateway, providing a unified interface to various LLM backends.
+**A Go runtime for autonomous coding agents.**
+
+> Define agents. Run agents. Scale agents.
+
+*Write Agents by defining them, not by implementing them.*
+
+AgentOS is not another coding agent — it is the operating system layer for autonomous coding agents. It provides a runtime, lifecycle, execution model, tool system, memory abstraction, and safety model. It uses [LiteLLM](https://github.com/BerriAI/litellm) as the LLM gateway, providing a unified interface to various LLM backends.
 
 ## Features
 
@@ -207,7 +213,44 @@ pr_body.md        # Pull request body draft
 
 ## Roadmap
 
-### v0.1 — Done
+### v1.0 — Released
+- [x] Runtime Agent interface (Plan, Execute, Review) with lifecycle hooks
+- [x] Standardized tool interface with Description, lifecycle, and validation
+- [x] Agent plugin registry with built-in agents (go-backend, reviewer, ci-fixer, docs)
+- [x] Structured event bus with typed events and file store persistence
+- [x] Pluggable memory layer (VectorStore, JSONStore)
+- [x] Sandbox interface (local, Docker stub)
+- [x] Versioned Agent Definition schema (apiVersion: agentos.io/v1)
+- [x] Agent Factory: Definition → Runnable Agent
+- [x] Multi-agent orchestration (sequential/parallel)
+
+### v0.5 — Shipped
+- [x] Agent Factory (create agents from templates)
+- [x] Profile-based agent generation
+- [x] Multi-agent orchestration (sequential/parallel)
+- [x] Agent template system with YAML definitions
+
+### v0.4 — Shipped
+- [x] MCP client (JSON-RPC stdio) with tool listing and calling
+- [x] MCP tool adapter → Tool registry integration
+- [x] Docker sandbox for isolated execution
+- [x] Web UI with dashboard, run viewer, and search
+
+### v0.3 — Shipped
+- [x] Vector store interface (local JSON + Qdrant)
+- [x] Embedding generation via LiteLLM
+- [x] Past PR search via vector search
+- [x] Coding guideline retrieval with semantic search
+- [x] Agent memory with save/search/clear
+- [x] Unified search command
+
+### v0.2 — Shipped
+- [x] GitHub Issue fetching
+- [x] Pull Request creation
+- [x] CI result fetching
+- [x] CI Fix Agent
+
+### v0.1 — Shipped
 - [x] CLI with run, review, version commands
 - [x] Task YAML loading
 - [x] Profile YAML loading
@@ -216,32 +259,6 @@ pr_body.md        # Pull request body draft
 - [x] Test/lint with retry
 - [x] Run artifact persistence
 - [x] Safety policies
-
-### v0.2 — Current
-- [x] GitHub Issue fetching
-- [x] Pull Request creation
-- [x] CI result fetching
-- [x] CI Fix Agent
-
-### v0.3 — Current
-- [x] Vector store interface (local JSON + Qdrant)
-- [x] Embedding generation via LiteLLM
-- [x] Past PR search via vector search
-- [x] Coding guideline retrieval with semantic search
-- [x] Agent memory with save/search/clear
-- [x] Unified search command
-
-### v0.4 — Current
-- [x] MCP client (JSON-RPC stdio) with tool listing and calling
-- [x] MCP tool adapter → Tool registry integration
-- [x] Docker sandbox for isolated execution
-- [x] Web UI with dashboard, run viewer, and search
-
-### v0.5 — Current
-- [x] Agent Factory (create agents from templates)
-- [x] Profile-based agent generation
-- [x] Multi-agent orchestration (sequential/parallel)
-- [x] Agent template system with YAML definitions
 
 ## License
 

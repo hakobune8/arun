@@ -1,5 +1,28 @@
 # Changelog
 
+## [Unreleased] - v1.0
+
+### Added
+- Runtime Agent interface (Plan, Execute, Review) with lifecycle hooks (#91)
+- Versioned Agent definition schema (apiVersion: agentos.io/v1) (#97)
+- Agent plugin registry with built-in agents (go-backend, reviewer, ci-fixer, docs) (#93)
+- Structured event bus with typed events and file store persistence (#94)
+- JSON memory store backend (zero dependencies) (#95)
+- Sandbox interface abstraction with LocalSandbox and Docker stub (#96)
+- Agent Factory from versioned Definition YAML (#98)
+- Multi-agent orchestration wired to actual runtime execution (#99)
+- Tool Description() method on all built-in tools and MCP adapter (#92)
+- Registry validation, lifecycle support, and duplicate detection (#92)
+
+### Changed
+- Runtime delegates planning/execution/review to Agent interface
+- MemoryStore renamed to VectorStore implementing Store interface
+- Workspace renamed to LocalSandbox implementing Sandbox interface
+- Orchestrator uses runtime.Agent interface and agent registry
+
+### Fixed
+- BuildAgentFromDefinition now returns LLM client properly
+
 ## [v0.5] - 2026-06-28
 
 ### Added
