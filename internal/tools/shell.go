@@ -42,6 +42,8 @@ func NewShellTool(policy *safety.CommandPolicy, workDir string) *ShellTool {
 
 func (t *ShellTool) Name() string { return "shell" }
 
+func (t *ShellTool) Description() string { return "Execute a shell command with safety policy enforcement" }
+
 func (t *ShellTool) Run(ctx context.Context, input ToolInput) ToolOutput {
 	command, _ := input["command"].(string)
 	if command == "" {

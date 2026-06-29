@@ -35,6 +35,8 @@ func NewTestTool(workDir string) *TestTool {
 
 func (t *TestTool) Name() string { return "test" }
 
+func (t *TestTool) Description() string { return "Run test commands (e.g. go test) and return output" }
+
 func (t *TestTool) Run(ctx context.Context, input ToolInput) ToolOutput {
 	command, _ := input["command"].(string)
 	if command == "" {

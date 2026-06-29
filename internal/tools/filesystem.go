@@ -33,6 +33,8 @@ func NewReadFileTool(workspace string) *ReadFileTool {
 
 func (t *ReadFileTool) Name() string { return "read_file" }
 
+func (t *ReadFileTool) Description() string { return "Read the contents of a file from the workspace" }
+
 func (t *ReadFileTool) Run(ctx context.Context, input ToolInput) ToolOutput {
 	filePath, _ := input["file"].(string)
 	if filePath == "" {
@@ -59,6 +61,8 @@ func NewWriteFileTool(workspace string) *WriteFileTool {
 }
 
 func (t *WriteFileTool) Name() string { return "write_file" }
+
+func (t *WriteFileTool) Description() string { return "Write content to a file in the workspace" }
 
 func (t *WriteFileTool) Run(ctx context.Context, input ToolInput) ToolOutput {
 	filePath, _ := input["file"].(string)

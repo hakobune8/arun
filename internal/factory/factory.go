@@ -91,22 +91,22 @@ func (f *Factory) CreateAgent(def *AgentDef) (*AgentInstance, error) {
 	}
 
 	if allowed["read_file"] || len(prof.Tools.Allow) == 0 {
-		registry.Register(tools.NewReadFileTool(f.workDir))
+		registry.MustRegister(tools.NewReadFileTool(f.workDir))
 	}
 	if allowed["write_file"] || len(prof.Tools.Allow) == 0 {
-		registry.Register(tools.NewWriteFileTool(f.workDir))
+		registry.MustRegister(tools.NewWriteFileTool(f.workDir))
 	}
 	if allowed["search"] || len(prof.Tools.Allow) == 0 {
-		registry.Register(tools.NewSearchTool(f.workDir))
+		registry.MustRegister(tools.NewSearchTool(f.workDir))
 	}
 	if allowed["shell"] || len(prof.Tools.Allow) == 0 {
-		registry.Register(tools.NewShellTool(policy, f.workDir))
+		registry.MustRegister(tools.NewShellTool(policy, f.workDir))
 	}
 	if allowed["git"] || len(prof.Tools.Allow) == 0 {
-		registry.Register(tools.NewGitTool(f.workDir))
+		registry.MustRegister(tools.NewGitTool(f.workDir))
 	}
 	if allowed["test"] || len(prof.Tools.Allow) == 0 {
-		registry.Register(tools.NewTestTool(f.workDir))
+		registry.MustRegister(tools.NewTestTool(f.workDir))
 	}
 
 	return &AgentInstance{

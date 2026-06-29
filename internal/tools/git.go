@@ -35,6 +35,8 @@ func NewGitTool(repoPath string) *GitTool {
 
 func (t *GitTool) Name() string { return "git" }
 
+func (t *GitTool) Description() string { return "Run git operations (diff, status, commit, branch, checkout, add, log)" }
+
 func (t *GitTool) Run(ctx context.Context, input ToolInput) ToolOutput {
 	subcommand, _ := input["subcommand"].(string)
 	args, _ := input["args"].(string)

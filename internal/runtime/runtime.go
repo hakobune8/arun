@@ -79,12 +79,12 @@ func NewRuntime(llmClient llm.LLMClient, prof *profile.Profile, workspace *sandb
 	workDir := workspace.RootDir
 	repoPath := workspace.RootDir
 
-	registry.Register(tools.NewReadFileTool(workDir))
-	registry.Register(tools.NewWriteFileTool(workDir))
-	registry.Register(tools.NewSearchTool(workDir))
-	registry.Register(tools.NewShellTool(policy, workDir))
-	registry.Register(tools.NewGitTool(repoPath))
-	registry.Register(tools.NewTestTool(workDir))
+	registry.MustRegister(tools.NewReadFileTool(workDir))
+	registry.MustRegister(tools.NewWriteFileTool(workDir))
+	registry.MustRegister(tools.NewSearchTool(workDir))
+	registry.MustRegister(tools.NewShellTool(policy, workDir))
+	registry.MustRegister(tools.NewGitTool(repoPath))
+	registry.MustRegister(tools.NewTestTool(workDir))
 
 	runDir := workspace.RunPath()
 	logger := state.NewLogger(runDir)

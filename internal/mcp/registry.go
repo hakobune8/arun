@@ -32,6 +32,11 @@ func (a *ToolAdapter) Name() string {
 	return "mcp_" + a.def.Name
 }
 
+// Description returns the tool's description from the MCP definition.
+func (a *ToolAdapter) Description() string {
+	return a.def.Description
+}
+
 func (a *ToolAdapter) Run(ctx context.Context, input tools.ToolInput) tools.ToolOutput {
 	args := make(map[string]interface{})
 	for k, v := range input {
@@ -70,7 +75,9 @@ func RegisterMCPServer(registry *tools.Registry, client *Client) error {
 			client: client,
 			def:    def,
 		}
-		registry.Register(adapter)
+		if err := registry.Register(adapter); err != nil {
+			return fmt.Errorf("register MCP tool %q: %w", def.Name, err)
+		}
 	}
 
 	return nil

@@ -54,14 +54,19 @@ func TestRegistry_AddAndList(t *testing.T) {
 		},
 	}
 
-	reg.Register(adapter)
-	names := reg.List()
-
-	if len(names) != 1 {
-		t.Fatalf("got %d tools, want 1", len(names))
+	if err := reg.Register(adapter); err != nil {
+		t.Fatalf("Register() error = %v", err)
 	}
-	if names[0] != "mcp_test_tool" {
-		t.Errorf("tool name = %q, want %q", names[0], "mcp_test_tool")
+	specs := reg.List()
+
+	if len(specs) != 1 {
+		t.Fatalf("got %d tools, want 1", len(specs))
+	}
+	if specs[0].Name != "mcp_test_tool" {
+		t.Errorf("tool name = %q, want %q", specs[0].Name, "mcp_test_tool")
+	}
+	if specs[0].Description != "A test tool" {
+		t.Errorf("tool description = %q, want %q", specs[0].Description, "A test tool")
 	}
 
 	tool, ok := reg.Get("mcp_test_tool")
@@ -77,25 +82,45 @@ func TestRegistry_AddMultiple(t *testing.T) {
 	t.Parallel()
 
 	reg := tools.NewRegistry()
-	reg.Register(&ToolAdapter{def: ToolDefinition{Name: "tool_a"}})
-	reg.Register(&ToolAdapter{def: ToolDefinition{Name: "tool_b"}})
-	reg.Register(&ToolAdapter{def: ToolDefinition{Name: "tool_c"}})
+	if err := reg.Register(&ToolAdapter{def: ToolDefinition{Name: "tool_a"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := reg.Register(&ToolAdapter{def: ToolDefinition{Name: "tool_b"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := reg.Register(&ToolAdapter{def: ToolDefinition{Name: "tool_c"}}); err != nil {
+		t.Fatal(err)
+	}
 
-	names := reg.List()
-	if len(names) != 3 {
-		t.Fatalf("got %d tools, want 3", len(names))
+	specs := reg.List()
+	if len(specs) != 3 {
+		t.Fatalf("got %d tools, want 3", len(specs))
 	}
 }
 
-func TestRegistry_AddDuplicateOverwrites(t *testing.T) {
+func TestRegistry_AddDuplicateReturnsError(t *testing.T) {
 	t.Parallel()
 
 	reg := tools.NewRegistry()
-	reg.Register(&ToolAdapter{def: ToolDefinition{Name: "same"}})
-	reg.Register(&ToolAdapter{def: ToolDefinition{Name: "same"}})
+	if err := reg.Register(&ToolAdapter{def: ToolDefinition{Name: "same"}}); err != nil {
+		t.Fatal(err)
+	}
+	err := reg.Register(&ToolAdapter{def: ToolDefinition{Name: "same"}})
+	if err == nil {
+		t.Fatal("expected error for duplicate registration")
+	}
+}
 
-	names := reg.List()
-	if len(names) != 1 {
-		t.Errorf("got %d tools, want 1 (duplicate should overwrite)", len(names))
+func TestToolAdapter_Description(t *testing.T) {
+	t.Parallel()
+
+	adapter := &ToolAdapter{
+		def: ToolDefinition{
+			Name:        "my_tool",
+			Description: "My custom tool",
+		},
+	}
+	if d := adapter.Description(); d != "My custom tool" {
+		t.Errorf("Description() = %q, want %q", d, "My custom tool")
 	}
 }
