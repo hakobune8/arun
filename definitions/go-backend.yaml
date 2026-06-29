@@ -1,0 +1,35 @@
+apiVersion: agentos.io/v1
+kind: Agent
+metadata:
+  name: go-backend
+  labels:
+    role: backend
+spec:
+  llm:
+    model: coder
+    temperature: 0.2
+    maxTokens: 8192
+  tools:
+    allow:
+      - read_file
+      - write_file
+      - search
+      - shell
+      - git
+      - test
+  safety:
+    denyCommands:
+      - rm -rf
+      - sudo
+      - docker run --privileged
+      - curl
+      - wget
+      - scp
+      - ssh
+  commands:
+    test: go test ./...
+    lint: go vet ./...
+    build: go build ./...
+  limits:
+    maxRetries: 3
+    maxIterations: 8
