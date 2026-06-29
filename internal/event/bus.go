@@ -38,13 +38,13 @@ func NewInMemoryBus() *InMemoryBus {
 }
 
 // Publish dispatches an event to all matching subscribers.
-func (b *InMemoryBus) Publish(ctx context.Context, e Event) error {
+func (b *InMemoryBus) Publish(ctx context.Context, e *Event) error {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
 	for _, sub := range b.subs {
 		if sub.matches(e.Type) {
-			if err := sub.handler(ctx, e); err != nil {
+			if err := sub.handler(ctx, *e); err != nil {
 				return fmt.Errorf("event handler: %w", err)
 			}
 		}

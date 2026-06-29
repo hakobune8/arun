@@ -110,7 +110,7 @@ func (r *Runtime) emit(ctx context.Context, runID string, t event.Type, data int
 	if r.Events == nil {
 		return
 	}
-	_ = r.Events.Publish(ctx, event.Event{ //nolint:errcheck // best-effort event
+	_ = r.Events.Publish(ctx, &event.Event{ //nolint:errcheck // best-effort event
 		ID:        fmt.Sprintf("%s-%d", runID, time.Now().UnixNano()),
 		Type:      t,
 		Timestamp: time.Now(),

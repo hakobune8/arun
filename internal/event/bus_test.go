@@ -28,10 +28,10 @@ func TestInMemoryBus_PublishSubscribe(t *testing.T) {
 	e1 := Event{ID: "1", Type: TypeTaskCreated, Timestamp: time.Now(), RunID: "run-1"}
 	e2 := Event{ID: "2", Type: TypePlanningStarted, Timestamp: time.Now(), RunID: "run-1"}
 
-	if err := bus.Publish(ctx, e1); err != nil {
+	if err := bus.Publish(ctx, &e1); err != nil {
 		t.Fatalf("Publish() error = %v", err)
 	}
-	if err := bus.Publish(ctx, e2); err != nil {
+	if err := bus.Publish(ctx, &e2); err != nil {
 		t.Fatalf("Publish() error = %v", err)
 	}
 
@@ -66,9 +66,9 @@ func TestInMemoryBus_FilterByType(t *testing.T) {
 	defer unsub()
 
 	ctx := context.Background()
-	_ = bus.Publish(ctx, Event{ID: "1", Type: TypeTaskCreated})
-	_ = bus.Publish(ctx, Event{ID: "2", Type: TypeToolStarted})
-	_ = bus.Publish(ctx, Event{ID: "3", Type: TypeToolFinished})
+	_ = bus.Publish(ctx, &Event{ID: "1", Type: TypeTaskCreated})
+	_ = bus.Publish(ctx, &Event{ID: "2", Type: TypeToolStarted})
+	_ = bus.Publish(ctx, &Event{ID: "3", Type: TypeToolFinished})
 
 	mu.Lock()
 	if len(received) != 1 {
@@ -94,8 +94,8 @@ func TestInMemoryBus_SubscribeAll(t *testing.T) {
 	defer unsub()
 
 	ctx := context.Background()
-	_ = bus.Publish(ctx, Event{Type: TypeTaskCreated})
-	_ = bus.Publish(ctx, Event{Type: TypeRunCompleted})
+	_ = bus.Publish(ctx, &Event{Type: TypeTaskCreated})
+	_ = bus.Publish(ctx, &Event{Type: TypeRunCompleted})
 
 	if count != 2 {
 		t.Fatalf("got %d events, want 2", count)
@@ -112,9 +112,9 @@ func TestInMemoryBus_Unsubscribe(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	_ = bus.Publish(ctx, Event{Type: TypeTaskCreated})
+	_ = bus.Publish(ctx, &Event{Type: TypeTaskCreated})
 	unsub()
-	_ = bus.Publish(ctx, Event{Type: TypeRunCompleted})
+	_ = bus.Publish(ctx, &Event{Type: TypeRunCompleted})
 
 	if count != 1 {
 		t.Fatalf("got %d events, want 1 (after unsubscribe)", count)
@@ -133,7 +133,7 @@ func TestInMemoryBus_Close(t *testing.T) {
 	_ = bus.Close()
 
 	ctx := context.Background()
-	_ = bus.Publish(ctx, Event{Type: TypeTaskCreated})
+	_ = bus.Publish(ctx, &Event{Type: TypeTaskCreated})
 
 	if count != 0 {
 		t.Fatalf("got %d events, want 0 (after close)", count)

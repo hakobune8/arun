@@ -57,7 +57,7 @@ type Handler func(ctx context.Context, e Event) error
 // It allows publishing events and subscribing handlers to event types.
 type Bus interface {
 	// Publish emits an event to all subscribed handlers.
-	Publish(ctx context.Context, e Event) error
+	Publish(ctx context.Context, e *Event) error
 
 	// Subscribe registers a handler for the given event types.
 	// An empty types slice subscribes to all events.
