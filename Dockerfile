@@ -9,7 +9,7 @@ COPY . .
 ARG VERSION=dev
 RUN CGO_ENABLED=0 go build -ldflags "-X github.com/kazyamaz200/agentos/internal/cli.Version=${VERSION}" -o agentos ./cmd/agentos
 
-FROM alpine:3.19
+FROM golang:1.22-alpine
 
 RUN apk add --no-cache ca-certificates tzdata bash git
 RUN addgroup -S agentos && adduser -S agentos -G agentos
