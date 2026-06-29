@@ -509,11 +509,17 @@ func (o *Orchestrator) executeSubtask(ctx context.Context, subtask Subtask, shar
 	runSandbox := sandbox.NewLocalSandbox(o.sandbox.RootDir())
 	rt := runtime.NewRuntime(o.llm, &prof, runSandbox, o.cfg, agt)
 	if err := rt.Run(ctx, tk); err != nil {
+		if result, ok := o.recoverBuiltInSubtask(ctx, subtask, runSandbox, err); ok {
+			return result
+		}
 		return SubtaskResult{
 			SubtaskID: subtask.ID,
 			Success:   false,
 			Error:     err.Error(),
 		}
+	}
+	if result, ok := o.recoverNoOpBuiltInSubtask(ctx, subtask, runSandbox); ok {
+		return result
 	}
 
 	return SubtaskResult{

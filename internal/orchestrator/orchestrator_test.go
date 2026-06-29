@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -348,6 +349,81 @@ func TestExecuteSubtask_ScopesRuntimeTaskIDWithRunID(t *testing.T) {
 	}
 	if agent.taskID != "run-abc-step-1" {
 		t.Fatalf("task ID = %q, want run-scoped ID", agent.taskID)
+	}
+}
+
+func TestRecoverGoBackend_CreatesValidService(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	out, err := recoverGoBackend(context.Background(), repo, "https://github.com/kazyamaz200/agentos-test.git create /healthz with net/http")
+	if err != nil {
+		t.Fatalf("recoverGoBackend() error = %v", err)
+	}
+	if !strings.Contains(out, "Go net/http service") {
+		t.Fatalf("output = %q", out)
+	}
+	for _, file := range []string{"go.mod", "main.go"} {
+		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
+			t.Fatalf("%s not created: %v", file, err)
+		}
+	}
+	mainData, err := os.ReadFile(filepath.Join(repo, "main.go"))
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	for _, want := range []string{"net/http", "healthzHandler", `"status": "ok"`} {
+		if !strings.Contains(string(mainData), want) {
+			t.Fatalf("main.go missing %q:\n%s", want, mainData)
+		}
+	}
+}
+
+func TestRecoverGoCI_CreatesWorkflowAndTests(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if _, err := recoverGoBackend(context.Background(), repo, "create /healthz with net/http"); err != nil {
+		t.Fatalf("recoverGoBackend() error = %v", err)
+	}
+	out, err := recoverGoCI(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("recoverGoCI() error = %v", err)
+	}
+	if !strings.Contains(out, "GitHub Actions") {
+		t.Fatalf("output = %q", out)
+	}
+	for _, file := range []string{"main_test.go", filepath.Join(".github", "workflows", "go.yml")} {
+		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
+			t.Fatalf("%s not created: %v", file, err)
+		}
+	}
+}
+
+func TestRecoverNoOpDocs_CreatesRequiredREADME(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("AGENTOS_HOME", filepath.Join(t.TempDir(), "agentos-home"))
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-step-2"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"docs": &recordingAgent{name: "docs"}},
+		&runtime.Config{},
+	)
+
+	result, ok := o.recoverNoOpBuiltInSubtask(context.Background(), Subtask{
+		ID:          "step-2",
+		AgentName:   "docs",
+		Description: "Update README for /healthz using net/http and go test.",
+	}, runSandbox)
+	if !ok || !result.Success {
+		t.Fatalf("recoverNoOpBuiltInSubtask() = (%+v, %v), want success", result, ok)
+	}
+	if !readmeCoversScenario(repo) {
+		t.Fatalf("README.md does not cover scenario")
 	}
 }
 
