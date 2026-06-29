@@ -30,6 +30,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -87,6 +88,8 @@ func NewServer(port int) *Server {
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/github/", s.handleGitHub)
 	mux.HandleFunc("/api/orchestrate", s.handleOrchestrate)
+	mux.HandleFunc("/api/orchestrates", s.handleOrchestrates)
+	mux.HandleFunc("/api/orchestrates/", s.handleOrchestrateDetail)
 
 	staticSub, err := fs.Sub(staticFS, "static")
 	if err == nil {
@@ -379,6 +382,23 @@ type orchestrateRequest struct {
 	Strategy   string   `json:"strategy"`
 }
 
+type orchestrationRecord struct {
+	ID         string                       `json:"id"`
+	Repo       string                       `json:"repo"`
+	RepoPath   string                       `json:"repoPath,omitempty"`
+	BaseBranch string                       `json:"baseBranch"`
+	Task       string                       `json:"task"`
+	Agents     []string                     `json:"agents"`
+	Strategy   string                       `json:"strategy"`
+	Status     string                       `json:"status"`
+	Error      string                       `json:"error,omitempty"`
+	Plan       *orchestrator.TaskPlan       `json:"plan,omitempty"`
+	Results    []orchestrator.SubtaskResult `json:"results,omitempty"`
+	Summary    string                       `json:"summary,omitempty"`
+	CreatedAt  time.Time                    `json:"createdAt"`
+	UpdatedAt  time.Time                    `json:"updatedAt"`
+}
+
 func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -396,6 +416,17 @@ func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 	var req orchestrateRequest
 	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, "parse body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	req.Repo = strings.TrimSpace(req.Repo)
+	req.BaseBranch = defaultBaseBranch(req.BaseBranch)
+	req.Strategy = strings.TrimSpace(req.Strategy)
+	if req.Strategy == "" {
+		req.Strategy = "sequential"
+	}
+	if req.Strategy != "sequential" && req.Strategy != "parallel" {
+		http.Error(w, "strategy must be sequential or parallel", http.StatusBadRequest)
 		return
 	}
 
@@ -420,32 +451,109 @@ func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 		agents[name] = a
 	}
 
-	cfg := &runtime.Config{Verbose: false}
-	orch := orchestrator.NewOrchestrator(s.llmClient, sandbox.NewLocalSandbox(repoPath), agents, cfg)
-	orch.SetBaseBranch(defaultBaseBranch(req.BaseBranch))
-
-	if req.Strategy == "parallel" {
-		orch.SetStrategy(orchestrator.StrategyParallel)
+	now := time.Now().UTC()
+	record := &orchestrationRecord{
+		ID:         generateID(),
+		Repo:       req.Repo,
+		RepoPath:   repoPath,
+		BaseBranch: req.BaseBranch,
+		Task:       req.Task,
+		Agents:     req.Agents,
+		Strategy:   req.Strategy,
+		Status:     "planning",
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
-
-	plan, err := orch.Plan(r.Context(), req.Task)
-	if err != nil {
-		http.Error(w, "plan: "+err.Error(), http.StatusInternalServerError)
+	if record.Repo == "" {
+		record.Repo = "."
+	}
+	if err := saveOrchestrationRecord(record); err != nil {
+		http.Error(w, "save orchestration: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	results, err := orch.Execute(r.Context(), plan)
+	go s.runOrchestration(record, agents)
+
+	_ = json.NewEncoder(w).Encode(record) //nolint:errcheck // best-effort response
+}
+
+func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string]runtime.Agent) {
+	cfg := &runtime.Config{Verbose: false}
+	orch := orchestrator.NewOrchestrator(s.llmClient, sandbox.NewLocalSandbox(record.RepoPath), agents, cfg)
+	orch.SetBaseBranch(record.BaseBranch)
+
+	if record.Strategy == "parallel" {
+		orch.SetStrategy(orchestrator.StrategyParallel)
+	}
+
+	plan, err := orch.Plan(context.Background(), record.Task)
 	if err != nil {
-		http.Error(w, "execute: "+err.Error(), http.StatusInternalServerError)
+		record.Status = "failed"
+		record.Error = "plan: " + err.Error()
+		record.UpdatedAt = time.Now().UTC()
+		if saveErr := saveOrchestrationRecord(record); saveErr != nil {
+			slog.Warn("save orchestration failed", "id", record.ID, "error", saveErr)
+		}
+		return
+	}
+	record.Plan = plan
+	record.Status = "running"
+	record.UpdatedAt = time.Now().UTC()
+	if err := saveOrchestrationRecord(record); err != nil {
+		slog.Warn("save orchestration failed", "id", record.ID, "error", err)
+	}
+
+	results, err := orch.Execute(context.Background(), plan)
+	if err != nil {
+		record.Status = "failed"
+		record.Error = "execute: " + err.Error()
+		record.Results = results
+		record.UpdatedAt = time.Now().UTC()
+		if saveErr := saveOrchestrationRecord(record); saveErr != nil {
+			slog.Warn("save orchestration failed", "id", record.ID, "error", saveErr)
+		}
 		return
 	}
 
 	summary := orch.MergeResults(results)
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck // best-effort response
-		"plan":    plan,
-		"results": results,
-		"summary": summary,
-	})
+	record.Results = results
+	record.Summary = summary
+	record.Status = "completed"
+	record.UpdatedAt = time.Now().UTC()
+	if err := saveOrchestrationRecord(record); err != nil {
+		slog.Warn("save orchestration failed", "id", record.ID, "error", err)
+	}
+}
+
+func (s *Server) handleOrchestrates(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodGet {
+		http.Error(w, "GET required", http.StatusMethodNotAllowed)
+		return
+	}
+
+	records, err := listOrchestrationRecords()
+	if err != nil {
+		http.Error(w, "list orchestrations: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(records) //nolint:errcheck // best-effort response
+}
+
+func (s *Server) handleOrchestrateDetail(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodGet {
+		http.Error(w, "GET required", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := filepath.Base(r.URL.Path)
+	record, err := readOrchestrationRecord(id)
+	if err != nil {
+		http.Error(w, "orchestration not found: "+id, http.StatusNotFound)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(record) //nolint:errcheck // best-effort response
 }
 
 func resolveOrchestrateRepo(repo, baseBranch string) (string, error) {
@@ -470,6 +578,67 @@ func resolveOrchestrateRepo(repo, baseBranch string) (string, error) {
 		return "", fmt.Errorf("repo is not a directory: %s", abs)
 	}
 	return abs, nil
+}
+
+func orchestrationsDir() string {
+	return filepath.Join(apphome.Dir(), "orchestrates")
+}
+
+func saveOrchestrationRecord(record *orchestrationRecord) error {
+	if err := os.MkdirAll(orchestrationsDir(), 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(orchestrationsDir(), record.ID+".json")
+	data, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
+}
+
+func readOrchestrationRecord(id string) (*orchestrationRecord, error) {
+	if id == "" || id == "." || strings.Contains(id, string(os.PathSeparator)) {
+		return nil, fmt.Errorf("invalid orchestration id")
+	}
+	path := filepath.Join(orchestrationsDir(), id+".json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var record orchestrationRecord
+	if err := json.Unmarshal(data, &record); err != nil {
+		return nil, err
+	}
+	return &record, nil
+}
+
+func listOrchestrationRecords() ([]*orchestrationRecord, error) {
+	entries, err := os.ReadDir(orchestrationsDir())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []*orchestrationRecord{}, nil
+		}
+		return nil, err
+	}
+
+	records := make([]*orchestrationRecord, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		id := strings.TrimSuffix(entry.Name(), ".json")
+		record, err := readOrchestrationRecord(id)
+		if err != nil {
+			slog.Warn("skip unreadable orchestration record", "id", id, "error", err)
+			continue
+		}
+		records = append(records, record)
+	}
+
+	sort.Slice(records, func(i, j int) bool {
+		return records[i].CreatedAt.After(records[j].CreatedAt)
+	})
+	return records, nil
 }
 
 func normalizeRemoteRepo(repo string) (string, bool) {

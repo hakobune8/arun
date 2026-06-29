@@ -519,6 +519,49 @@ func TestServer_Orchestrate_EmptyBody(t *testing.T) {
 	assertStatus(t, w.Code, http.StatusBadRequest)
 }
 
+func TestServer_Orchestrates_EmptyList(t *testing.T) {
+	t.Setenv("AGENTOS_HOME", shortTestDir(t))
+	s := NewServer(0)
+	w := serveRequest(s, "GET", "/api/orchestrates", nil)
+	assertStatus(t, w.Code, http.StatusOK)
+	if strings.TrimSpace(w.Body.String()) != "[]" {
+		t.Fatalf("body = %s, want []", w.Body.String())
+	}
+}
+
+func TestOrchestrationRecordStore_RoundTrip(t *testing.T) {
+	t.Setenv("AGENTOS_HOME", shortTestDir(t))
+	now := time.Now().UTC().Truncate(time.Second)
+	record := &orchestrationRecord{
+		ID:         "run-test",
+		Repo:       "owner/repo",
+		BaseBranch: "main",
+		Task:       "test",
+		Agents:     []string{"go-backend"},
+		Strategy:   "parallel",
+		Status:     "completed",
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}
+	if err := saveOrchestrationRecord(record); err != nil {
+		t.Fatalf("saveOrchestrationRecord() error = %v", err)
+	}
+	got, err := readOrchestrationRecord(record.ID)
+	if err != nil {
+		t.Fatalf("readOrchestrationRecord() error = %v", err)
+	}
+	if got.ID != record.ID || got.Repo != record.Repo || got.Status != record.Status {
+		t.Fatalf("record = %+v, want %+v", got, record)
+	}
+	records, err := listOrchestrationRecords()
+	if err != nil {
+		t.Fatalf("listOrchestrationRecords() error = %v", err)
+	}
+	if len(records) != 1 || records[0].ID != record.ID {
+		t.Fatalf("records = %+v, want one %s", records, record.ID)
+	}
+}
+
 // --- Static Files ---
 
 func TestServer_ServesIndexHTML(t *testing.T) {
@@ -530,21 +573,24 @@ func TestServer_ServesIndexHTML(t *testing.T) {
 	if !strings.Contains(body, "AgentOS") {
 		t.Error("index.html does not contain 'AgentOS'")
 	}
-	if !strings.Contains(body, "Dashboard") {
-		t.Error("index.html does not contain 'Dashboard'")
+	if !strings.Contains(body, "Orchestrates") {
+		t.Error("index.html does not contain 'Orchestrates'")
 	}
 }
 
-func TestServer_IndexHTML_HasAllNavLinks(t *testing.T) {
+func TestServer_IndexHTML_HasPrimaryNavLinks(t *testing.T) {
 	t.Parallel()
 	s := NewServer(0)
 	w := serveRequest(s, "GET", "/", nil)
 	body := w.Body.String()
-	links := []string{"Dashboard", "Runs", "Agents", "Search", "GitHub", "Orchestrate", "New Run"}
+	links := []string{"Orchestrates", "Agents"}
 	for _, link := range links {
 		if !strings.Contains(body, link) {
 			t.Errorf("index.html missing nav link: %s", link)
 		}
+	}
+	if strings.Contains(body, `data-page="dashboard"`) || strings.Contains(body, `data-page="github"`) {
+		t.Error("index.html should not expose dashboard or github as top-level pages")
 	}
 }
 

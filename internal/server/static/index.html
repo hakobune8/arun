@@ -9,226 +9,179 @@
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0d1117;color:#c9d1d9;line-height:1.6;min-width:320px}
 .header{background:#161b22;border-bottom:1px solid #30363d;padding:12px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:10}
 .brand{display:flex;align-items:baseline;gap:10px;flex:0 0 auto}
-.header h1{font-size:18px;color:#f0f6fc;cursor:pointer;white-space:nowrap}
-.header h1:hover{color:#58a6ff}
-.header span{color:#8b949e;font-size:12px}
-.nav{display:flex;gap:4px;margin-left:8px;overflow-x:auto;min-width:0;scrollbar-width:thin}
-.nav a{padding:6px 12px;color:#8b949e;text-decoration:none;font-size:13px;border-radius:6px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
-.nav a:hover{color:#c9d1d9;background:#1c2128}
-.nav a.active{color:#f0f6fc;background:#1c2128}
-.container{max-width:1200px;margin:0 auto;padding:24px;width:100%}
+.brand h1{font-size:18px;color:#f0f6fc;cursor:pointer;white-space:nowrap}
+.brand span{color:#8b949e;font-size:12px}
+.nav,.tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:thin}
+.nav{margin-left:8px}
+.nav a,.tabs button{padding:7px 12px;color:#8b949e;text-decoration:none;font-size:13px;border-radius:6px;cursor:pointer;white-space:nowrap;background:transparent;border:0}
+.nav a:hover,.tabs button:hover{color:#c9d1d9;background:#1c2128;text-decoration:none}
+.nav a.active,.tabs button.active{color:#f0f6fc;background:#1c2128}
+.container{max-width:1240px;margin:0 auto;padding:24px;width:100%}
+.page,.orch-panel,.detail-panel{display:none}
+.page.active,.orch-panel.active,.detail-panel.active{display:block}
 .card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;margin-bottom:16px;overflow:hidden}
-.card h2{font-size:15px;margin-bottom:12px;color:#f0f6fc}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.card h2{font-size:16px;margin-bottom:12px;color:#f0f6fc}
+.card h3{font-size:14px;margin:14px 0 8px;color:#f0f6fc}
+.muted{color:#8b949e;font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
 .stat{text-align:center;padding:16px}
 .stat-value{font-size:28px;font-weight:600;color:#58a6ff}
 .stat-label{font-size:11px;color:#8b949e;margin-top:4px}
 table{width:100%;border-collapse:collapse;display:block;overflow-x:auto;white-space:nowrap}
-thead,tbody{display:table;width:100%;min-width:640px}
-th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #30363d;font-size:13px}
+thead,tbody{display:table;width:100%;min-width:680px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #30363d;font-size:13px;vertical-align:top}
 th{color:#8b949e;font-weight:500}
 tr:hover{background:#1c2128}
-.status{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;line-height:1.4;white-space:nowrap;background:#30363d;color:#c9d1d9;border:1px solid #484f58}
-.status-completed{background:#23863620;color:#3fb950;border:1px solid #238636}
-.status-failed{background:#da363320;color:#f85149;border:1px solid #da3633}
-.status-pending{background:#d2992220;color:#d29922;border:1px solid #d29922}
-.status-planning,.status-executing,.status-testing,.status-reviewing{background:#58a6ff20;color:#58a6ff;border:1px solid #58a6ff}
-.status-success,.status-open{background:#23863620;color:#3fb950;border:1px solid #238636}
-.status-pass{background:#23863620;color:#3fb950;border:1px solid #238636}
 a{color:#58a6ff;text-decoration:none;cursor:pointer}
 a:hover{text-decoration:underline}
-pre{background:#0d1117;padding:12px;border-radius:6px;overflow-x:auto;font-size:12px;max-height:400px;overflow-y:auto}
-.page{display:none}
-.page.active{display:block}
-.btn{padding:8px 16px;background:#238636;border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:13px;min-height:36px;white-space:nowrap}
+pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12px;max-height:360px}
+.status{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;line-height:1.4;white-space:nowrap;background:#30363d;color:#c9d1d9;border:1px solid #484f58}
+.status-completed,.status-success,.status-open,.status-pass{background:#23863620;color:#3fb950;border-color:#238636}
+.status-failed,.status-failure{background:#da363320;color:#f85149;border-color:#da3633}
+.status-pending,.status-planning,.status-running,.status-queued{background:#d2992220;color:#d29922;border-color:#d29922}
+.btn{padding:8px 16px;background:#238636;border:0;border-radius:6px;color:#fff;cursor:pointer;font-size:13px;min-height:36px;white-space:nowrap}
 .btn:hover{background:#2ea043}
 .btn:disabled{opacity:.55;cursor:not-allowed}
 .btn-secondary{background:#21262d;border:1px solid #30363d}
 .btn-secondary:hover{background:#30363d}
 .form-group{margin-bottom:12px}
 .form-group label{display:block;font-size:12px;color:#8b949e;margin-bottom:4px}
-.form-group input,.form-group textarea,.form-group select{width:100%;padding:8px 10px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px}
-.form-group textarea{min-height:80px;resize:vertical}
-.search-box{display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap}
-.search-box input{flex:1 1 220px;min-width:0;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px}
-.search-box select{flex:0 1 180px;min-width:140px;padding:8px 34px 8px 10px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px;appearance:none;background-image:linear-gradient(45deg,transparent 50%,#8b949e 50%),linear-gradient(135deg,#8b949e 50%,transparent 50%);background-position:calc(100% - 16px) 15px,calc(100% - 10px) 15px;background-size:6px 6px,6px 6px;background-repeat:no-repeat}
-.github-controls{display:grid;grid-template-columns:minmax(260px,1fr) minmax(150px,190px) minmax(120px,160px) auto;gap:8px;align-items:center;margin-bottom:12px}
-.github-controls input,.github-controls select{width:100%;min-width:0;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px;min-height:36px}
-.github-controls select{padding-right:34px;appearance:none;background-image:linear-gradient(45deg,transparent 50%,#8b949e 50%),linear-gradient(135deg,#8b949e 50%,transparent 50%);background-position:calc(100% - 16px) 15px,calc(100% - 10px) 15px;background-size:6px 6px,6px 6px;background-repeat:no-repeat}
-.github-ref{display:none}
-.github-ref.visible{display:block}
+.form-group input,.form-group textarea,.form-group select,.search-row input,.search-row select{width:100%;padding:8px 10px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px;min-height:36px}
+.form-group textarea{min-height:120px;resize:vertical}
+.search-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(140px,180px) auto;gap:8px;align-items:center;margin-bottom:12px}
+.github-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(150px,190px) minmax(120px,160px) auto;gap:8px;align-items:center;margin-bottom:12px}
 .agent-card{border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:8px}
-.agent-card h3{font-size:14px;color:#f0f6fc;margin-bottom:4px}
+.agent-card h3{font-size:14px;color:#f0f6fc;margin:0 0 4px}
 .agent-card p{font-size:12px;color:#8b949e}
-.agent-card .tags{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap}
-.agent-card .tag{background:#1c2128;color:#8b949e;padding:2px 8px;border-radius:4px;font-size:11px}
+.tags{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap}
+.tag{background:#1c2128;color:#8b949e;padding:2px 8px;border-radius:4px;font-size:11px}
+.agent-picker{display:flex;flex-wrap:wrap;gap:8px;padding:8px;background:#0d1117;border:1px solid #30363d;border-radius:6px;min-height:42px}
+.agent-picker label{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:#161b22;border:1px solid #30363d;border-radius:6px;font-size:13px;cursor:pointer;white-space:nowrap}
+.agent-picker input{width:16px;height:16px;accent-color:#238636;margin:0}
+.detail-header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.detail-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.repo-pill{background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:4px 8px;font-size:12px;color:#8b949e}
 .empty{color:#8b949e;font-size:13px;padding:12px 0}
+.error{color:#f85149;font-size:13px}
 @media (max-width:720px){
   .header{align-items:flex-start;flex-direction:column;padding:12px 16px;gap:10px}
-  .brand{width:100%;justify-content:space-between}
-  .nav{width:100%;margin-left:0;padding-bottom:2px}
+  .nav{width:100%;margin-left:0}
   .container{padding:16px}
   .card{padding:16px}
   .grid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
-  .stat-value{font-size:24px}
-  .search-box{align-items:stretch}
-  .search-box input,.search-box select,.search-box .btn{width:100%;flex:1 1 100%}
-  .github-controls{grid-template-columns:1fr}
+  .search-row,.github-row{grid-template-columns:1fr}
+  .btn{width:100%}
 }
 </style>
 </head>
 <body>
 <div class="header">
   <div class="brand">
-    <h1 onclick="showPage('dashboard')">AgentOS</h1>
+    <h1 onclick="showPage('orchestrates')">AgentOS</h1>
     <span>v1.0</span>
   </div>
   <div class="nav">
-    <a class="active" onclick="showPage('dashboard')" data-page="dashboard">Dashboard</a>
-    <a onclick="showPage('runs')" data-page="runs">Runs</a>
+    <a class="active" onclick="showPage('orchestrates')" data-page="orchestrates">Orchestrates</a>
     <a onclick="showPage('agents')" data-page="agents">Agents</a>
-    <a onclick="showPage('search')" data-page="search">Search</a>
-    <a onclick="showPage('github')" data-page="github">GitHub</a>
-    <a onclick="showPage('orchestrate')" data-page="orchestrate">Orchestrate</a>
-    <a onclick="showPage('new-run')" data-page="new-run">New Run</a>
   </div>
 </div>
 
 <div class="container">
-<div id="page-dashboard" class="page active">
-  <div class="grid" id="statsGrid"></div>
-  <div class="card">
-    <h2>Recent Runs</h2>
-    <table><thead><tr><th>ID</th><th>Status</th><th>Agent</th><th>Time</th><th></th></tr></thead><tbody id="recentRunsBody"></tbody></table>
-  </div>
-</div>
-
-<div id="page-runs" class="page">
-  <div class="card">
-    <h2>Run History</h2>
-    <div id="runFilters" class="search-box">
-      <input type="text" id="runFilter" placeholder="Filter by ID..." oninput="loadRuns()">
-      <select id="statusFilter" onchange="loadRuns()"><option value="">All Status</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="pending">Pending</option></select>
+  <div id="page-orchestrates" class="page active">
+    <div class="card">
+      <div class="detail-header">
+        <div>
+          <h2>Orchestrates</h2>
+          <p class="muted">Create and manage multi-agent work across remote repositories.</p>
+        </div>
+        <button class="btn btn-secondary" onclick="refreshCurrentOrchestration()">Refresh</button>
+      </div>
+      <div class="tabs" style="margin-top:14px">
+        <button class="active" onclick="showOrchPanel('new')" data-orch-panel="new">New</button>
+        <button onclick="showOrchPanel('list')" data-orch-panel="list">List</button>
+        <button onclick="showOrchPanel('detail')" data-orch-panel="detail" id="detailTab">Detail</button>
+      </div>
     </div>
-    <table><thead><tr><th>ID</th><th>Status</th><th>Agent</th><th>Created</th><th></th></tr></thead><tbody id="runsBody"></tbody></table>
-  </div>
-  <div class="card" id="runDetail" style="display:none">
-    <h2 id="runDetailTitle">Run Detail</h2>
-    <div id="runDetailContent"></div>
-  </div>
-</div>
 
-<div id="page-agents" class="page">
-  <div class="card">
-    <h2>Registered Agents</h2>
-    <div id="agentsList"></div>
-  </div>
-</div>
-
-<div id="page-search" class="page">
-  <div class="card">
-    <h2>Search</h2>
-    <div class="search-box">
-      <input type="text" id="searchQuery" placeholder="Search memory, guidelines, PRs..." onkeydown="if(event.key==='Enter')doSearch()">
-      <select id="searchSource"><option value="">All Sources</option><option value="memory">Memory</option><option value="guideline">Guidelines</option><option value="pr">PRs</option></select>
-      <button class="btn" onclick="doSearch()">Search</button>
+    <div id="orch-panel-new" class="orch-panel active">
+      <div class="card">
+        <h2>New Orchestration</h2>
+        <form onsubmit="submitOrchestrate(event)">
+          <div class="form-group">
+            <label>Repository</label>
+            <input type="text" id="orchRepo" value="" placeholder="owner/repo or https://github.com/owner/repo.git" required>
+          </div>
+          <div class="form-group">
+            <label>Base Branch</label>
+            <input type="text" id="orchBaseBranch" value="main" placeholder="main">
+          </div>
+          <div class="form-group">
+            <label>Agents</label>
+            <div id="orchAgents" class="agent-picker"></div>
+          </div>
+          <div class="form-group">
+            <label>Strategy</label>
+            <select id="orchStrategy">
+              <option value="sequential">Sequential</option>
+              <option value="parallel">Parallel</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Task Description</label>
+            <textarea id="orchTask" placeholder="Describe what the agents should accomplish..." required></textarea>
+          </div>
+          <button type="submit" class="btn">Start Orchestration</button>
+          <span id="orchStatus" class="muted" style="margin-left:12px"></span>
+        </form>
+      </div>
     </div>
-    <div id="searchResults"></div>
-  </div>
-</div>
 
-<div id="page-github" class="page">
-  <div class="card">
-    <h2>GitHub Integration</h2>
-    <div class="github-controls">
-      <input type="text" id="ghRepo" placeholder="owner/repo" value="" onkeydown="if(event.key==='Enter')loadGitHub()">
-      <select id="ghTab" onchange="loadGitHub()">
-        <option value="issues">Issues</option>
-        <option value="pulls">Pull Requests</option>
-        <option value="checks">CI Checks</option>
-      </select>
-      <input class="github-ref" type="text" id="ghRef" placeholder="ref" value="main" onkeydown="if(event.key==='Enter')loadGitHub()">
-      <button class="btn" onclick="loadGitHub()">Load</button>
+    <div id="orch-panel-list" class="orch-panel">
+      <div class="card">
+        <h2>Orchestration List</h2>
+        <table><thead><tr><th>ID</th><th>Status</th><th>Repository</th><th>Branch</th><th>Task</th><th>Updated</th><th></th></tr></thead><tbody id="orchestratesBody"></tbody></table>
+      </div>
     </div>
-    <div id="githubContent"><p class="empty">Enter a repository to view issues, PRs, or CI checks.</p></div>
-  </div>
-</div>
 
-<div id="page-orchestrate" class="page">
-  <div class="card">
-    <h2>Multi-Agent Orchestration</h2>
-    <form onsubmit="submitOrchestrate(event)">
-      <div class="form-group">
-        <label>Agents</label>
-        <div id="orchAgents" style="display:flex;flex-wrap:wrap;gap:8px;padding:8px;background:#0d1117;border:1px solid #30363d;border-radius:6px;min-height:40px"></div>
-      </div>
-      <div class="form-group">
-        <label>Strategy</label>
-        <select id="orchStrategy">
-          <option value="sequential">Sequential</option>
-          <option value="parallel">Parallel</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Repository</label>
-        <input type="text" id="orchRepo" value="" placeholder="owner/repo or https://github.com/owner/repo.git" required>
-      </div>
-      <div class="form-group">
-        <label>Base Branch</label>
-        <input type="text" id="orchBaseBranch" value="main" placeholder="main">
-      </div>
-      <div class="form-group">
-        <label>Task Description</label>
-        <textarea id="orchTask" placeholder="Describe what the agents should accomplish..." required></textarea>
-      </div>
-      <button type="submit" class="btn">Start Orchestration</button>
-      <span id="orchStatus" style="margin-left:12px;font-size:13px;color:#8b949e"></span>
-    </form>
-    <div id="orchResults" style="margin-top:16px"></div>
+    <div id="orch-panel-detail" class="orch-panel">
+      <div id="orchestrateDetail"></div>
+    </div>
   </div>
-</div>
 
-<div id="page-new-run" class="page">
-  <div class="card">
-    <h2>New Run</h2>
-    <form onsubmit="submitRun(event)">
-      <div class="form-group">
-        <label>Agent</label>
-        <select id="runAgent" required></select>
-      </div>
-      <div class="form-group">
-        <label>Task Title</label>
-        <input type="text" id="runTitle" placeholder="e.g. Add input validation to API" required>
-      </div>
-      <div class="form-group">
-        <label>Description</label>
-        <textarea id="runDescription" placeholder="Describe what the agent should do..."></textarea>
-      </div>
-      <div class="form-group">
-        <label>Repository Path</label>
-        <input type="text" id="runRepo" placeholder="./my-repo or /absolute/path" value=".">
-      </div>
-      <button type="submit" class="btn">Start Run</button>
-      <span id="runStatus" style="margin-left:12px;font-size:13px;color:#8b949e"></span>
-    </form>
+  <div id="page-agents" class="page">
+    <div class="card">
+      <h2>Registered Agents</h2>
+      <div id="agentsList"></div>
+    </div>
   </div>
-</div>
 </div>
 
 <script>
 const BASE = '';
+let selectedOrchestrateId = '';
+let currentOrchestration = null;
+let orchPoll = null;
 
 function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   document.querySelector('.nav a[data-page="' + name + '"]').classList.add('active');
-  if (name === 'dashboard') loadDashboard();
-  if (name === 'runs') loadRuns();
+  if (name === 'orchestrates') {
+    loadOrchAgentCheckboxes();
+    loadOrchestrates();
+  }
   if (name === 'agents') loadAgents();
-  if (name === 'github') toggleGitHubRef();
-  if (name === 'new-run') loadAgentSelect();
-  if (name === 'orchestrate') loadOrchAgentCheckboxes();
+}
+
+function showOrchPanel(name) {
+  document.querySelectorAll('.orch-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+  document.getElementById('orch-panel-' + name).classList.add('active');
+  document.querySelector('.tabs button[data-orch-panel="' + name + '"]').classList.add('active');
+  if (name === 'new') loadOrchAgentCheckboxes();
+  if (name === 'list') loadOrchestrates();
+  if (name === 'detail') renderOrchestrationDetail();
 }
 
 async function api(path, opts) {
@@ -239,7 +192,7 @@ async function api(path, opts) {
 
 function escape(s) {
   const d = document.createElement('div');
-  d.textContent = s || '';
+  d.textContent = s == null ? '' : String(s);
   return d.innerHTML;
 }
 
@@ -251,214 +204,245 @@ function statusSpan(s) {
 function ago(ts) {
   if (!ts) return '-';
   const ms = Date.now() - new Date(ts).getTime();
-  if (ms < 60000) return Math.floor(ms/1000) + 's ago';
+  if (Number.isNaN(ms)) return '-';
+  if (ms < 60000) return Math.max(0, Math.floor(ms/1000)) + 's ago';
   if (ms < 3600000) return Math.floor(ms/60000) + 'm ago';
   if (ms < 86400000) return Math.floor(ms/3600000) + 'h ago';
   return Math.floor(ms/86400000) + 'd ago';
 }
 
-// --- Dashboard ---
-
-async function loadDashboard() {
-  try {
-    const runs = await api('/api/runs');
-    const total = runs.length;
-    const completed = runs.filter(r => r.state && r.state.status === 'completed').length;
-    const failed = runs.filter(r => r.state && r.state.status === 'failed').length;
-    const pending = total - completed - failed;
-
-    document.getElementById('statsGrid').innerHTML = [
-      {label:'Total Runs',val:total},{label:'Completed',val:completed,color:'#3fb950'},
-      {label:'Failed',val:failed,color:'#f85149'},{label:'In Progress',val:pending,color:'#d29922'}
-    ].map(s => '<div class="card stat"><div class="stat-value" style="color:'+(s.color||'#58a6ff')+'">'+s.val+'</div><div class="stat-label">'+s.label+'</div></div>').join('');
-
-    document.getElementById('recentRunsBody').innerHTML = runs.length === 0
-      ? '<tr><td colspan="5" class="empty">No runs yet.</td></tr>'
-      : runs.slice(0,10).map(r =>
-      '<tr><td><a onclick="showRunDetail(\''+r.id+'\')">'+escape(r.id)+'</a></td>' +
-      '<td>' + statusSpan(r.state ? r.state.status : 'pending') + '</td>' +
-      '<td>' + escape(r.state ? r.state.profile_name : '-') + '</td>' +
-      '<td>' + ago(r.state ? r.state.started_at : null) + '</td>' +
-      '<td><a onclick="showRunDetail(\''+r.id+'\')">View</a></td></tr>'
-    ).join('');
-  } catch(e) { console.error(e); }
+function shortText(value, size) {
+  const text = String(value || '');
+  return text.length > size ? text.slice(0, size - 1) + '...' : text;
 }
 
-// --- Runs ---
-
-let allRuns = [];
-
-async function loadRuns() {
-  try {
-    allRuns = await api('/api/runs');
-    renderRuns();
-  } catch(e) { console.error(e); }
-}
-
-function renderRuns() {
-  const filter = (document.getElementById('runFilter')||{value:''}).value.toLowerCase();
-  const status = (document.getElementById('statusFilter')||{value:''}).value;
-  const filtered = allRuns.filter(r => {
-    if (filter && !r.id.toLowerCase().includes(filter)) return false;
-    if (status && (!r.state || r.state.status !== status)) return false;
-    return true;
-  });
-
-  document.getElementById('runsBody').innerHTML = filtered.length === 0
-    ? '<tr><td colspan="5" class="empty">No runs match the current filters.</td></tr>'
-    : filtered.map(r =>
-    '<tr><td><a onclick="showRunDetail(\''+r.id+'\')">'+escape(r.id)+'</a></td>' +
-    '<td>' + statusSpan(r.state ? r.state.status : 'pending') + '</td>' +
-    '<td>' + escape(r.state ? r.state.profile_name : '-') + '</td>' +
-    '<td>' + ago(r.state ? r.state.started_at : null) + '</td>' +
-    '<td><a onclick="showRunDetail(\''+r.id+'\')">View</a></td></tr>'
-  ).join('');
-}
-
-async function showRunDetail(id) {
-  try {
-    const data = await api('/api/runs/' + id);
-    const div = document.getElementById('runDetail');
-    div.style.display = 'block';
-    document.getElementById('runDetailTitle').textContent = 'Run: ' + id;
-    const content = document.getElementById('runDetailContent');
-
-    let html = '';
-    if (data.artifacts) {
-      const order = ['run_state.json','plan.json','diff.patch','summary.md','test.log','lint.log','task.yaml','profile.yaml','pr_body.md'];
-      for (const name of order) {
-        if (data.artifacts[name]) {
-          html += '<h3 style="margin-top:12px;font-size:13px;color:#8b949e">' + name + '</h3>';
-          html += '<pre>' + escape(data.artifacts[name].substring(0,5000)) + '</pre>';
-        }
-      }
-    }
-    content.innerHTML = html;
-    showPage('runs');
-    document.getElementById('runDetail').scrollIntoView({behavior:'smooth'});
-  } catch(e) { console.error(e); }
-}
-
-// --- Agents ---
-
-async function loadAgents() {
+async function loadOrchAgentCheckboxes() {
   try {
     const agents = await api('/api/agents');
-    document.getElementById('agentsList').innerHTML = agents.length === 0
-      ? '<p class="empty">No agents registered.</p>'
-      : agents.map(a =>
-        '<div class="agent-card">' +
-        '<h3>' + escape(a.Name) + ' <span style="color:#8b949e;font-size:11px">v' + escape(a.Version) + '</span></h3>' +
-        '<p>' + escape(a.Description) + '</p>' +
-        (a.Author ? '<p style="font-size:11px;color:#8b949e;margin-top:4px">Author: ' + escape(a.Author) + '</p>' : '') +
-        '<div class="tags">' + (a.RequiredTools || []).map(t => '<span class="tag">' + escape(t) + '</span>').join('') + '</div>' +
-        '</div>'
-      ).join('');
-  } catch(e) { console.error(e); }
-}
-
-// --- Search ---
-
-async function doSearch() {
-  const q = document.getElementById('searchQuery').value;
-  if (!q) return;
-  const src = document.getElementById('searchSource').value;
-  const url = '/api/search?q=' + encodeURIComponent(q) + (src ? '&source=' + src : '');
-
-  try {
-    const results = await api(url);
-    const div = document.getElementById('searchResults');
-    if (results.length === 0) {
-      div.innerHTML = '<p style="color:#8b949e;font-size:13px">No results for "' + escape(q) + '".</p>';
-      return;
-    }
-    div.innerHTML = results.map(r =>
-      '<div style="padding:10px 0;border-bottom:1px solid #30363d">' +
-      '<span style="color:#8b949e;font-size:11px">[' + escape(r.source || 'unknown') + ']</span> ' +
-      '<span style="font-size:13px">' + escape(r.content || r.title || '') + '</span>' +
-      '</div>'
+    const target = document.getElementById('orchAgents');
+    target.innerHTML = agents.length === 0 ? '<p class="empty">No agents registered.</p>' : agents.map(a =>
+      '<label><input type="checkbox" value="' + escape(a.Name) + '"><span>' + escape(a.Name) + '</span></label>'
     ).join('');
   } catch(e) {
-    document.getElementById('searchResults').innerHTML = '<p style="color:#f85149">Error: ' + escape(e.message) + '</p>';
+    document.getElementById('orchAgents').innerHTML = '<p class="error">Error: ' + escape(e.message) + '</p>';
   }
 }
 
-// --- New Run ---
-
-async function loadAgentSelect() {
-  try {
-    const agents = await api('/api/agents');
-    const sel = document.getElementById('runAgent');
-    sel.innerHTML = agents.map(a => '<option value="' + escape(a.Name) + '">' + escape(a.Name) + ' — ' + escape(a.Description) + '</option>').join('');
-  } catch(e) { console.error(e); }
-}
-
-async function submitRun(e) {
+async function submitOrchestrate(e) {
   e.preventDefault();
   const btn = e.target.querySelector('button[type=submit]');
-  const status = document.getElementById('runStatus');
+  const status = document.getElementById('orchStatus');
+  const checked = Array.from(document.querySelectorAll('#orchAgents input:checked')).map(c => c.value);
+  if (checked.length === 0) {
+    status.textContent = 'Select at least one agent.';
+    return;
+  }
   btn.disabled = true;
-  status.textContent = 'Starting run...';
-
+  status.textContent = 'Starting...';
   try {
-    const result = await api('/api/runs', {
+    const result = await api('/api/orchestrate', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
-        agent: document.getElementById('runAgent').value,
-        task: document.getElementById('runTitle').value,
-        description: document.getElementById('runDescription').value,
-        repo: document.getElementById('runRepo').value,
+        agents: checked,
+        repo: document.getElementById('orchRepo').value.trim(),
+        baseBranch: document.getElementById('orchBaseBranch').value.trim() || 'main',
+        task: document.getElementById('orchTask').value,
+        strategy: document.getElementById('orchStrategy').value
       })
     });
-    status.innerHTML = 'Run started: <a onclick="showRunDetail(\'' + result.id + '\')">' + result.id + '</a>';
-    btn.disabled = false;
-    setTimeout(() => { loadRuns(); }, 500);
+    status.textContent = 'Started: ' + result.id;
+    selectOrchestration(result.id);
   } catch(e) {
     status.textContent = 'Error: ' + e.message;
+  } finally {
     btn.disabled = false;
   }
 }
 
-// --- GitHub ---
+async function loadOrchestrates() {
+  const body = document.getElementById('orchestratesBody');
+  if (!body) return;
+  body.innerHTML = '<tr><td colspan="7" class="empty">Loading...</td></tr>';
+  try {
+    const records = await api('/api/orchestrates');
+    body.innerHTML = records.length === 0
+      ? '<tr><td colspan="7" class="empty">No orchestrations yet.</td></tr>'
+      : records.map(r =>
+        '<tr><td><a onclick="selectOrchestration(\'' + escape(r.id) + '\')">' + escape(r.id) + '</a></td>' +
+        '<td>' + statusSpan(r.status) + '</td>' +
+        '<td>' + escape(r.repo || '-') + '</td>' +
+        '<td>' + escape(r.baseBranch || '-') + '</td>' +
+        '<td title="' + escape(r.task || '') + '">' + escape(shortText(r.task, 80)) + '</td>' +
+        '<td>' + ago(r.updatedAt || r.createdAt) + '</td>' +
+        '<td><a onclick="selectOrchestration(\'' + escape(r.id) + '\')">Open</a></td></tr>'
+      ).join('');
+  } catch(e) {
+    body.innerHTML = '<tr><td colspan="7" class="error">Error: ' + escape(e.message) + '</td></tr>';
+  }
+}
+
+async function selectOrchestration(id) {
+  selectedOrchestrateId = id;
+  showOrchPanel('detail');
+  await refreshCurrentOrchestration();
+  startOrchestrationPoll();
+}
+
+async function refreshCurrentOrchestration() {
+  if (!selectedOrchestrateId) {
+    renderOrchestrationDetail();
+    return;
+  }
+  try {
+    currentOrchestration = await api('/api/orchestrates/' + encodeURIComponent(selectedOrchestrateId));
+    renderOrchestrationDetail();
+    loadOrchestrates();
+  } catch(e) {
+    document.getElementById('orchestrateDetail').innerHTML = '<div class="card"><p class="error">Error: ' + escape(e.message) + '</p></div>';
+  }
+}
+
+function startOrchestrationPoll() {
+  if (orchPoll) clearInterval(orchPoll);
+  orchPoll = setInterval(() => {
+    if (!currentOrchestration) return;
+    if (['completed','failed'].includes(currentOrchestration.status)) {
+      clearInterval(orchPoll);
+      orchPoll = null;
+      return;
+    }
+    refreshCurrentOrchestration();
+  }, 5000);
+}
+
+function renderOrchestrationDetail() {
+  const div = document.getElementById('orchestrateDetail');
+  if (!selectedOrchestrateId) {
+    div.innerHTML = '<div class="card"><p class="empty">Select an orchestration from List or start a new one.</p></div>';
+    return;
+  }
+  const r = currentOrchestration;
+  if (!r) {
+    div.innerHTML = '<div class="card"><p class="empty">Loading...</p></div>';
+    return;
+  }
+  div.innerHTML =
+    '<div class="card">' +
+    '<div class="detail-header"><div><h2>' + escape(r.id) + ' ' + statusSpan(r.status) + '</h2>' +
+    '<div class="detail-meta"><span class="repo-pill">' + escape(r.repo || '-') + '</span><span class="repo-pill">' + escape(r.baseBranch || '-') + '</span><span class="repo-pill">' + escape(r.strategy || '-') + '</span></div></div>' +
+    '<button class="btn btn-secondary" onclick="refreshCurrentOrchestration()">Refresh</button></div>' +
+    '<p class="muted" style="margin-top:12px">' + escape(r.task || '') + '</p>' +
+    (r.error ? '<p class="error" style="margin-top:10px">' + escape(r.error) + '</p>' : '') +
+    '</div>' +
+    '<div class="card"><div class="tabs">' +
+    '<button class="active" onclick="showDetailPanel(\'dashboard\')" data-detail-panel="dashboard">Dashboard</button>' +
+    '<button onclick="showDetailPanel(\'runs\')" data-detail-panel="runs">Runs</button>' +
+    '<button onclick="showDetailPanel(\'search\')" data-detail-panel="search">Search</button>' +
+    '<button onclick="showDetailPanel(\'github\')" data-detail-panel="github">GitHub</button>' +
+    '</div></div>' +
+    '<div id="detail-panel-dashboard" class="detail-panel active">' + renderDashboard(r) + '</div>' +
+    '<div id="detail-panel-runs" class="detail-panel">' + renderRuns(r) + '</div>' +
+    '<div id="detail-panel-search" class="detail-panel">' + renderSearch() + '</div>' +
+    '<div id="detail-panel-github" class="detail-panel">' + renderGitHub(r) + '</div>';
+}
+
+function showDetailPanel(name) {
+  document.querySelectorAll('.detail-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('[data-detail-panel]').forEach(b => b.classList.remove('active'));
+  document.getElementById('detail-panel-' + name).classList.add('active');
+  document.querySelector('[data-detail-panel="' + name + '"]').classList.add('active');
+  if (name === 'github') loadGitHub();
+}
+
+function renderDashboard(r) {
+  const results = r.results || [];
+  const passed = results.filter(x => x.success).length;
+  const failed = results.filter(x => x.success === false).length;
+  const total = r.plan && r.plan.subtasks ? r.plan.subtasks.length : results.length;
+  return '<div class="grid">' +
+    statCard('Subtasks', total) + statCard('Passed', passed, '#3fb950') + statCard('Failed', failed, '#f85149') + statCard('Agents', (r.agents || []).length, '#d29922') +
+    '</div><div class="card"><h2>Summary</h2>' + (r.summary ? '<pre>' + escape(r.summary) + '</pre>' : '<p class="empty">Summary will appear after execution completes.</p>') + '</div>';
+}
+
+function statCard(label, value, color) {
+  return '<div class="card stat"><div class="stat-value" style="color:' + (color || '#58a6ff') + '">' + escape(value) + '</div><div class="stat-label">' + escape(label) + '</div></div>';
+}
+
+function renderRuns(r) {
+  const subtasks = r.plan && r.plan.subtasks ? r.plan.subtasks : [];
+  const results = r.results || [];
+  const byID = {};
+  results.forEach(x => { byID[x.subtask_id] = x; });
+  if (subtasks.length === 0 && results.length === 0) {
+    return '<div class="card"><p class="empty">Runs will appear after planning starts.</p></div>';
+  }
+  const rows = (subtasks.length ? subtasks : results.map(x => ({id:x.subtask_id,description:'',agent_type:'-'}))).map(s => {
+    const result = byID[s.id] || {};
+    const status = result.subtask_id ? (result.success ? 'pass' : 'failed') : 'pending';
+    return '<tr><td>' + escape(s.id) + '</td><td>' + statusSpan(status) + '</td><td>' + escape(s.agent_type || '-') + '</td><td>' + escape(s.description || '-') + '</td></tr>' +
+      (result.output || result.error || result.diff ? '<tr><td colspan="4"><pre>' + escape((result.error || '') + (result.output ? '\n' + result.output : '') + (result.diff ? '\n' + result.diff : '')).slice(0, 5000) + '</pre></td></tr>' : '');
+  }).join('');
+  return '<div class="card"><h2>Runs</h2><table><thead><tr><th>ID</th><th>Status</th><th>Agent</th><th>Description</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function renderSearch() {
+  return '<div class="card"><h2>Search</h2><div class="search-row">' +
+    '<input type="text" id="searchQuery" placeholder="Search memory, guidelines, PRs..." onkeydown="if(event.key===\'Enter\')doSearch()">' +
+    '<select id="searchSource"><option value="">All Sources</option><option value="memory">Memory</option><option value="guideline">Guidelines</option><option value="pr">PRs</option></select>' +
+    '<button class="btn" onclick="doSearch()">Search</button></div><div id="searchResults"></div></div>';
+}
+
+async function doSearch() {
+  const q = document.getElementById('searchQuery').value.trim();
+  if (!q) return;
+  const src = document.getElementById('searchSource').value;
+  const url = '/api/search?q=' + encodeURIComponent(q) + (src ? '&source=' + encodeURIComponent(src) : '');
+  const div = document.getElementById('searchResults');
+  div.innerHTML = '<p class="empty">Searching...</p>';
+  try {
+    const results = await api(url);
+    div.innerHTML = results.length === 0 ? '<p class="empty">No results.</p>' : results.map(item =>
+      '<div style="padding:10px 0;border-bottom:1px solid #30363d"><span class="tag">' + escape(item.source || 'unknown') + '</span> ' + escape(item.content || item.title || '') + '</div>'
+    ).join('');
+  } catch(e) {
+    div.innerHTML = '<p class="error">Error: ' + escape(e.message) + '</p>';
+  }
+}
+
+function renderGitHub(r) {
+  const repo = repoForGitHub(r.repo || '');
+  return '<div class="card"><h2>GitHub</h2><div class="github-row">' +
+    '<input type="text" id="ghRepo" placeholder="owner/repo" value="' + escape(repo) + '" onkeydown="if(event.key===\'Enter\')loadGitHub()">' +
+    '<select id="ghTab" onchange="loadGitHub()"><option value="issues">Issues</option><option value="pulls">Pull Requests</option><option value="checks">CI Checks</option></select>' +
+    '<input type="text" id="ghRef" placeholder="ref" value="' + escape(r.baseBranch || 'main') + '">' +
+    '<button class="btn" onclick="loadGitHub()">Load</button></div><div id="githubContent"><p class="empty">Load repository data for this orchestration.</p></div></div>';
+}
+
+function repoForGitHub(repo) {
+  if (/^[^/]+\/[^/]+$/.test(repo) && !repo.includes(':')) return repo;
+  const match = repo.match(/github\.com[:/]([^/]+\/[^/.]+)(?:\.git)?/);
+  return match ? match[1] : '';
+}
 
 async function loadGitHub() {
   const repo = document.getElementById('ghRepo').value.trim();
-  toggleGitHubRef();
-  if (!repo) {
-    document.getElementById('githubContent').innerHTML = '<p class="empty">Enter a repository to view issues, PRs, or CI checks.</p>';
-    return;
-  }
   const tab = document.getElementById('ghTab').value;
   const ref = document.getElementById('ghRef').value.trim() || 'main';
   const div = document.getElementById('githubContent');
-  div.innerHTML = '<p style="color:#8b949e">Loading...</p>';
-
+  if (!repo) {
+    div.innerHTML = '<p class="empty">Enter a GitHub owner/repo.</p>';
+    return;
+  }
+  div.innerHTML = '<p class="empty">Loading...</p>';
   try {
     const query = new URLSearchParams({repo});
     if (tab === 'checks') query.set('ref', ref);
     const payload = await api('/api/github/' + tab + '?' + query.toString());
     const data = normalizeGitHubPayload(tab, payload);
-    if (data.length === 0) {
-      div.innerHTML = '<p class="empty">No ' + githubTabLabel(tab).toLowerCase() + ' found for ' + escape(repo) + (tab === 'checks' ? ' at ' + escape(ref) : '') + '.</p>';
-      return;
-    }
-
-    if (tab === 'issues') {
-      div.innerHTML = '<table><thead><tr><th>#</th><th>Title</th><th>State</th><th>Labels</th></tr></thead><tbody>' +
-        data.map(i => '<tr><td>#' + escape(i.number) + '</td><td>' + linkOrText(i.html_url, i.title) + '</td><td>' + statusSpan(i.state) + '</td><td>' + (i.labels||[]).map(l => '<span class="tag">'+escape(l.name)+'</span>').join('') + '</td></tr>').join('') +
-        '</tbody></table>';
-    } else if (tab === 'pulls') {
-      div.innerHTML = '<table><thead><tr><th>#</th><th>Title</th><th>State</th><th>Branch</th></tr></thead><tbody>' +
-        data.map(p => '<tr><td>#' + escape(p.number) + '</td><td>' + linkOrText(p.html_url, p.title) + '</td><td>' + statusSpan(p.state) + '</td><td>' + escape(p.head || '-') + ' → ' + escape(p.base || '-') + '</td></tr>').join('') +
-        '</tbody></table>';
-    } else if (tab === 'checks') {
-      div.innerHTML = '<table><thead><tr><th>Name</th><th>Status</th><th>Conclusion</th><th>Completed</th></tr></thead><tbody>' +
-        data.map(c => '<tr><td>' + linkOrText(c.html_url, c.name || (c.output && c.output.title) || 'Unnamed check') + '</td><td>' + statusSpan(c.status || 'queued') + '</td><td>' + statusSpan(c.conclusion || (c.status === 'completed' ? 'success' : 'pending')) + '</td><td>' + escape(formatTime(c.completed_at)) + '</td></tr>').join('') +
-        '</tbody></table>';
-    }
+    div.innerHTML = data.length === 0 ? '<p class="empty">No ' + escape(tab) + ' found.</p>' : githubTable(tab, data);
   } catch(e) {
-    div.innerHTML = '<p style="color:#f85149">Error: ' + escape(e.message) + '</p>';
+    div.innerHTML = '<p class="error">Error: ' + escape(e.message) + '</p>';
   }
 }
 
@@ -471,8 +455,20 @@ function normalizeGitHubPayload(tab, payload) {
   return [];
 }
 
-function githubTabLabel(tab) {
-  return tab === 'pulls' ? 'Pull requests' : tab === 'checks' ? 'CI checks' : 'Issues';
+function githubTable(tab, data) {
+  if (tab === 'checks') {
+    return '<table><thead><tr><th>Name</th><th>Status</th><th>Conclusion</th><th>Completed</th></tr></thead><tbody>' +
+      data.map(c => '<tr><td>' + linkOrText(c.html_url, c.name || (c.output && c.output.title) || 'Unnamed check') + '</td><td>' + statusSpan(c.status || 'queued') + '</td><td>' + statusSpan(c.conclusion || 'pending') + '</td><td>' + escape(formatTime(c.completed_at)) + '</td></tr>').join('') +
+      '</tbody></table>';
+  }
+  if (tab === 'pulls') {
+    return '<table><thead><tr><th>#</th><th>Title</th><th>State</th><th>Branch</th></tr></thead><tbody>' +
+      data.map(p => '<tr><td>#' + escape(p.number) + '</td><td>' + linkOrText(p.html_url, p.title) + '</td><td>' + statusSpan(p.state) + '</td><td>' + escape(p.head || '-') + ' -> ' + escape(p.base || '-') + '</td></tr>').join('') +
+      '</tbody></table>';
+  }
+  return '<table><thead><tr><th>#</th><th>Title</th><th>State</th><th>Labels</th></tr></thead><tbody>' +
+    data.map(i => '<tr><td>#' + escape(i.number) + '</td><td>' + linkOrText(i.html_url, i.title) + '</td><td>' + statusSpan(i.state) + '</td><td>' + (i.labels||[]).map(l => '<span class="tag">' + escape(l.name) + '</span>').join('') + '</td></tr>').join('') +
+    '</tbody></table>';
 }
 
 function linkOrText(url, text) {
@@ -483,84 +479,25 @@ function linkOrText(url, text) {
 function formatTime(value) {
   if (!value || value === '0001-01-01T00:00:00Z') return '-';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString();
 }
 
-function toggleGitHubRef() {
-  const ref = document.getElementById('ghRef');
-  if (!ref) return;
-  ref.classList.toggle('visible', document.getElementById('ghTab').value === 'checks');
-}
-
-async function loadOrchAgentCheckboxes() {
+async function loadAgents() {
   try {
     const agents = await api('/api/agents');
-    document.getElementById('orchAgents').innerHTML = agents.map(a =>
-      '<label style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:#161b22;border:1px solid #30363d;border-radius:6px;font-size:13px;cursor:pointer;white-space:nowrap">' +
-      '<input type="checkbox" value="' + escape(a.Name) + '" style="width:16px;height:16px;accent-color:#238636;flex-shrink:0;margin:0">' +
-      '<span>' + escape(a.Name) + '</span>' +
-      '</label>'
+    document.getElementById('agentsList').innerHTML = agents.length === 0 ? '<p class="empty">No agents registered.</p>' : agents.map(a =>
+      '<div class="agent-card"><h3>' + escape(a.Name) + ' <span class="muted">v' + escape(a.Version) + '</span></h3>' +
+      '<p>' + escape(a.Description) + '</p>' +
+      (a.Author ? '<p>Author: ' + escape(a.Author) + '</p>' : '') +
+      '<div class="tags">' + (a.RequiredTools || []).map(t => '<span class="tag">' + escape(t) + '</span>').join('') + '</div></div>'
     ).join('');
-  } catch(e) { console.error(e); }
-}
-
-// --- Orchestrate ---
-
-async function submitOrchestrate(e) {
-  e.preventDefault();
-  const btn = e.target.querySelector('button[type=submit]');
-  const status = document.getElementById('orchStatus');
-  const resultsDiv = document.getElementById('orchResults');
-  btn.disabled = true;
-  status.textContent = 'Planning...';
-  resultsDiv.innerHTML = '';
-
-  const checked = Array.from(document.querySelectorAll('#orchAgents input:checked')).map(c => c.value);
-  if (checked.length === 0) {
-    status.textContent = 'Select at least one agent.';
-    btn.disabled = false;
-    return;
-  }
-
-  try {
-    const result = await api('/api/orchestrate', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        agents: checked,
-        repo: document.getElementById('orchRepo').value.trim(),
-        baseBranch: document.getElementById('orchBaseBranch').value.trim() || 'main',
-        task: document.getElementById('orchTask').value,
-        strategy: document.getElementById('orchStrategy').value,
-      })
-    });
-
-    let html = '<h3 style="color:#3fb950;margin-bottom:8px">Orchestration Complete</h3>';
-
-    if (result.plan && result.plan.subtasks) {
-      html += '<h4 style="margin-top:12px;color:#8b949e">Plan</h4><ul>';
-      result.plan.subtasks.forEach(s => {
-        html += '<li style="padding:4px 0;font-size:13px">' + statusSpan('PASS') + ' <strong>' + escape(s.id) + '</strong>: ' + escape(s.description) + ' <span style="color:#8b949e">→ ' + escape(s.agent_type) + '</span></li>';
-      });
-      html += '</ul>';
-    }
-
-    if (result.summary) {
-      html += '<h4 style="margin-top:12px;color:#8b949e">Summary</h4><pre>' + escape(result.summary) + '</pre>';
-    }
-
-    resultsDiv.innerHTML = html;
-    status.textContent = '';
   } catch(e) {
-    status.textContent = 'Error: ' + e.message;
+    document.getElementById('agentsList').innerHTML = '<p class="error">Error: ' + escape(e.message) + '</p>';
   }
-  btn.disabled = false;
 }
 
-// --- Init ---
-
-loadDashboard();
+loadOrchAgentCheckboxes();
+loadOrchestrates();
 </script>
 </body>
 </html>
