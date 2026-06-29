@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package memory provides an agent memory store backed by a vector database.
+// Package memory provides pluggable memory stores for agents with
+// support for vector, JSON, and SQLite backends.
 package memory
 
 import (
@@ -34,85 +35,66 @@ type Entry struct {
 	Vector    []float32              `json:"-"`
 }
 
-// MemoryStore provides persistent memory storage for agents using vector search.
-//nolint:revive // stutter is acceptable for package-level interface
-type MemoryStore struct {
-	vs         vector.VectorStore
-	embed      embedding.Embedder
-	collection string
+// Config defines which memory backend to use and its options.
+type Config struct {
+	// Backend selects the implementation: "vector", "json", "sqlite".
+	// Defaults to "json".
+	Backend string `yaml:"backend"`
+
+	// Path is the file path for JSON or SQLite backends.
+	Path string `yaml:"path"`
+
+	// Collection is the vector collection name (for vector backend).
+	Collection string `yaml:"collection"`
 }
 
-// NewMemoryStore creates a new MemoryStore backed by the given vector store and embedder.
-func NewMemoryStore(vs vector.VectorStore, embed embedding.Embedder) *MemoryStore {
-	return &MemoryStore{
-		vs:         vs,
-		embed:      embed,
-		collection: "agentos_memory",
+// DefaultConfig returns a default memory configuration using JSON backend.
+func DefaultConfig() Config {
+	return Config{
+		Backend: "json",
+		Path:    ".agentos/memory.jsonl",
 	}
 }
 
-// Save stores a memory entry, embedding its content for later search.
-func (m *MemoryStore) Save(ctx context.Context, entry *Entry) error {
-	if entry.ID == "" {
-		entry.ID = fmt.Sprintf("mem-%d", time.Now().UnixNano())
-	}
-	if entry.Timestamp.IsZero() {
-		entry.Timestamp = time.Now()
-	}
-
-	vectors, err := m.embed.Embed(ctx, []string{entry.Content})
-	if err != nil {
-		return fmt.Errorf("embed: %w", err)
-	}
-
-	point := vector.Point{
-		ID: entry.ID,
-		Vector: vectors[0],
-		Payload: map[string]interface{}{
-			"content":   entry.Content,
-			"type":      entry.Type,
-			"timestamp": entry.Timestamp.Format(time.RFC3339),
-		},
-	}
-	for k, v := range entry.Metadata {
-		point.Payload[k] = v
-	}
-
-	return m.vs.Upsert(ctx, m.collection, []vector.Point{point})
-}
-
-// Search finds memory entries similar to the given query string.
-func (m *MemoryStore) Search(ctx context.Context, query string, limit int) ([]Entry, error) {
-	vec, err := m.embed.EmbedQuery(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("embed query: %w", err)
-	}
-
-	points, err := m.vs.Search(ctx, m.collection, vec, limit)
-	if err != nil {
-		return nil, fmt.Errorf("search: %w", err)
-	}
-
-	var entries []Entry
-	for _, p := range points {
-		entry := Entry{
-			ID:    p.ID,
-			Vector: p.Vector,
+// New creates a Store from the given config and optional dependencies.
+// For the vector backend, vs and embed must be provided.
+func New(ctx context.Context, cfg Config, vs vector.VectorStore, embed embedding.Embedder) (Store, error) {
+	switch cfg.Backend {
+	case "vector":
+		if vs == nil {
+			return nil, fmt.Errorf("vector store required for vector memory backend")
 		}
-		if content, ok := p.Payload["content"]; ok {
-			entry.Content = fmt.Sprintf("%v", content)
+		if embed == nil {
+			return nil, fmt.Errorf("embedder required for vector memory backend")
 		}
-		if t, ok := p.Payload["type"]; ok {
-			entry.Type = fmt.Sprintf("%v", t)
+		s := NewVectorStore(vs, embed)
+		if cfg.Collection != "" {
+			s.collection = cfg.Collection
 		}
-		entry.Metadata = p.Payload
-		entries = append(entries, entry)
-	}
+		return s, nil
 
-	return entries, nil
+	case "json":
+		path := cfg.Path
+		if path == "" {
+			path = ".agentos/memory.jsonl"
+		}
+		return NewJSONStore(path)
+
+	case "sqlite":
+		return nil, fmt.Errorf("sqlite memory backend not yet implemented")
+
+	default:
+		return nil, fmt.Errorf("unknown memory backend: %q (options: vector, json, sqlite)", cfg.Backend)
+	}
 }
 
-// Clear removes all stored memory entries.
-func (m *MemoryStore) Clear(ctx context.Context) error {
-	return m.vs.DeleteCollection(ctx, m.collection)
+// MemoryStore is a type alias for backward compatibility.
+// Deprecated: Use Store interface instead.
+//nolint:revive // stutter is acceptable for backward compatibility
+type MemoryStore = VectorStore
+
+// NewMemoryStore creates a VectorStore.
+// Deprecated: Use New() with Config instead.
+func NewMemoryStore(vs vector.VectorStore, embed embedding.Embedder) *VectorStore {
+	return NewVectorStore(vs, embed)
 }
