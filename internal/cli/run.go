@@ -34,6 +34,7 @@ import (
 var (
 	taskFile       string
 	profileFile    string
+	runAgentName   string
 	dryRun         bool
 	verbose        bool
 	runCreatePR    bool
@@ -64,6 +65,7 @@ func init() {
 	runCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
 	runCmd.Flags().BoolVar(&runCreatePR, "pr", false, "Create a PR after successful run")
 	runCmd.Flags().StringVar(&runPRRepo, "pr-repo", "", "GitHub repo for PR (owner/name)")
+	runCmd.Flags().StringVar(&runAgentName, "agent", "", "Agent name from registry (overrides profile agent)")
 	_ = runCmd.MarkFlagRequired("task")    //nolint:errcheck // cobra returns error only for invalid flag name
 	_ = runCmd.MarkFlagRequired("profile") //nolint:errcheck // cobra returns error only for invalid flag name
 }
@@ -109,7 +111,17 @@ func runTask() error {
 		Verbose: verbose,
 	}
 
-	agt := agent.NewBaseAgent(prof.Name, llmClient)
+	var agt runtime.Agent
+	if runAgentName != "" {
+		reg := agent.DefaultRegistry()
+		a, err := reg.Create(runAgentName, llmClient)
+		if err != nil {
+			return fmt.Errorf("lookup agent %q: %w", runAgentName, err)
+		}
+		agt = a
+	} else {
+		agt = agent.NewBaseAgent(prof.Name, llmClient)
+	}
 	rt := runtime.NewRuntime(llmClient, prof, ws, cfg, agt)
 	if err := rt.Run(context.Background(), tk); err != nil {
 		return err
