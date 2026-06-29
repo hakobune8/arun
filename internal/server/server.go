@@ -574,7 +574,7 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 	observer := func(event orchestrator.SubtaskEvent) {
 		mu.Lock()
 		defer mu.Unlock()
-		applySubtaskEvent(record, event)
+		applySubtaskEvent(record, &event)
 		record.UpdatedAt = time.Now().UTC()
 		if err := saveOrchestrationRecord(record); err != nil {
 			slog.Warn("save orchestration failed", "id", record.ID, "error", err)
@@ -660,7 +660,7 @@ func makeSubtaskStates(plan *orchestrator.TaskPlan) []orchestrationSubtaskState 
 	return states
 }
 
-func applySubtaskEvent(record *orchestrationRecord, event orchestrator.SubtaskEvent) {
+func applySubtaskEvent(record *orchestrationRecord, event *orchestrator.SubtaskEvent) {
 	if len(record.Subtasks) == 0 && record.Plan != nil {
 		record.Subtasks = makeSubtaskStates(record.Plan)
 	}

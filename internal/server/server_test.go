@@ -814,7 +814,7 @@ func TestApplySubtaskEvent(t *testing.T) {
 		}}},
 	}
 	started := time.Now().UTC()
-	applySubtaskEvent(record, orchestrator.SubtaskEvent{
+	applySubtaskEvent(record, &orchestrator.SubtaskEvent{
 		Type:    orchestrator.SubtaskStarted,
 		Subtask: record.Plan.Subtasks[0],
 		Started: started,
@@ -824,7 +824,7 @@ func TestApplySubtaskEvent(t *testing.T) {
 	}
 
 	finished := started.Add(time.Second)
-	applySubtaskEvent(record, orchestrator.SubtaskEvent{
+	applySubtaskEvent(record, &orchestrator.SubtaskEvent{
 		Type:     orchestrator.SubtaskCompleted,
 		Subtask:  record.Plan.Subtasks[0],
 		Finished: finished,
