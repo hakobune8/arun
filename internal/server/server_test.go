@@ -454,6 +454,33 @@ func TestShouldRetryCloneWithoutBranch(t *testing.T) {
 	}
 }
 
+func TestGitCloneEnv_AddsGitHubBasicAuth(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "secret-token")
+	env := gitCloneEnv([]string{"clone", "https://github.com/owner/repo.git", "/tmp/repo"})
+
+	joined := strings.Join(env, "\n")
+	if !strings.Contains(joined, "GIT_CONFIG_KEY_0=http.https://github.com/.extraheader") {
+		t.Fatal("missing git extraheader config key")
+	}
+	if !strings.Contains(joined, "GIT_CONFIG_VALUE_0=AUTHORIZATION: basic ") {
+		t.Fatal("missing basic auth extraheader")
+	}
+	for _, item := range env {
+		if strings.HasPrefix(item, "GIT_CONFIG_VALUE_0=") && strings.Contains(item, "secret-token") {
+			t.Fatal("git extraheader must not expose the raw token")
+		}
+	}
+}
+
+func TestGitCloneEnv_SkipsNonGitHubRemote(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "secret-token")
+	env := gitCloneEnv([]string{"clone", "https://example.com/owner/repo.git", "/tmp/repo"})
+	joined := strings.Join(env, "\n")
+	if strings.Contains(joined, "GIT_CONFIG_KEY_0") {
+		t.Fatal("did not expect GitHub auth config for non-GitHub remote")
+	}
+}
+
 func TestNormalizeRemoteRepo(t *testing.T) {
 	t.Parallel()
 	tests := map[string]string{

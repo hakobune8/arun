@@ -18,6 +18,7 @@ import (
 	"context"
 	"crypto/rand"
 	"embed"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -514,20 +515,41 @@ func cloneRemoteRepo(cloneURL, baseBranch string) (string, error) {
 
 func runGitClone(args []string) ([]byte, error) {
 	cmd := exec.Command("git", args...)
+	cmd.Env = gitCloneEnv(args)
 	return cmd.CombinedOutput()
 }
 
 func gitCloneArgs(cloneURL, baseBranch, dest string) []string {
-	args := []string{}
-	if token := os.Getenv("GITHUB_TOKEN"); token != "" && isGitHubHTTPSRepo(cloneURL) {
-		args = append(args, "-c", "http.https://github.com/.extraheader=AUTHORIZATION: bearer "+token)
-	}
-	args = append(args, "clone", "--depth=1")
+	args := []string{"clone", "--depth=1"}
 	if baseBranch != "" {
 		args = append(args, "--branch", baseBranch)
 	}
 	args = append(args, cloneURL, dest)
 	return args
+}
+
+func gitCloneEnv(args []string) []string {
+	env := os.Environ()
+	token := os.Getenv("GITHUB_TOKEN")
+	if token == "" || !cloneArgsUseGitHubHTTPS(args) {
+		return env
+	}
+
+	auth := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + token))
+	return append(env,
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=http.https://github.com/.extraheader",
+		"GIT_CONFIG_VALUE_0=AUTHORIZATION: basic "+auth,
+	)
+}
+
+func cloneArgsUseGitHubHTTPS(args []string) bool {
+	for _, arg := range args {
+		if isGitHubHTTPSRepo(arg) {
+			return true
+		}
+	}
+	return false
 }
 
 func isGitHubHTTPSRepo(repo string) bool {
