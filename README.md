@@ -198,6 +198,24 @@ pr_body.md        # Pull request body draft
 - **File limits**: Maximum changed files enforced per run
 - **Retry limits**: Automatic retry with configurable maximum
 
+## Documentation
+
+- [Architecture](docs/architecture.md) — System architecture overview
+- [Configuration](docs/configuration.md) — LiteLLM, Qdrant, Docker, MCP, templates
+- [Profiles](docs/profiles.md) — Profile YAML schema reference
+- [Agent Definitions](docs/agent-definitions.md) — Versioned Agent YAML format (agentos.io/v1)
+- [Safety](docs/safety.md) — Safety mechanisms and command policies
+- [Event Bus](docs/event-bus.md) — Structured events for observability
+- [Factory](docs/factory.md) — Creating agents from definitions
+- [Memory](docs/memory.md) — Pluggable memory backends (vector, JSON)
+- [Sandbox](docs/sandbox.md) — Execution isolation (local, Docker)
+- [Orchestrator](docs/orchestrator.md) — Multi-agent coordination
+- [Embedding](docs/embedding.md) — LLM embedding service
+- [Search](docs/search.md) — Unified search across sources
+- [Guidelines](docs/guidelines.md) — Coding guidelines management
+- [MCP](docs/mcp.md) — Model Context Protocol integration
+- [API](docs/api.md) — REST API reference for web UI
+
 ## Environment Variables
 
 | Variable | Default | Description |
