@@ -25,8 +25,11 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/kazyamaz200/agentos/internal/agent"
@@ -368,10 +371,11 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 // --- Orchestrate ---
 
 type orchestrateRequest struct {
-	Agents   []string `json:"agents"`
-	Repo     string   `json:"repo"`
-	Task     string   `json:"task"`
-	Strategy string   `json:"strategy"`
+	Agents     []string `json:"agents"`
+	Repo       string   `json:"repo"`
+	BaseBranch string   `json:"baseBranch"`
+	Task       string   `json:"task"`
+	Strategy   string   `json:"strategy"`
 }
 
 func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
@@ -399,7 +403,7 @@ func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	repoPath, err := resolveOrchestrateRepo(req.Repo)
+	repoPath, err := resolveOrchestrateRepo(req.Repo, req.BaseBranch)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -417,6 +421,7 @@ func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 
 	cfg := &runtime.Config{Verbose: false}
 	orch := orchestrator.NewOrchestrator(s.llmClient, sandbox.NewLocalSandbox(repoPath), agents, cfg)
+	orch.SetBaseBranch(defaultBaseBranch(req.BaseBranch))
 
 	if req.Strategy == "parallel" {
 		orch.SetStrategy(orchestrator.StrategyParallel)
@@ -442,9 +447,13 @@ func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func resolveOrchestrateRepo(repo string) (string, error) {
+func resolveOrchestrateRepo(repo, baseBranch string) (string, error) {
 	if repo == "" {
 		repo = "."
+	}
+
+	if cloneURL, ok := normalizeRemoteRepo(repo); ok {
+		return cloneRemoteRepo(cloneURL, defaultBaseBranch(baseBranch))
 	}
 
 	abs, err := filepath.Abs(repo)
@@ -460,6 +469,91 @@ func resolveOrchestrateRepo(repo string) (string, error) {
 		return "", fmt.Errorf("repo is not a directory: %s", abs)
 	}
 	return abs, nil
+}
+
+func normalizeRemoteRepo(repo string) (string, bool) {
+	repo = strings.TrimSpace(repo)
+	if repo == "" {
+		return "", false
+	}
+
+	if strings.HasPrefix(repo, "git@") {
+		return repo, true
+	}
+	if strings.HasPrefix(repo, "http://") || strings.HasPrefix(repo, "https://") || strings.HasPrefix(repo, "file://") {
+		return repo, true
+	}
+	if strings.Count(repo, "/") == 1 && !strings.HasPrefix(repo, ".") {
+		parts := splitRepo(repo)
+		if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
+			return "https://github.com/" + repo + ".git", true
+		}
+	}
+	return "", false
+}
+
+func cloneRemoteRepo(cloneURL, baseBranch string) (string, error) {
+	root := filepath.Join(apphome.Dir(), "workspaces", "orchestrate")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return "", fmt.Errorf("create workspace root: %w", err)
+	}
+
+	dest := filepath.Join(root, fmt.Sprintf("%s-%s-%s", time.Now().UTC().Format("20060102T150405"), generateID(), safeRepoSlug(cloneURL)))
+	args := gitCloneArgs(cloneURL, baseBranch, dest)
+	cmd := exec.Command("git", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("clone repo: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return dest, nil
+}
+
+func gitCloneArgs(cloneURL, baseBranch, dest string) []string {
+	args := []string{}
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" && isGitHubHTTPSRepo(cloneURL) {
+		args = append(args, "-c", "http.https://github.com/.extraheader=AUTHORIZATION: bearer "+token)
+	}
+	args = append(args, "clone", "--depth=1")
+	if baseBranch != "" {
+		args = append(args, "--branch", baseBranch)
+	}
+	args = append(args, cloneURL, dest)
+	return args
+}
+
+func isGitHubHTTPSRepo(repo string) bool {
+	u, err := url.Parse(repo)
+	return err == nil && u.Scheme == "https" && strings.EqualFold(u.Host, "github.com")
+}
+
+func defaultBaseBranch(branch string) string {
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return "main"
+	}
+	return branch
+}
+
+func safeRepoSlug(repo string) string {
+	slug := repo
+	if u, err := url.Parse(repo); err == nil && u.Path != "" {
+		slug = strings.Trim(u.Path, "/")
+	}
+	slug = strings.TrimSuffix(slug, ".git")
+	slug = strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+			return r
+		}
+		return '-'
+	}, slug)
+	slug = strings.Trim(slug, "-")
+	if slug == "" {
+		return "repo"
+	}
+	if len(slug) > 24 {
+		return slug[len(slug)-24:]
+	}
+	return slug
 }
 
 // --- Store ---
