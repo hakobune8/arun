@@ -1,2 +1,0 @@
-{"timestamp":"2026-06-29T13:52:20.983943+09:00","level":"info","component":"runtime","message":"starting run","data":{"profile":"go-backend","repo":".","task_id":"run-54d21a311eaacb7f"}}
-{"timestamp":"2026-06-29T13:52:20.98397+09:00","level":"info","component":"runtime","message":"starting run","data":{"profile":"go-backend","repo":".","task_id":"run-8f99fead3e664f21"}}
