@@ -60,7 +60,8 @@ persistence:
 env:
   # LiteLLM proxy URL
   LITELLM_BASE_URL: "http://litellm:4000"
-  LITELLM_API_KEY: "sk-local"
+  # Prefer secrets.existingSecret or secrets.litellmApiKey for production.
+  LITELLM_API_KEY: ""
   AGENTOS_MODEL_CODER: "coder"
   # Qdrant vector database (optional — falls back to local)
   QDRANT_URL: ""
@@ -71,6 +72,34 @@ env:
   AGENTOS_HOME: "/home/agentos/.agentos"
   # GitHub token (optional, for PR operations)
   GITHUB_TOKEN: ""
+
+auth:
+  required: false
+  github:
+    clientId: ""
+    callbackUrl: ""
+    authorizeUrl: "https://github.com/login/oauth/authorize"
+    tokenUrl: "https://github.com/login/oauth/access_token"
+    userUrl: "https://api.github.com/user"
+  cookieSecure: false
+
+llm:
+  defaultPreset: "default"
+  presets:
+    - id: "default"
+      name: "Default LiteLLM"
+      provider: "litellm"
+      baseUrl: "http://litellm:4000"
+      model: "coder"
+      apiKeyEnv: "LITELLM_API_KEY"
+
+secrets:
+  # Set to an existing Secret name to avoid rendering sensitive values from Helm.
+  existingSecret: ""
+  litellmApiKey: ""
+  githubToken: ""
+  githubOAuthClientSecret: ""
+  agentosSessionSecret: ""
 
 networkPolicy:
   enabled: false

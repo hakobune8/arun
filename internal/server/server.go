@@ -56,13 +56,15 @@ var runIDPattern = regexp.MustCompile(`^run-[0-9a-f]{16}$`)
 
 // Server serves the AgentOS web UI and API endpoints.
 type Server struct {
-	port       int
-	server     *http.Server
-	search     *search.Service
-	agentReg   *agent.Registry
-	llmClient  llm.LLMClient
-	sandbox    sandbox.Sandbox
-	runtimeCfg *runtime.Config
+	port        int
+	server      *http.Server
+	search      *search.Service
+	agentReg    *agent.Registry
+	llmClient   llm.LLMClient
+	sandbox     sandbox.Sandbox
+	runtimeCfg  *runtime.Config
+	auth        authConfig
+	llmSettings llmSettings
 }
 
 // NewServer creates a new Server listening on the given port.
@@ -73,18 +75,27 @@ func NewServer(port int) *Server {
 
 	llmCfg := llm.DefaultConfig()
 	llmClient := llm.NewLiteLLMClient(llmCfg)
+	authCfg := loadAuthConfig()
+	llmSettings := loadLLMSettings()
 
 	mux := http.NewServeMux()
 	s := &Server{
-		port:       port,
-		search:     svc,
-		agentReg:   agent.DefaultRegistry(),
-		llmClient:  llmClient,
-		sandbox:    sandbox.NewLocalSandbox("."),
-		runtimeCfg: &runtime.Config{Verbose: false},
+		port:        port,
+		search:      svc,
+		agentReg:    agent.DefaultRegistry(),
+		llmClient:   llmClient,
+		sandbox:     sandbox.NewLocalSandbox("."),
+		runtimeCfg:  &runtime.Config{Verbose: false},
+		auth:        authCfg,
+		llmSettings: llmSettings,
 	}
 
+	mux.HandleFunc("/api/auth/session", s.handleAuthSession)
+	mux.HandleFunc("/auth/login", s.handleAuthLogin)
+	mux.HandleFunc("/auth/callback", s.handleAuthCallback)
+	mux.HandleFunc("/auth/logout", s.handleAuthLogout)
 	mux.HandleFunc("/api/agents", s.handleAgents)
+	mux.HandleFunc("/api/settings/llm", s.handleLLMSettings)
 	mux.HandleFunc("/api/runs", s.handleRuns)
 	mux.HandleFunc("/api/runs/", s.handleRunDetail)
 	mux.HandleFunc("/api/search", s.handleSearch)
@@ -136,6 +147,13 @@ func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(agents) //nolint:errcheck // best-effort
 }
 
+// --- Settings ---
+
+func (s *Server) handleLLMSettings(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(s.llmSettings) //nolint:errcheck // best-effort
+}
+
 // --- Runs ---
 
 type createRunRequest struct {
@@ -143,9 +161,13 @@ type createRunRequest struct {
 	Task        string `json:"task"`
 	Description string `json:"description"`
 	Repo        string `json:"repo"`
+	LLMPreset   string `json:"llmPreset"`
 }
 
 func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireAuth(w, r); !ok {
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		s.listRuns(w, r)
@@ -211,7 +233,13 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agt, err := s.agentReg.Create(req.Agent, s.llmClient)
+	llmClient, presetID, err := s.llmClientForPreset(req.LLMPreset)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	agt, err := s.agentReg.Create(req.Agent, llmClient)
 	if err != nil {
 		http.Error(w, "lookup agent: "+err.Error(), http.StatusBadRequest)
 		return
@@ -230,14 +258,14 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 		BaseBranch:  "main",
 		Branch:      "agentos/" + id,
 		Title:       req.Task,
-		Description: req.Description,
+		Description: req.Description + "\n\nLLM preset: " + presetID,
 	}
 
 	sb := sandbox.NewLocalSandbox(repo)
 	cfg := &runtime.Config{Verbose: false}
 	prof := &profile.Profile{Name: req.Agent}
 
-	rt := runtime.NewRuntime(s.llmClient, prof, sb, cfg, agt)
+	rt := runtime.NewRuntime(llmClient, prof, sb, cfg, agt)
 
 	go func() {
 		if err := rt.Run(context.Background(), tk); err != nil {
@@ -246,14 +274,18 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	_ = json.NewEncoder(w).Encode(map[string]string{ //nolint:errcheck // best-effort
-		"id":     id,
-		"status": "started",
+		"id":        id,
+		"status":    "started",
+		"llmPreset": presetID,
 	})
 }
 
 // --- Run Detail ---
 
 func (s *Server) handleRunDetail(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireAuth(w, r); !ok {
+		return
+	}
 	id := filepath.Base(r.URL.Path)
 
 	runDir := filepath.Join(apphome.RunsDir(), id)
@@ -283,6 +315,9 @@ func (s *Server) handleRunDetail(w http.ResponseWriter, r *http.Request) {
 // --- Search ---
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireAuth(w, r); !ok {
+		return
+	}
 	query := r.URL.Query().Get("q")
 	if query == "" {
 		http.Error(w, "query param q required", http.StatusBadRequest)
@@ -314,6 +349,9 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	if _, ok := s.requireAuth(w, r); !ok {
+		return
+	}
 	repo := r.URL.Query().Get("repo")
 	if repo == "" {
 		http.Error(w, "repo query param required", http.StatusBadRequest)
@@ -383,6 +421,7 @@ type orchestrateRequest struct {
 	BaseBranch string   `json:"baseBranch"`
 	Task       string   `json:"task"`
 	Strategy   string   `json:"strategy"`
+	LLMPreset  string   `json:"llmPreset"`
 }
 
 type orchestrationRecord struct {
@@ -393,6 +432,7 @@ type orchestrationRecord struct {
 	Task       string                       `json:"task"`
 	Agents     []string                     `json:"agents"`
 	Strategy   string                       `json:"strategy"`
+	LLMPreset  string                       `json:"llmPreset"`
 	Status     string                       `json:"status"`
 	Error      string                       `json:"error,omitempty"`
 	Plan       *orchestrator.TaskPlan       `json:"plan,omitempty"`
@@ -404,6 +444,9 @@ type orchestrationRecord struct {
 
 func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	if _, ok := s.requireAuth(w, r); !ok {
+		return
+	}
 
 	if r.Method != http.MethodPost {
 		http.Error(w, "POST required", http.StatusMethodNotAllowed)
@@ -438,6 +481,12 @@ func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	llmClient, presetID, err := s.llmClientForPreset(req.LLMPreset)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	repoPath, err := resolveOrchestrateRepo(req.Repo, req.BaseBranch)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -446,7 +495,7 @@ func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 
 	agents := make(map[string]runtime.Agent)
 	for _, name := range req.Agents {
-		a, err := s.agentReg.Create(name, s.llmClient)
+		a, err := s.agentReg.Create(name, llmClient)
 		if err != nil {
 			http.Error(w, "lookup agent "+name+": "+err.Error(), http.StatusBadRequest)
 			return
@@ -463,6 +512,7 @@ func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 		Task:       req.Task,
 		Agents:     req.Agents,
 		Strategy:   req.Strategy,
+		LLMPreset:  presetID,
 		Status:     "planning",
 		CreatedAt:  now,
 		UpdatedAt:  now,
@@ -475,14 +525,14 @@ func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go s.runOrchestration(record, agents)
+	go s.runOrchestration(record, agents, llmClient)
 
 	_ = json.NewEncoder(w).Encode(record) //nolint:errcheck // best-effort response
 }
 
-func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string]runtime.Agent) {
+func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string]runtime.Agent, llmClient llm.LLMClient) {
 	cfg := &runtime.Config{Verbose: false}
-	orch := orchestrator.NewOrchestrator(s.llmClient, sandbox.NewLocalSandbox(record.RepoPath), agents, cfg)
+	orch := orchestrator.NewOrchestrator(llmClient, sandbox.NewLocalSandbox(record.RepoPath), agents, cfg)
 	orch.SetBaseBranch(record.BaseBranch)
 
 	if record.Strategy == "parallel" {
@@ -530,6 +580,9 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 
 func (s *Server) handleOrchestrates(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	if _, ok := s.requireAuth(w, r); !ok {
+		return
+	}
 	if r.Method != http.MethodGet {
 		http.Error(w, "GET required", http.StatusMethodNotAllowed)
 		return
@@ -545,6 +598,9 @@ func (s *Server) handleOrchestrates(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleOrchestrateDetail(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	if _, ok := s.requireAuth(w, r); !ok {
+		return
+	}
 	if r.Method != http.MethodGet {
 		http.Error(w, "GET required", http.StatusMethodNotAllowed)
 		return

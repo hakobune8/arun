@@ -18,6 +18,8 @@ spec:
       {{- $securityContext := default dict (get .Values "securityContext") }}
       {{- $capabilities := default dict (get $securityContext "capabilities") }}
       {{- $env := default dict (get .Values "env") }}
+      {{- $secrets := default dict (get .Values "secrets") }}
+      {{- $secretName := default (include "agentos.fullname" .) (get $secrets "existingSecret") }}
       securityContext:
         fsGroup: {{ default 101 (get $podSecurityContext "fsGroup") }}
         runAsGroup: {{ default 101 (get $podSecurityContext "runAsGroup") }}
@@ -63,11 +65,15 @@ spec:
             - name: LITELLM_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "agentos.fullname" . }}
+                  name: {{ $secretName }}
                   key: LITELLM_API_KEY
                   optional: true
             - name: AGENTOS_MODEL_CODER
               value: "{{ .Values.env.AGENTOS_MODEL_CODER }}"
+            - name: AGENTOS_LLM_DEFAULT_PRESET
+              value: "{{ .Values.llm.defaultPreset }}"
+            - name: AGENTOS_LLM_PRESETS
+              value: {{ toJson .Values.llm.presets | quote }}
             - name: AGENTOS_HOME
               value: "{{ default "/home/agentos/.agentos" (get $env "AGENTOS_HOME") }}"
             - name: QDRANT_URL
@@ -77,8 +83,34 @@ spec:
             - name: GITHUB_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "agentos.fullname" . }}
+                  name: {{ $secretName }}
                   key: GITHUB_TOKEN
+                  optional: true
+            - name: AGENTOS_AUTH_REQUIRED
+              value: "{{ .Values.auth.required }}"
+            - name: AGENTOS_COOKIE_SECURE
+              value: "{{ .Values.auth.cookieSecure }}"
+            - name: GITHUB_OAUTH_CLIENT_ID
+              value: "{{ .Values.auth.github.clientId }}"
+            - name: GITHUB_OAUTH_CALLBACK_URL
+              value: "{{ .Values.auth.github.callbackUrl }}"
+            - name: GITHUB_OAUTH_AUTHORIZE_URL
+              value: "{{ .Values.auth.github.authorizeUrl }}"
+            - name: GITHUB_OAUTH_TOKEN_URL
+              value: "{{ .Values.auth.github.tokenUrl }}"
+            - name: GITHUB_OAUTH_USER_URL
+              value: "{{ .Values.auth.github.userUrl }}"
+            - name: GITHUB_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: GITHUB_OAUTH_CLIENT_SECRET
+                  optional: true
+            - name: AGENTOS_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: AGENTOS_SESSION_SECRET
                   optional: true
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
