@@ -124,7 +124,6 @@ MCP server commands inherit the AgentOS environment variables, including `LITELL
 | `GITHUB_OAUTH_CLIENT_SECRET` | `""` | GitHub OAuth App client secret |
 | `GITHUB_OAUTH_CALLBACK_URL` | `""` | OAuth callback URL, for example `/auth/callback` on the public host |
 | `AGENTOS_SESSION_SECRET` | `""` | HMAC secret for signed Web UI session cookies |
-| `AGENTOS_COOKIE_SECURE` | `false` | Set secure cookies when serving over HTTPS |
 
 The token requires the following scopes:
 - `repo` — for private repositories

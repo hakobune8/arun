@@ -30,6 +30,7 @@ func TestRetryHandler_New(t *testing.T) {
 	h := NewRetryHandler(cfg)
 	if h == nil {
 		t.Fatal("expected non-nil handler")
+		return
 	}
 	if h.config.MaxRetries != 3 {
 		t.Errorf("expected MaxRetries=3, got %d", h.config.MaxRetries)

@@ -102,6 +102,7 @@ func TestDefaultTemplate(t *testing.T) {
 	tmpl := DefaultTemplate()
 	if tmpl == nil {
 		t.Fatal("DefaultTemplate returned nil")
+		return
 	}
 	if tmpl.Schema != "agentos/v1" {
 		t.Errorf("Schema = %q, want %q", tmpl.Schema, "agentos/v1")

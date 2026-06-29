@@ -28,6 +28,7 @@ func TestNewClient(t *testing.T) {
 	c := NewClient("owner", "repo")
 	if c == nil {
 		t.Fatal("expected non-nil client")
+		return
 	}
 	if c.RepoOwner != "owner" || c.RepoName != "repo" {
 		t.Errorf("expected owner/repo, got %s/%s", c.RepoOwner, c.RepoName)
@@ -47,6 +48,7 @@ func TestNewClient_NoToken(t *testing.T) {
 	c := NewClient("owner", "repo")
 	if c == nil {
 		t.Fatal("expected non-nil client")
+		return
 	}
 	if c.Token != "" {
 		t.Errorf("expected empty token, got %q", c.Token)

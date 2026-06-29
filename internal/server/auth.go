@@ -293,12 +293,12 @@ func signedCookie(name, value string, maxAge time.Duration, secret string) *http
 		MaxAge:   int(maxAge.Seconds()),
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   strings.EqualFold(os.Getenv("AGENTOS_COOKIE_SECURE"), "true"),
+		Secure:   true,
 	}
 }
 
 func expiredCookie(name string) *http.Cookie {
-	return &http.Cookie{Name: name, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode}
+	return &http.Cookie{Name: name, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: true}
 }
 
 func (s *Server) readSignedCookie(r *http.Request, name string) (string, error) {

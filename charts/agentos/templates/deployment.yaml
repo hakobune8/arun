@@ -90,8 +90,6 @@ spec:
                   optional: true
             - name: AGENTOS_AUTH_REQUIRED
               value: "{{ .Values.auth.required }}"
-            - name: AGENTOS_COOKIE_SECURE
-              value: "{{ .Values.auth.cookieSecure }}"
             - name: GITHUB_OAUTH_CLIENT_ID
               value: "{{ .Values.auth.github.clientId }}"
             - name: GITHUB_OAUTH_CALLBACK_URL

@@ -102,12 +102,12 @@ helm upgrade --install agentos ./charts/agentos \
   --set secrets.existingSecret=agentos-secrets \
   --set auth.required=true \
   --set auth.github.clientId=<oauth-client-id> \
-  --set auth.github.callbackUrl=https://agentos.example.com/auth/callback \
-  --set auth.cookieSecure=true
+  --set auth.github.callbackUrl=https://agentos.example.com/auth/callback
 ```
 
 When authentication is enabled, the Web UI shows the signed-in GitHub identity
-and work-triggering APIs require a valid signed session.
+and work-triggering APIs require a valid signed session. Session cookies are
+always marked `Secure`, so GitHub login should be served over HTTPS.
 
 ### LLM Presets
 

@@ -54,6 +54,8 @@ import (
 var staticFS embed.FS
 
 var runIDPattern = regexp.MustCompile(`^run-[0-9a-f]{16}$`)
+var githubRepoPathPattern = regexp.MustCompile(`^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$`)
+var gitRefPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$`)
 
 // Server serves the AgentOS web UI and API endpoints.
 type Server struct {
@@ -288,6 +290,10 @@ func (s *Server) handleRunDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := filepath.Base(r.URL.Path)
+	if !isValidRunID(id) {
+		http.Error(w, "invalid run id", http.StatusBadRequest)
+		return
+	}
 
 	runDir := filepath.Join(apphome.RunsDir(), id)
 
@@ -303,7 +309,10 @@ func (s *Server) handleRunDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, name := range artifacts {
-		path := filepath.Join(runDir, name)
+		path, err := runArtifactPath(runDir, name)
+		if err != nil {
+			continue
+		}
 		if data, err := os.ReadFile(path); err == nil {
 			result["artifacts"].(map[string]string)[name] = string(data)
 		}
@@ -703,24 +712,30 @@ func resolveOrchestrateRepo(repo, baseBranch string) (string, error) {
 	if repo == "" {
 		repo = "."
 	}
+	if err := validateGitRef(defaultBaseBranch(baseBranch)); err != nil {
+		return "", err
+	}
 
 	if cloneURL, ok := normalizeRemoteRepo(repo); ok {
 		return cloneRemoteRepo(cloneURL, defaultBaseBranch(baseBranch))
 	}
-
-	abs, err := filepath.Abs(repo)
-	if err != nil {
-		return "", fmt.Errorf("resolve repo path: %w", err)
+	if repo != "." {
+		return "", fmt.Errorf("repo must be a GitHub HTTPS URL, owner/repo, or .")
 	}
 
-	info, err := os.Stat(abs)
+	wd, err := os.Getwd()
 	if err != nil {
-		return "", fmt.Errorf("repo does not exist: %s", abs)
+		return "", fmt.Errorf("resolve current repo path: %w", err)
+	}
+
+	info, err := os.Stat(wd)
+	if err != nil {
+		return "", fmt.Errorf("repo does not exist: %s", wd)
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("repo is not a directory: %s", abs)
+		return "", fmt.Errorf("repo is not a directory: %s", wd)
 	}
-	return abs, nil
+	return wd, nil
 }
 
 func orchestrationsDir() string {
@@ -759,6 +774,21 @@ func isValidRunID(id string) bool {
 	return runIDPattern.MatchString(id)
 }
 
+func runArtifactPath(runDir, artifact string) (string, error) {
+	if strings.Contains(artifact, string(filepath.Separator)) || artifact == "." || artifact == ".." {
+		return "", fmt.Errorf("invalid artifact name")
+	}
+	cleanDir, err := filepath.Abs(runDir)
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(cleanDir, artifact)
+	if filepath.Dir(path) != cleanDir {
+		return "", fmt.Errorf("artifact escapes run directory")
+	}
+	return path, nil
+}
+
 func listOrchestrationRecords() ([]*orchestrationRecord, error) {
 	entries, err := os.ReadDir(orchestrationsDir())
 	if err != nil {
@@ -794,15 +824,20 @@ func normalizeRemoteRepo(repo string) (string, bool) {
 		return "", false
 	}
 
-	if strings.HasPrefix(repo, "git@") {
-		return repo, true
-	}
-	if strings.HasPrefix(repo, "http://") || strings.HasPrefix(repo, "https://") || strings.HasPrefix(repo, "file://") {
-		return repo, true
+	if strings.HasPrefix(repo, "https://") {
+		u, err := url.Parse(repo)
+		if err != nil || u.User != nil || !strings.EqualFold(u.Host, "github.com") || u.RawQuery != "" || u.Fragment != "" {
+			return "", false
+		}
+		path := strings.Trim(strings.TrimSuffix(u.EscapedPath(), ".git"), "/")
+		if !githubRepoPathPattern.MatchString(path) {
+			return "", false
+		}
+		return "https://github.com/" + path + ".git", true
 	}
 	if strings.Count(repo, "/") == 1 && !strings.HasPrefix(repo, ".") {
-		parts := splitRepo(repo)
-		if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
+		repo = strings.TrimSuffix(repo, ".git")
+		if githubRepoPathPattern.MatchString(repo) {
 			return "https://github.com/" + repo + ".git", true
 		}
 	}
@@ -840,8 +875,18 @@ func gitCloneArgs(cloneURL, baseBranch, dest string) []string {
 	if baseBranch != "" {
 		args = append(args, "--branch", baseBranch)
 	}
-	args = append(args, cloneURL, dest)
+	args = append(args, "--", cloneURL, dest)
 	return args
+}
+
+func validateGitRef(ref string) error {
+	if ref == "" {
+		return nil
+	}
+	if !gitRefPattern.MatchString(ref) || strings.Contains(ref, "..") || strings.Contains(ref, "@{") || strings.HasSuffix(ref, ".") || strings.HasSuffix(ref, "/") {
+		return fmt.Errorf("invalid git ref: %s", ref)
+	}
+	return nil
 }
 
 func gitCloneEnv(args []string) []string {

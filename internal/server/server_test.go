@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -22,6 +21,7 @@ func TestNewServer_ReturnsServer(t *testing.T) {
 	s := NewServer(0)
 	if s == nil {
 		t.Fatal("NewServer returned nil")
+		return
 	}
 	if s.server == nil {
 		t.Error("http.Server is nil")
@@ -221,15 +221,22 @@ func TestServer_CreateRun_ValidRequest(t *testing.T) {
 func TestServer_RunDetail_NotFound(t *testing.T) {
 	t.Parallel()
 	s := NewServer(0)
-	w := serveRequest(s, "GET", "/api/runs/nonexistent", nil)
+	w := serveRequest(s, "GET", "/api/runs/run-0123456789abcdef", nil)
 	assertStatus(t, w.Code, http.StatusOK) // returns empty artifacts, not error
 	var resp map[string]interface{}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if id, ok := resp["id"]; !ok || id != "nonexistent" {
-		t.Errorf("id = %v, want nonexistent", id)
+	if id, ok := resp["id"]; !ok || id != "run-0123456789abcdef" {
+		t.Errorf("id = %v, want run-0123456789abcdef", id)
 	}
+}
+
+func TestServer_RunDetail_RejectsInvalidID(t *testing.T) {
+	t.Parallel()
+	s := NewServer(0)
+	w := serveRequest(s, "GET", "/api/runs/not-a-run-id", nil)
+	assertStatus(t, w.Code, http.StatusBadRequest)
 }
 
 // --- GitHub ---
@@ -383,66 +390,28 @@ func TestServer_Orchestrate_InvalidRepo(t *testing.T) {
 	assertStatus(t, w.Code, http.StatusBadRequest)
 }
 
-func TestResolveOrchestrateRepo_LocalPath(t *testing.T) {
+func TestResolveOrchestrateRepo_CurrentDirectory(t *testing.T) {
+	t.Parallel()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := resolveOrchestrateRepo(".", "")
+	if err != nil {
+		t.Fatalf("resolveOrchestrateRepo() error = %v", err)
+	}
+	if got != wd {
+		t.Fatalf("repo = %q, want %q", got, wd)
+	}
+}
+
+func TestResolveOrchestrateRepo_RejectsLocalPath(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
 
-	got, err := resolveOrchestrateRepo(repo, "")
-	if err != nil {
-		t.Fatalf("resolveOrchestrateRepo() error = %v", err)
-	}
-	if got != repo {
-		t.Fatalf("repo = %q, want %q", got, repo)
-	}
-}
-
-func TestResolveOrchestrateRepo_RemoteFileClone(t *testing.T) {
-	requireGit(t)
-	root := t.TempDir()
-	t.Setenv("AGENTOS_HOME", shortTestDir(t))
-
-	source := filepath.Join(root, "source")
-	remote := filepath.Join(root, "remote.git")
-	if err := os.MkdirAll(source, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	runGitCommand(t, source, "init", "-b", "main")
-	if err := os.WriteFile(filepath.Join(source, "README.md"), []byte("# scenario\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	runGitCommand(t, source, "add", "README.md")
-	runGitCommand(t, source, "-c", "user.name=AgentOS", "-c", "user.email=agentos@example.local", "commit", "-m", "init")
-	runGitCommand(t, root, "clone", "--bare", source, remote)
-
-	got, err := resolveOrchestrateRepo("file://"+remote, "main")
-	if err != nil {
-		t.Fatalf("resolveOrchestrateRepo() error = %v", err)
-	}
-	if !strings.Contains(got, filepath.Join("workspaces", "orchestrate")) {
-		t.Fatalf("repo = %q, want cloned workspace under AGENTOS_HOME", got)
-	}
-	if _, err := os.Stat(filepath.Join(got, "README.md")); err != nil {
-		t.Fatalf("cloned README.md missing: %v", err)
-	}
-}
-
-func TestResolveOrchestrateRepo_EmptyRemoteFallsBackWithoutBranch(t *testing.T) {
-	requireGit(t)
-	root := t.TempDir()
-	t.Setenv("AGENTOS_HOME", shortTestDir(t))
-
-	remote := filepath.Join(root, "empty.git")
-	runGitCommand(t, root, "init", "--bare", remote)
-
-	got, err := resolveOrchestrateRepo("file://"+remote, "main")
-	if err != nil {
-		t.Fatalf("resolveOrchestrateRepo() error = %v", err)
-	}
-	if !strings.Contains(got, filepath.Join("workspaces", "orchestrate")) {
-		t.Fatalf("repo = %q, want cloned workspace under AGENTOS_HOME", got)
-	}
-	if _, err := os.Stat(filepath.Join(got, ".git")); err != nil {
-		t.Fatalf("cloned .git missing: %v", err)
+	if _, err := resolveOrchestrateRepo(repo, ""); err == nil {
+		t.Fatal("resolveOrchestrateRepo() error = nil, want local path rejection")
 	}
 }
 
@@ -486,12 +455,16 @@ func TestGitCloneEnv_SkipsNonGitHubRemote(t *testing.T) {
 func TestNormalizeRemoteRepo(t *testing.T) {
 	t.Parallel()
 	tests := map[string]string{
-		"kazyamaz200/agentos":               "https://github.com/kazyamaz200/agentos.git",
-		"https://github.com/owner/repo.git": "https://github.com/owner/repo.git",
-		"git@github.com:owner/repo.git":     "git@github.com:owner/repo.git",
-		"file:///tmp/repo.git":              "file:///tmp/repo.git",
-		"/workspace/scenario-repo":          "",
-		"relative-repo":                     "",
+		"kazyamaz200/agentos":                        "https://github.com/kazyamaz200/agentos.git",
+		"https://github.com/owner/repo.git":          "https://github.com/owner/repo.git",
+		"https://github.com/owner/repo":              "https://github.com/owner/repo.git",
+		"https://github.com/owner/repo.git?ref=main": "",
+		"https://example.com/owner/repo.git":         "",
+		"git@github.com:owner/repo.git":              "",
+		"file:///tmp/repo.git":                       "",
+		"/workspace/scenario-repo":                   "",
+		"relative-repo":                              "",
+		"owner/repo;touch-x":                         "",
 	}
 	for input, want := range tests {
 		got, ok := normalizeRemoteRepo(input)
@@ -503,6 +476,22 @@ func TestNormalizeRemoteRepo(t *testing.T) {
 		}
 		if !ok || got != want {
 			t.Fatalf("normalizeRemoteRepo(%q) = %q, %v, want %q, true", input, got, ok, want)
+		}
+	}
+}
+
+func TestValidateGitRef(t *testing.T) {
+	t.Parallel()
+	valid := []string{"main", "release/v1.0", "feature_1.2-rc"}
+	for _, ref := range valid {
+		if err := validateGitRef(ref); err != nil {
+			t.Fatalf("validateGitRef(%q) error = %v", ref, err)
+		}
+	}
+	invalid := []string{"", "../main", "main..next", "main@{1}", "main/", "-bad"}
+	for _, ref := range invalid[1:] {
+		if err := validateGitRef(ref); err == nil {
+			t.Fatalf("validateGitRef(%q) error = nil, want error", ref)
 		}
 	}
 }
@@ -660,23 +649,6 @@ func TestSplitRepo_MultiSlash(t *testing.T) {
 	parts := splitRepo("a/b/c")
 	if len(parts) != 2 || parts[0] != "a" || parts[1] != "b/c" {
 		t.Errorf("splitRepo = %v, want [a b/c]", parts)
-	}
-}
-
-func requireGit(t *testing.T) {
-	t.Helper()
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not available")
-	}
-}
-
-func runGitCommand(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %v failed: %v\n%s", args, err, out)
 	}
 }
 

@@ -37,6 +37,7 @@ func TestBaseAgent_New(t *testing.T) {
 	a := NewBaseAgent("test-agent", mock)
 	if a == nil {
 		t.Fatal("expected non-nil agent")
+		return
 	}
 	if a.name != "test-agent" {
 		t.Errorf("expected name 'test-agent', got %q", a.name)
@@ -96,6 +97,7 @@ func TestBaseAgent_ExecuteFailsAfterTestRetries(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("expected result")
+		return
 	}
 	if result.Success {
 		t.Fatal("result.Success = true, want false")
@@ -117,6 +119,7 @@ func TestBaseAgent_ExecuteFailsAfterLintRetries(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("expected result")
+		return
 	}
 	if result.Success {
 		t.Fatal("result.Success = true, want false")

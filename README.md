@@ -18,6 +18,8 @@ AgentOS is not another coding agent — it is the operating system layer for aut
 Designed for Kubernetes deployment. Manage runs, review diffs, and
 search across agents through the [Web UI](docs/api.md).
 
+![AgentOS Web UI orchestrates screen](docs/images/agentos-webui-orchestrates.jpg)
+
 ```bash
 helm repo add agentos https://kazyamaz200.github.io/agentos
 helm install agentos agentos/agentos \
@@ -216,6 +218,18 @@ pr_body.md        # Pull request body draft
 | `AGENTOS_MODEL_EMBEDDING` | `text-embedding-ada-002` | Model for embeddings |
 | `QDRANT_URL` | `http://localhost:6333` | Qdrant vector database URL |
 | `QDRANT_API_KEY` | - | Qdrant API key |
+| `AGENTOS_AUTH_REQUIRED` | `false` | Require GitHub login for work-triggering APIs |
+| `AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT` | `10m` | Timeout for each orchestration subtask |
+| `GITHUB_OAUTH_CLIENT_ID` | - | GitHub OAuth App client ID |
+| `GITHUB_OAUTH_CLIENT_SECRET` | - | GitHub OAuth App client secret |
+| `GITHUB_OAUTH_CALLBACK_URL` | - | GitHub OAuth callback URL |
+
+## Release Notes
+
+The Helm chart workflow skips already published chart versions. Before a
+release that changes `charts/agentos/**`, update both `version` and
+`appVersion` in `charts/agentos/Chart.yaml` intentionally so chart-releaser can
+publish a new immutable chart release.
 
 ## Roadmap
 

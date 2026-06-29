@@ -30,6 +30,7 @@ func TestNewReviewer(t *testing.T) {
 	r := NewReviewer(mock)
 	if r == nil {
 		t.Fatal("expected non-nil reviewer")
+		return
 	}
 	if r.llm != mock {
 		t.Error("expected llm field to be set")

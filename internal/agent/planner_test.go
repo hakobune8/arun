@@ -42,6 +42,7 @@ func TestNewPlanner(t *testing.T) {
 	p := NewPlanner(mock)
 	if p == nil {
 		t.Fatal("expected non-nil planner")
+		return
 	}
 	if p.llm != mock {
 		t.Error("expected llm field to be set")
