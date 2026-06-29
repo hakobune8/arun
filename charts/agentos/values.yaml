@@ -1,0 +1,64 @@
+# Default values for agentos Helm chart.
+# This is a YAML-formatted file.
+
+# Number of replicas
+replicaCount: 1
+
+# Container image
+image:
+  repository: ghcr.io/kazyamaz200/agentos
+  tag: latest
+  pullPolicy: Always
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: agentos.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Resource limits
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Persistent storage for run artifacts
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: ""
+  accessMode: ReadWriteOnce
+
+# Environment variables
+env:
+  # LiteLLM proxy URL
+  LITELLM_BASE_URL: "http://litellm:4000"
+  LITELLM_API_KEY: "sk-local"
+  AGENTOS_MODEL_CODER: "coder"
+  # Qdrant vector database (optional — falls back to local)
+  QDRANT_URL: ""
+  QDRANT_API_KEY: ""
+  # Server port
+  AGENTOS_PORT: "8080"
+  # GitHub token (optional, for PR operations)
+  GITHUB_TOKEN: ""
+
+# Probes
+probe:
+  enabled: true
+  initialDelaySeconds: 5
+  periodSeconds: 10

@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agentos.fullname" . }}
+  labels:
+    {{- include "agentos.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "agentos.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "agentos.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - serve
+            - --port
+            - "{{ .Values.env.AGENTOS_PORT }}"
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          {{- if .Values.probe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: {{ .Values.probe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probe.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: {{ .Values.probe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probe.periodSeconds }}
+          {{- end }}
+          env:
+            - name: LITELLM_BASE_URL
+              value: "{{ .Values.env.LITELLM_BASE_URL }}"
+            - name: LITELLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "agentos.fullname" . }}
+                  key: LITELLM_API_KEY
+                  optional: true
+            - name: AGENTOS_MODEL_CODER
+              value: "{{ .Values.env.AGENTOS_MODEL_CODER }}"
+            - name: QDRANT_URL
+              value: "{{ .Values.env.QDRANT_URL }}"
+            - name: QDRANT_API_KEY
+              value: "{{ .Values.env.QDRANT_API_KEY }}"
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "agentos.fullname" . }}
+                  key: GITHUB_TOKEN
+                  optional: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: runs
+              mountPath: /home/agentos/.agentos
+      volumes:
+        - name: runs
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "agentos.fullname" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
