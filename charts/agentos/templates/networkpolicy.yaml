@@ -1,4 +1,6 @@
-{{- if .Values.networkPolicy.enabled }}
+{{- $networkPolicy := default dict (get .Values "networkPolicy") }}
+{{- if default false (get $networkPolicy "enabled") }}
+{{- $ingressCIDRs := default (list) (get $networkPolicy "ingressCIDRs") }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -13,8 +15,8 @@ spec:
     - Ingress
   ingress:
     - from:
-        {{- if .Values.networkPolicy.ingressCIDRs }}
-        {{- range .Values.networkPolicy.ingressCIDRs }}
+        {{- if $ingressCIDRs }}
+        {{- range $ingressCIDRs }}
         - ipBlock:
             cidr: {{ . | quote }}
         {{- end }}
