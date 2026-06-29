@@ -19,11 +19,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
-	"github.com/kazyamaz200/agentos/internal/factory"
 	"github.com/kazyamaz200/agentos/internal/llm"
+	"github.com/kazyamaz200/agentos/internal/runtime"
+	"github.com/kazyamaz200/agentos/internal/sandbox"
+	"github.com/kazyamaz200/agentos/internal/task"
 )
 
 // Strategy defines the execution strategy for multi-agent coordination.
@@ -38,21 +39,42 @@ const (
 
 // Orchestrator coordinates multiple agents to execute a task.
 type Orchestrator struct {
-	factory  *factory.Factory
-	llm      llm.LLMClient
-	agents   []*factory.AgentInstance
-	strategy Strategy
+	llm       llm.LLMClient
+	sandbox   sandbox.Sandbox
+	agents    map[string]runtime.Agent
+	agentDefs []agentInfo
+	strategy  Strategy
+	cfg       *runtime.Config
 }
 
-// NewOrchestrator creates a new Orchestrator with the given factory and agents.
-func NewOrchestrator(f *factory.Factory, agents []*factory.AgentInstance) *Orchestrator {
-	llmClient := llm.NewLiteLLMClient(llm.DefaultConfig())
-	return &Orchestrator{
-		factory:  f,
-		llm:      llmClient,
-		agents:   agents,
-		strategy: StrategySequential,
+type agentInfo struct {
+	name        string
+	description string
+}
+
+// NewOrchestrator creates a new Orchestrator with the given llm client, sandbox, and agents.
+func NewOrchestrator(llmClient llm.LLMClient, sb sandbox.Sandbox, agents map[string]runtime.Agent, cfg *runtime.Config) *Orchestrator {
+	var infos []agentInfo
+	for name, a := range agents {
+		infos = append(infos, agentInfo{name: name, description: a.Name()})
+		_ = a
 	}
+	return &Orchestrator{
+		llm:       llmClient,
+		sandbox:   sb,
+		agents:    agents,
+		agentDefs: infos,
+		strategy:  StrategySequential,
+		cfg:       cfg,
+	}
+}
+
+// DefaultAgent returns the first registered agent, used as fallback.
+func (o *Orchestrator) DefaultAgent() runtime.Agent {
+	for _, a := range o.agents {
+		return a
+	}
+	return nil
 }
 
 // SetStrategy sets the execution strategy for the orchestrator.
@@ -62,24 +84,25 @@ func (o *Orchestrator) SetStrategy(s Strategy) {
 
 // TaskPlan represents a breakdown of a task into subtasks.
 type TaskPlan struct {
-	Description string
-	Subtasks    []Subtask
+	Description string    `json:"description"`
+	Subtasks    []Subtask `json:"subtasks"`
 }
 
 // Subtask represents a single unit of work within a task plan.
 type Subtask struct {
-	ID          string
-	Description string
-	AgentName   string
-	Deps        []string
+	ID          string   `json:"id"`
+	Description string   `json:"description"`
+	AgentName   string   `json:"agent_type"`
+	Deps        []string `json:"dependencies"`
 }
 
 // SubtaskResult contains the result of executing a subtask.
 type SubtaskResult struct {
-	SubtaskID string
-	Output    string
-	Error     string
-	Success   bool
+	SubtaskID  string `json:"subtask_id"`
+	Output     string `json:"output"`
+	Diff       string `json:"diff,omitempty"`
+	Error      string `json:"error,omitempty"`
+	Success    bool   `json:"success"`
 }
 
 // Plan uses an LLM to break a task description into a plan of subtasks.
@@ -95,7 +118,7 @@ Output ONLY valid JSON with this structure:
     {
       "id": "step-1",
       "description": "what to do",
-      "agent_type": "coder | reviewer | tester",
+      "agent_type": "agent name from the list",
       "dependencies": []
     }
   ]
@@ -103,8 +126,8 @@ Output ONLY valid JSON with this structure:
 	}
 
 	agentsInfo := ""
-	for _, a := range o.agents {
-		agentsInfo += fmt.Sprintf("- %s (role: %s, tools: %v)\n", a.Def.Name, a.Def.Role, a.Def.Tools)
+	for _, info := range o.agentDefs {
+		agentsInfo += fmt.Sprintf("- %s: %s\n", info.name, info.description)
 	}
 
 	userMsg := llm.Message{
@@ -149,48 +172,72 @@ func (o *Orchestrator) Execute(ctx context.Context, plan *TaskPlan) ([]SubtaskRe
 
 	switch o.strategy {
 	case StrategySequential:
+		sharedCtx := ""
 		for _, subtask := range plan.Subtasks {
-			result := o.executeSubtask(ctx, subtask)
+			result := o.executeSubtask(ctx, subtask, sharedCtx)
 			results = append(results, result)
+			if result.Diff != "" {
+				sharedCtx = result.Diff
+			}
 		}
 	case StrategyParallel:
-		resultCh := make(chan SubtaskResult, len(plan.Subtasks))
-		for _, subtask := range plan.Subtasks {
+		type subResult struct {
+			result SubtaskResult
+			index  int
+		}
+		ch := make(chan subResult, len(plan.Subtasks))
+		for i, subtask := range plan.Subtasks {
 			s := subtask
+			idx := i
 			go func() {
-				resultCh <- o.executeSubtask(ctx, s)
+				ch <- subResult{o.executeSubtask(ctx, s, ""), idx}
 			}()
 		}
+		results = make([]SubtaskResult, len(plan.Subtasks))
 		for range plan.Subtasks {
-			results = append(results, <-resultCh)
+			sr := <-ch
+			results[sr.index] = sr.result
 		}
 	}
 
 	return results, nil
 }
 
-func (o *Orchestrator) executeSubtask(ctx context.Context, subtask Subtask) SubtaskResult {
-	agent := o.findAgent(subtask.AgentName)
-	if agent == nil {
-		agent = o.agents[0]
+func (o *Orchestrator) executeSubtask(ctx context.Context, subtask Subtask, sharedCtx string) SubtaskResult {
+	agt, ok := o.agents[subtask.AgentName]
+	if !ok {
+		agt = o.DefaultAgent()
+	}
+	if agt == nil {
+		return SubtaskResult{
+			SubtaskID: subtask.ID,
+			Success:   false,
+			Error:     "no agent available",
+		}
 	}
 
-	fmt.Fprintf(os.Stdout, "  [%s] %s\n", agent.Def.Name, subtask.Description)
+	tk := &task.Task{
+		ID:          subtask.ID,
+		Title:       subtask.Description,
+		Description: subtask.Description,
+		Branch:      fmt.Sprintf("agentos/%s", subtask.ID),
+	}
+
+	rt := runtime.NewRuntime(o.llm, nil, o.sandbox, o.cfg, agt)
+	if err := rt.Run(ctx, tk); err != nil {
+		return SubtaskResult{
+			SubtaskID: subtask.ID,
+			Success:   false,
+			Error:     err.Error(),
+		}
+	}
 
 	return SubtaskResult{
 		SubtaskID: subtask.ID,
 		Success:   true,
-		Output:    fmt.Sprintf("Executed by %s: %s", agent.Def.Name, subtask.Description),
+		Output:    fmt.Sprintf("Executed by %s: %s", agt.Name(), subtask.Description),
+		Diff:      sharedCtx,
 	}
-}
-
-func (o *Orchestrator) findAgent(name string) *factory.AgentInstance {
-	for _, a := range o.agents {
-		if a.Def.Name == name || a.Def.Role == name {
-			return a
-		}
-	}
-	return nil
 }
 
 // MergeResults combines subtask results into a formatted report.
@@ -198,11 +245,11 @@ func (o *Orchestrator) MergeResults(results []SubtaskResult) string {
 	var b strings.Builder
 	b.WriteString("# Multi-Agent Execution Results\n\n")
 	for _, r := range results {
-		status := "✅"
+		status := "PASS"
 		if !r.Success {
-			status = "❌"
+			status = "FAIL"
 		}
-		b.WriteString(fmt.Sprintf("## %s %s\n", status, r.SubtaskID))
+		b.WriteString(fmt.Sprintf("## [%s] %s\n", status, r.SubtaskID))
 		if r.Output != "" {
 			b.WriteString(fmt.Sprintf("%s\n", r.Output))
 		}
@@ -212,9 +259,4 @@ func (o *Orchestrator) MergeResults(results []SubtaskResult) string {
 		b.WriteString("\n")
 	}
 	return b.String()
-}
-
-// Agents returns the list of agents managed by the orchestrator.
-func (o *Orchestrator) Agents() []*factory.AgentInstance {
-	return o.agents
 }
