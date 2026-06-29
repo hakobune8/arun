@@ -100,8 +100,8 @@ func TestStore_Search_ReturnsMatchingGuidelines(t *testing.T) {
 	s := NewStore(vs, emb)
 	ctx := context.Background()
 
-	s.Add(ctx, &Guideline{ID: "gl-1", Title: "One", Rule: "Rule one"})  //nolint:errcheck // test helper, error checked via search
-	s.Add(ctx, &Guideline{ID: "gl-2", Title: "Two", Rule: "Rule two"})  //nolint:errcheck // test helper, error checked via search
+	s.Add(ctx, &Guideline{ID: "gl-1", Title: "One", Rule: "Rule one"}) //nolint:errcheck // test helper, error checked via search
+	s.Add(ctx, &Guideline{ID: "gl-2", Title: "Two", Rule: "Rule two"}) //nolint:errcheck // test helper, error checked via search
 
 	results, err := s.Search(ctx, "query", 10)
 	if err != nil {

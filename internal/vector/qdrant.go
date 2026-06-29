@@ -126,8 +126,8 @@ func (c *QdrantClient) Upsert(ctx context.Context, collection string, points []P
 
 func (c *QdrantClient) Search(ctx context.Context, collection string, vector []float32, limit int) ([]Point, error) {
 	body := map[string]interface{}{
-		"vector": vector,
-		"limit":  limit,
+		"vector":       vector,
+		"limit":        limit,
 		"with_payload": true,
 	}
 

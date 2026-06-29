@@ -271,10 +271,10 @@ func TestClient_CreatePR(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck // test helper
-			"number":  1,
-			"title":   "Test PR",
+			"number":   1,
+			"title":    "Test PR",
 			"html_url": "https://github.com/owner/repo/pull/1",
-			"state":   "open",
+			"state":    "open",
 		})
 	}))
 	defer ts.Close()
@@ -341,12 +341,12 @@ func TestClient_ListPRs(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode([]map[string]interface{}{ //nolint:errcheck // test helper
 			{
-				"number":  1,
-				"title":   "First PR",
+				"number":   1,
+				"title":    "First PR",
 				"html_url": "https://github.com/owner/repo/pull/1",
-				"state":   "open",
-				"head":    map[string]interface{}{"ref": "feature-a"},
-				"base":    map[string]interface{}{"ref": "main"},
+				"state":    "open",
+				"head":     map[string]interface{}{"ref": "feature-a"},
+				"base":     map[string]interface{}{"ref": "main"},
 			},
 		})
 	}))
@@ -380,10 +380,10 @@ func TestClient_ListIssues(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode([]map[string]interface{}{ //nolint:errcheck // test helper
 			{
-				"number":  42,
-				"title":   "Bug report",
-				"body":    "Something broke",
-				"state":   "open",
+				"number":   42,
+				"title":    "Bug report",
+				"body":     "Something broke",
+				"state":    "open",
 				"html_url": "https://github.com/owner/repo/issues/42",
 			},
 		})
@@ -441,10 +441,10 @@ func TestClient_GetIssue(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck // test helper
-			"number":  7,
-			"title":   "Feature request",
-			"body":    "Please add feature",
-			"state":   "open",
+			"number":   7,
+			"title":    "Feature request",
+			"body":     "Please add feature",
+			"state":    "open",
 			"html_url": "https://github.com/owner/repo/issues/7",
 		})
 	}))

@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/kazyamaz200/agentos/internal/apphome"
 )
 
 // Sandbox defines the interface for execution isolation.
@@ -88,15 +90,11 @@ func (s *LocalSandbox) Type() string { return "local" }
 // RootDir returns the sandbox's root directory path.
 func (s *LocalSandbox) RootDir() string { return s.rootDir }
 
-// PrepareRun creates the run directory structure under ~/.agentos/runs for
+// PrepareRun creates the run directory structure under AGENTOS_HOME/runs for
 // the given taskID.
 func (s *LocalSandbox) PrepareRun(taskID string) error {
 	s.TaskID = taskID
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		homeDir = "."
-	}
-	s.RunsDir = filepath.Join(homeDir, ".agentos", "runs")
+	s.RunsDir = apphome.RunsDir()
 	s.RunDir = filepath.Join(s.RunsDir, taskID)
 
 	if err := os.MkdirAll(s.RunDir, 0o755); err != nil {

@@ -13,6 +13,8 @@ cover.html
 
 # AgentOS runtime data
 .agentos/
+run.log
+run_state.json
 
 # Environment files (but keep .env.example for documentation)
 .env

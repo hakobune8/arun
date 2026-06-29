@@ -45,12 +45,12 @@ type PullRequest struct {
 
 // CheckRun represents a GitHub check run.
 type CheckRun struct {
-	ID          int       `json:"id"`
-	Name        string    `json:"name"`
-	Status      string    `json:"status"`
-	Conclusion  string    `json:"conclusion"`
-	HTMLURL     string    `json:"html_url"`
-	CompletedAt time.Time `json:"completed_at"`
+	ID          int         `json:"id"`
+	Name        string      `json:"name"`
+	Status      string      `json:"status"`
+	Conclusion  string      `json:"conclusion"`
+	HTMLURL     string      `json:"html_url"`
+	CompletedAt time.Time   `json:"completed_at"`
 	Output      CheckOutput `json:"output"`
 }
 
@@ -63,10 +63,10 @@ type CheckOutput struct {
 
 // CheckSuite represents a GitHub check suite.
 type CheckSuite struct {
-	ID           int    `json:"id"`
-	Status       string `json:"status"`
-	Conclusion   string `json:"conclusion"`
-	HeadSHA      string `json:"head_sha"`
+	ID         int    `json:"id"`
+	Status     string `json:"status"`
+	Conclusion string `json:"conclusion"`
+	HeadSHA    string `json:"head_sha"`
 }
 
 // Repo identifies a GitHub repository.

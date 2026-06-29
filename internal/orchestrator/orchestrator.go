@@ -98,11 +98,11 @@ type Subtask struct {
 
 // SubtaskResult contains the result of executing a subtask.
 type SubtaskResult struct {
-	SubtaskID  string `json:"subtask_id"`
-	Output     string `json:"output"`
-	Diff       string `json:"diff,omitempty"`
-	Error      string `json:"error,omitempty"`
-	Success    bool   `json:"success"`
+	SubtaskID string `json:"subtask_id"`
+	Output    string `json:"output"`
+	Diff      string `json:"diff,omitempty"`
+	Error     string `json:"error,omitempty"`
+	Success   bool   `json:"success"`
 }
 
 // Plan uses an LLM to break a task description into a plan of subtasks.

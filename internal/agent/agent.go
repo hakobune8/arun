@@ -18,6 +18,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/kazyamaz200/agentos/internal/llm"
@@ -157,43 +158,23 @@ func (a *BaseAgent) Execute(ctx *runtime.RunContext, plan *runtime.Plan) (*runti
 	if testCmd == "" {
 		testCmd = "go test ./..."
 	}
+	testPassed := true
 	if testTool, ok := ctx.Registry.Get("test"); ok {
-		ctx.Logger.Log("info", "tester", "running tests", map[string]string{"command": testCmd}) //nolint:errcheck // best-effort log
-		output := testTool.Run(ctx.Context, tools.ToolInput{"command": testCmd})
-		testLog := ""
-		if data, ok := output.Data.(map[string]string); ok {
-			testLog = data["stdout"] + "\n" + data["stderr"]
-		}
-		if !output.Success {
-			ctx.Logger.Log("warn", "tester", "tests failed", map[string]string{"output": testLog, "error": output.Error}) //nolint:errcheck // best-effort log
-		} else {
-			ctx.Logger.Log("info", "tester", "tests passed", nil) //nolint:errcheck // best-effort log
-		}
-		result.TestLog = testLog
+		result.TestLog, testPassed = a.runValidation(ctx, testTool, testCmd, "tester", "tests")
 	}
 
 	// Lint
 	lintCmd := ctx.Profile.Commands.Lint
+	lintPassed := true
 	if lintCmd != "" {
 		if shellTool, ok := ctx.Registry.Get("shell"); ok {
-			ctx.Logger.Log("info", "linter", "running lint", map[string]string{"command": lintCmd}) //nolint:errcheck // best-effort log
-			output := shellTool.Run(ctx.Context, tools.ToolInput{"command": lintCmd})
-			lintLog := ""
-			if data, ok := output.Data.(map[string]string); ok {
-				lintLog = data["stdout"] + "\n" + data["stderr"]
-			}
-			if !output.Success {
-				ctx.Logger.Log("warn", "linter", "lint failed", map[string]string{"output": lintLog, "error": output.Error}) //nolint:errcheck // best-effort log
-			} else {
-				ctx.Logger.Log("info", "linter", "lint passed", nil) //nolint:errcheck // best-effort log
-			}
-			result.LintLog = lintLog
+			result.LintLog, lintPassed = a.runValidation(ctx, shellTool, lintCmd, "linter", "lint")
 		}
 	}
 
 	// Retry loop
 	maxRetries := ctx.MaxRetries
-	for retryCount := 0; (result.TestLog != "" || result.LintLog != "") && retryCount < maxRetries; retryCount++ {
+	for retryCount := 0; (!testPassed || !lintPassed) && retryCount < maxRetries; retryCount++ {
 		result.Retries = retryCount + 1
 		ctx.Logger.Log("info", "runtime", "retry attempt", map[string]interface{}{ //nolint:errcheck // best-effort log
 			"attempt": retryCount + 1,
@@ -272,49 +253,57 @@ func (a *BaseAgent) Execute(ctx *runtime.RunContext, plan *runtime.Plan) (*runti
 
 			stepResult.Duration = time.Since(stepStart)
 			result.StepResults = append(result.StepResults, stepResult)
-		ctx.Logger.LogTool(step.Action, step, stepResult, stepResult.Duration) //nolint:errcheck // best-effort log
-	}
+			ctx.Logger.LogTool(step.Action, step, stepResult, stepResult.Duration) //nolint:errcheck // best-effort log
+		}
 
-	diffContent, err := gitTool.Diff(ctx.Context)
-	if err == nil {
-		result.Diff = diffContent
-	}
+		diffContent, err := gitTool.Diff(ctx.Context)
+		if err == nil {
+			result.Diff = diffContent
+		}
 
-	// Re-run tests
+		// Re-run tests
 		if testTool, ok := ctx.Registry.Get("test"); ok {
-			output := testTool.Run(ctx.Context, tools.ToolInput{"command": testCmd})
-			testLog := ""
-			if data, ok := output.Data.(map[string]string); ok {
-				testLog = data["stdout"] + "\n" + data["stderr"]
-			}
-			result.TestLog = testLog
-			if !output.Success {
-				ctx.Logger.Log("warn", "tester", "tests failed on retry", map[string]string{"output": testLog, "error": output.Error}) //nolint:errcheck // best-effort log
-			} else {
-				ctx.Logger.Log("info", "tester", "tests passed on retry", nil) //nolint:errcheck // best-effort log
-			}
+			result.TestLog, testPassed = a.runValidation(ctx, testTool, testCmd, "tester", "tests")
 		}
 
 		// Re-run lint
 		if lintCmd != "" {
 			if shellTool, ok := ctx.Registry.Get("shell"); ok {
-				output := shellTool.Run(ctx.Context, tools.ToolInput{"command": lintCmd})
-				lintLog := ""
-				if data, ok := output.Data.(map[string]string); ok {
-					lintLog = data["stdout"] + "\n" + data["stderr"]
-				}
-				result.LintLog = lintLog
-				if !output.Success {
-					ctx.Logger.Log("warn", "linter", "lint failed on retry", map[string]string{"output": lintLog, "error": output.Error}) //nolint:errcheck // best-effort log
-				} else {
-					ctx.Logger.Log("info", "linter", "lint passed on retry", nil) //nolint:errcheck // best-effort log
-				}
+				result.LintLog, lintPassed = a.runValidation(ctx, shellTool, lintCmd, "linter", "lint")
 			}
 		}
 	}
 
+	if !testPassed || !lintPassed {
+		var failed []string
+		if !testPassed {
+			failed = append(failed, "tests")
+		}
+		if !lintPassed {
+			failed = append(failed, "lint")
+		}
+		result.Success = false
+		result.Error = fmt.Sprintf("validation failed after %d retries: %s", result.Retries, strings.Join(failed, ", "))
+		return result, fmt.Errorf("%s", result.Error)
+	}
+
 	result.Success = true
 	return result, nil
+}
+
+func (a *BaseAgent) runValidation(ctx *runtime.RunContext, tool tools.Tool, command, component, label string) (string, bool) {
+	ctx.Logger.Log("info", component, "running "+label, map[string]string{"command": command}) //nolint:errcheck // best-effort log
+	output := tool.Run(ctx.Context, tools.ToolInput{"command": command})
+	log := ""
+	if data, ok := output.Data.(map[string]string); ok {
+		log = strings.TrimSpace(data["stdout"] + "\n" + data["stderr"])
+	}
+	if !output.Success {
+		ctx.Logger.Log("warn", component, label+" failed", map[string]string{"output": log, "error": output.Error}) //nolint:errcheck // best-effort log
+		return log, false
+	}
+	ctx.Logger.Log("info", component, label+" passed", nil) //nolint:errcheck // best-effort log
+	return log, true
 }
 
 // Review sends the result diff to the LLM for structured review.

@@ -19,8 +19,10 @@ package memory
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"time"
 
+	"github.com/kazyamaz200/agentos/internal/apphome"
 	"github.com/kazyamaz200/agentos/internal/embedding"
 	"github.com/kazyamaz200/agentos/internal/vector"
 )
@@ -52,7 +54,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Backend: "json",
-		Path:    ".agentos/memory.jsonl",
+		Path:    filepath.Join(apphome.Dir(), "memory.jsonl"),
 	}
 }
 
@@ -76,7 +78,7 @@ func New(ctx context.Context, cfg Config, vs vector.VectorStore, embed embedding
 	case "json":
 		path := cfg.Path
 		if path == "" {
-			path = ".agentos/memory.jsonl"
+			path = filepath.Join(apphome.Dir(), "memory.jsonl")
 		}
 		return NewJSONStore(path)
 
@@ -90,6 +92,7 @@ func New(ctx context.Context, cfg Config, vs vector.VectorStore, embed embedding
 
 // MemoryStore is a type alias for backward compatibility.
 // Deprecated: Use Store interface instead.
+//
 //nolint:revive // stutter is acceptable for backward compatibility
 type MemoryStore = VectorStore
 

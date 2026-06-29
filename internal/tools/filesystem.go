@@ -19,6 +19,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/kazyamaz200/agentos/internal/safety"
 )
 
 // ReadFileTool reads file contents from within the configured workspace.
@@ -41,7 +44,14 @@ func (t *ReadFileTool) Run(ctx context.Context, input ToolInput) ToolOutput {
 		return ToolOutput{Success: false, Error: "file is required"}
 	}
 
-	fullPath := filepath.Join(t.Workspace, filePath)
+	fullPath, err := resolveWorkspacePath(t.Workspace, filePath)
+	if err != nil {
+		return ToolOutput{Success: false, Error: err.Error()}
+	}
+	if safety.NewSecretDetector().IsSecretFile(fullPath) {
+		return ToolOutput{Success: false, Error: "refusing to read secret file"}
+	}
+
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		return ToolOutput{Success: false, Error: fmt.Sprintf("read file: %v", err)}
@@ -74,7 +84,14 @@ func (t *WriteFileTool) Run(ctx context.Context, input ToolInput) ToolOutput {
 		return ToolOutput{Success: false, Error: "content is required"}
 	}
 
-	fullPath := filepath.Join(t.Workspace, filePath)
+	fullPath, err := resolveWorkspacePath(t.Workspace, filePath)
+	if err != nil {
+		return ToolOutput{Success: false, Error: err.Error()}
+	}
+	if safety.NewSecretDetector().IsSecretFile(fullPath) {
+		return ToolOutput{Success: false, Error: "refusing to write secret file"}
+	}
+
 	dir := filepath.Dir(fullPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return ToolOutput{Success: false, Error: fmt.Sprintf("create dir: %v", err)}
@@ -85,4 +102,31 @@ func (t *WriteFileTool) Run(ctx context.Context, input ToolInput) ToolOutput {
 	}
 
 	return ToolOutput{Success: true}
+}
+
+func resolveWorkspacePath(workspace, filePath string) (string, error) {
+	if workspace == "" {
+		workspace = "."
+	}
+	workspaceAbs, err := filepath.Abs(workspace)
+	if err != nil {
+		return "", fmt.Errorf("resolve workspace: %w", err)
+	}
+	if filepath.IsAbs(filePath) {
+		return "", fmt.Errorf("absolute paths are not allowed: %s", filePath)
+	}
+
+	fullPath, err := filepath.Abs(filepath.Join(workspaceAbs, filepath.Clean(filePath)))
+	if err != nil {
+		return "", fmt.Errorf("resolve file: %w", err)
+	}
+
+	rel, err := filepath.Rel(workspaceAbs, fullPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve relative path: %w", err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path escapes workspace: %s", filePath)
+	}
+	return fullPath, nil
 }

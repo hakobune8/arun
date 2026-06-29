@@ -42,7 +42,7 @@
 
 ### Added
 - MCP client (JSON-RPC stdio) with tool registration
-- Docker sandbox for isolated agent execution
+- Docker sandbox interface stub for future isolated execution
 - Web UI dashboard (`agentos serve`)
 - GitHub CI checks integration
 - CI Fix Agent for automated CI failure resolution

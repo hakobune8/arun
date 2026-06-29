@@ -144,8 +144,8 @@ func TestLogger_AppendsToExistingFile(t *testing.T) {
 	dir := t.TempDir()
 	logger := NewLogger(dir)
 
-	logger.Log("info", "c1", "msg1", nil)  //nolint:errcheck // test helper, error checked via read // test helper, error checked via read
-	logger.Log("info", "c2", "msg2", nil)  //nolint:errcheck // test helper, error checked via read // test helper, error checked via read
+	logger.Log("info", "c1", "msg1", nil) //nolint:errcheck // test helper, error checked via read // test helper, error checked via read
+	logger.Log("info", "c2", "msg2", nil) //nolint:errcheck // test helper, error checked via read // test helper, error checked via read
 
 	data, _ := os.ReadFile(filepath.Join(dir, "run.log"))
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
@@ -160,8 +160,8 @@ func TestLogger_MultipleLogFiles(t *testing.T) {
 	dir := t.TempDir()
 	logger := NewLogger(dir)
 
-	logger.Log("info", "c", "m", nil)                      //nolint:errcheck // test helper, error checked via read // test helper, error checked via read
-	logger.LogTool("tool", "in", "out", time.Second)        //nolint:errcheck // test helper, error checked via read
+	logger.Log("info", "c", "m", nil)                        //nolint:errcheck // test helper, error checked via read // test helper, error checked via read
+	logger.LogTool("tool", "in", "out", time.Second)         //nolint:errcheck // test helper, error checked via read
 	logger.LogLLM("req", "resp", "model", time.Second, 1, 2) //nolint:errcheck // test helper, error checked via read
 
 	entries, _ := os.ReadDir(dir)

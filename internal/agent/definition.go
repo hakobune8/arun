@@ -58,10 +58,10 @@ const CurrentSchemaVersion = "agentos.io/v1"
 //	  limits:
 //	    maxRetries: 3
 type Definition struct {
-	APIVersion string            `yaml:"apiVersion"`
-	Kind       string            `yaml:"kind"`
+	APIVersion string             `yaml:"apiVersion"`
+	Kind       string             `yaml:"kind"`
 	Metadata   DefinitionMetadata `yaml:"metadata"`
-	Spec       DefinitionSpec    `yaml:"spec"`
+	Spec       DefinitionSpec     `yaml:"spec"`
 }
 
 // DefinitionMetadata holds identifying information about the agent.
@@ -72,11 +72,11 @@ type DefinitionMetadata struct {
 
 // DefinitionSpec holds the full agent configuration.
 type DefinitionSpec struct {
-	LLM      LLMConfig        `yaml:"llm"`
-	Tools    ToolsConfig      `yaml:"tools"`
-	Safety   SafetyConfig     `yaml:"safety,omitempty"`
-	Commands CommandsConfig   `yaml:"commands,omitempty"`
-	Limits   LimitsConfig     `yaml:"limits,omitempty"`
+	LLM      LLMConfig      `yaml:"llm"`
+	Tools    ToolsConfig    `yaml:"tools"`
+	Safety   SafetyConfig   `yaml:"safety,omitempty"`
+	Commands CommandsConfig `yaml:"commands,omitempty"`
+	Limits   LimitsConfig   `yaml:"limits,omitempty"`
 }
 
 // LLMConfig configures the language model provider.
@@ -98,8 +98,8 @@ type SafetyConfig struct {
 
 // CommandsConfig specifies custom commands for the agent.
 type CommandsConfig struct {
-	Test string `yaml:"test,omitempty"`
-	Lint string `yaml:"lint,omitempty"`
+	Test  string `yaml:"test,omitempty"`
+	Lint  string `yaml:"lint,omitempty"`
 	Build string `yaml:"build,omitempty"`
 }
 

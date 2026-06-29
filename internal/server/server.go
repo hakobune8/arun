@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/kazyamaz200/agentos/internal/agent"
+	"github.com/kazyamaz200/agentos/internal/apphome"
 	"github.com/kazyamaz200/agentos/internal/embedding"
 	agentosgh "github.com/kazyamaz200/agentos/internal/github"
 	"github.com/kazyamaz200/agentos/internal/llm"
@@ -47,12 +48,12 @@ var staticFS embed.FS
 
 // Server serves the AgentOS web UI and API endpoints.
 type Server struct {
-	port      int
-	server    *http.Server
-	search    *search.Service
-	agentReg  *agent.Registry
-	llmClient llm.LLMClient
-	sandbox   sandbox.Sandbox
+	port       int
+	server     *http.Server
+	search     *search.Service
+	agentReg   *agent.Registry
+	llmClient  llm.LLMClient
+	sandbox    sandbox.Sandbox
 	runtimeCfg *runtime.Config
 }
 
@@ -67,11 +68,11 @@ func NewServer(port int) *Server {
 
 	mux := http.NewServeMux()
 	s := &Server{
-		port:      port,
-		search:    svc,
-		agentReg:  agent.DefaultRegistry(),
-		llmClient: llmClient,
-		sandbox:   sandbox.NewLocalSandbox("."),
+		port:       port,
+		search:     svc,
+		agentReg:   agent.DefaultRegistry(),
+		llmClient:  llmClient,
+		sandbox:    sandbox.NewLocalSandbox("."),
 		runtimeCfg: &runtime.Config{Verbose: false},
 	}
 
@@ -148,8 +149,7 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {
 func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	homeDir, _ := os.UserHomeDir()
-	runsDir := filepath.Join(homeDir, ".agentos", "runs")
+	runsDir := apphome.RunsDir()
 
 	entries, err := os.ReadDir(runsDir)
 	if err != nil {
@@ -246,8 +246,7 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRunDetail(w http.ResponseWriter, r *http.Request) {
 	id := filepath.Base(r.URL.Path)
 
-	homeDir, _ := os.UserHomeDir()
-	runDir := filepath.Join(homeDir, ".agentos", "runs", id)
+	runDir := filepath.Join(apphome.RunsDir(), id)
 
 	artifacts := []string{
 		"task.yaml", "profile.yaml", "plan.json",
@@ -434,11 +433,7 @@ func newVectorStore() vector.VectorStore {
 	if qdrantURL != "" {
 		return vector.NewQdrantClient()
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = os.TempDir()
-	}
-	return vector.NewLocalStore(filepath.Join(home, ".agentos", "vectors"))
+	return vector.NewLocalStore(apphome.VectorsDir())
 }
 
 // --- Helpers ---

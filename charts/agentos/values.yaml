@@ -7,8 +7,21 @@ replicaCount: 1
 # Container image
 image:
   repository: ghcr.io/kazyamaz200/agentos
-  tag: latest
-  pullPolicy: Always
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 100
+  runAsGroup: 101
+  fsGroup: 101
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
 
 # Service configuration
 service:
@@ -54,8 +67,14 @@ env:
   QDRANT_API_KEY: ""
   # Server port
   AGENTOS_PORT: "8080"
+  # State directory for run artifacts and local vector indexes
+  AGENTOS_HOME: "/home/agentos/.agentos"
   # GitHub token (optional, for PR operations)
   GITHUB_TOKEN: ""
+
+networkPolicy:
+  enabled: false
+  ingressCIDRs: []
 
 # Probes
 probe:

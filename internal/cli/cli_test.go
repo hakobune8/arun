@@ -41,3 +41,10 @@ func TestRootCommand_HasSubcommands(t *testing.T) {
 		}
 	}
 }
+
+func TestRunCommand_HasDefinitionFlag(t *testing.T) {
+	flag := runCmd.Flags().Lookup("definition")
+	if flag == nil {
+		t.Fatal("expected run command to expose --definition")
+	}
+}

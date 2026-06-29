@@ -48,31 +48,17 @@ Qdrant collections are created automatically by AgentOS. No manual schema setup 
 
 ## Docker Sandbox
 
-AgentOS can execute shell commands inside a Docker container for additional isolation.
+AgentOS has a sandbox interface, but the Docker backend is currently a stub and
+is not available in v1.0. Use the local backend only for trusted repositories and
+run AgentOS inside a separately isolated environment when executing untrusted
+code.
 
-### Setup
-
-Ensure Docker is installed and the current user has permission to run Docker commands:
-
-```bash
-docker ps  # verify Docker is running
-```
-
-### Configuration
-
-Docker sandbox is enabled via the `--sandbox docker` flag:
-
-```bash
-agentos run --task task.yaml --profile profile.yaml --sandbox docker
-```
-
-The sandbox uses the `mcr.microsoft.com/devcontainers/go:latest` image by default. You can customize the image via the profile YAML:
+The intended future configuration shape is:
 
 ```yaml
 sandbox:
+  backend: docker
   image: "custom-image:latest"
-  memory_limit: "2g"
-  cpu_limit: "1.0"
 ```
 
 ---

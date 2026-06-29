@@ -15,16 +15,23 @@
 package runtime
 
 import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/kazyamaz200/agentos/internal/llm"
 	"github.com/kazyamaz200/agentos/internal/profile"
 	"github.com/kazyamaz200/agentos/internal/sandbox"
+	"github.com/kazyamaz200/agentos/internal/task"
 )
 
 type mockAgent struct {
-	plan *Plan
-	err  error
+	plan          *Plan
+	err           error
+	executeResult *ExecutionResult
+	executeErr    error
 }
 
 func (m *mockAgent) Name() string { return "mock-agent" }
@@ -34,6 +41,9 @@ func (m *mockAgent) Plan(ctx *RunContext) (*Plan, error) {
 }
 
 func (m *mockAgent) Execute(ctx *RunContext, plan *Plan) (*ExecutionResult, error) {
+	if m.executeResult != nil || m.executeErr != nil {
+		return m.executeResult, m.executeErr
+	}
 	return &ExecutionResult{Success: true}, nil
 }
 
@@ -78,6 +88,42 @@ func TestNewRuntime(t *testing.T) {
 	}
 	if rt.Policy == nil {
 		t.Error("Policy should not be nil")
+	}
+}
+
+func TestRuntime_RunSavesExecutionArtifactsOnFailure(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("AGENTOS_HOME", home)
+
+	prof := profile.DefaultProfile()
+	ws := sandbox.NewWorkspace(t.TempDir())
+	agt := &mockAgent{
+		plan: &Plan{Summary: "test"},
+		executeResult: &ExecutionResult{
+			TestLog: "test failed",
+			LintLog: "lint failed",
+		},
+		executeErr: fmt.Errorf("validation failed"),
+	}
+	rt := NewRuntime(llm.NewMockLLMClient(nil), &prof, ws, &Config{}, agt)
+
+	err := rt.Run(context.Background(), &task.Task{
+		ID:         "failure-artifacts",
+		Repo:       ws.RootDir(),
+		BaseBranch: "main",
+		Branch:     "agent/failure-artifacts",
+		Title:      "failure artifacts",
+	})
+	if err == nil {
+		t.Fatal("expected run error")
+	}
+
+	runDir := filepath.Join(home, "runs", "failure-artifacts")
+	if data, err := os.ReadFile(filepath.Join(runDir, "test.log")); err != nil || string(data) != "test failed" {
+		t.Fatalf("test.log = %q, err=%v", data, err)
+	}
+	if data, err := os.ReadFile(filepath.Join(runDir, "lint.log")); err != nil || string(data) != "lint failed" {
+		t.Fatalf("lint.log = %q, err=%v", data, err)
 	}
 }
 

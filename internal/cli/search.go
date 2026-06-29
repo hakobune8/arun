@@ -19,8 +19,8 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 
+	"github.com/kazyamaz200/agentos/internal/apphome"
 	"github.com/kazyamaz200/agentos/internal/embedding"
 	"github.com/kazyamaz200/agentos/internal/search"
 	"github.com/kazyamaz200/agentos/internal/vector"
@@ -28,9 +28,9 @@ import (
 )
 
 var (
-	searchQuery  string
-	searchType   string
-	searchLimit  int
+	searchQuery string
+	searchType  string
+	searchLimit int
 )
 
 var searchCmd = &cobra.Command{
@@ -57,11 +57,7 @@ func newVectorStore() vector.VectorStore {
 	if qdrantURL != "" {
 		return vector.NewQdrantClient()
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = os.TempDir()
-	}
-	return vector.NewLocalStore(filepath.Join(home, ".agentos", "vectors"))
+	return vector.NewLocalStore(apphome.VectorsDir())
 }
 
 func runSearch() error {

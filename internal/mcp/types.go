@@ -27,7 +27,7 @@ type JSONRPCResponse struct {
 	JSONRPC string      `json:"jsonrpc"`
 	ID      int         `json:"id"`
 	Result  interface{} `json:"result,omitempty"`
-	Error   *RPCError  `json:"error,omitempty"`
+	Error   *RPCError   `json:"error,omitempty"`
 }
 
 // RPCError represents a JSON-RPC error object.
@@ -51,8 +51,8 @@ type InitializeResult struct {
 		Version string `json:"version"`
 	} `json:"serverInfo"`
 	Capabilities struct {
-		Tools      *ToolsCapability `json:"tools,omitempty"`
-		Resources  *interface{}     `json:"resources,omitempty"`
+		Tools     *ToolsCapability `json:"tools,omitempty"`
+		Resources *interface{}     `json:"resources,omitempty"`
 	} `json:"capabilities"`
 }
 
@@ -63,8 +63,8 @@ type ToolsCapability struct {
 
 // ToolDefinition describes a tool exposed by an MCP server.
 type ToolDefinition struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
 	InputSchema map[string]interface{} `json:"inputSchema"`
 }
 

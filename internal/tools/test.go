@@ -54,8 +54,8 @@ func (t *TestTool) Run(ctx context.Context, input ToolInput) ToolOutput {
 	output := ToolOutput{
 		Success: err == nil,
 		Data: map[string]string{
-			"stdout": strings.TrimSpace(stdout.String()),
-			"stderr": strings.TrimSpace(stderr.String()),
+			"stdout":  strings.TrimSpace(stdout.String()),
+			"stderr":  strings.TrimSpace(stderr.String()),
 			"command": command,
 		},
 	}

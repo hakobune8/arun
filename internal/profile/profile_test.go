@@ -56,5 +56,3 @@ func TestDefaultProfile(t *testing.T) {
 		t.Errorf("Output.Mode = %q, want %q", p.Output.Mode, "patch")
 	}
 }
-
-
