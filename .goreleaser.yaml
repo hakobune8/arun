@@ -37,17 +37,6 @@ archives:
       - LICENSE
       - CHANGELOG.md
 
-dockers:
-  - image_templates:
-      - "ghcr.io/kazyamaz200/agentos:v{{ .Version }}"
-      - "ghcr.io/kazyamaz200/agentos:latest"
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - "--platform=linux/amd64"
-      - "--build-arg=VERSION={{ .Version }}"
-      - "--label=org.opencontainers.image.source=https://github.com/kazyamaz200/agentos"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-
 checksum:
   name_template: "checksums.txt"
 
