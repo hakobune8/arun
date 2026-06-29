@@ -213,7 +213,7 @@ pr_body.md        # Pull request body draft
 
 ## Roadmap
 
-### v1.0 — Released
+### v1.0 — Pre-release (RC)
 - [x] Runtime Agent interface (Plan, Execute, Review) with lifecycle hooks
 - [x] Standardized tool interface with Description, lifecycle, and validation
 - [x] Agent plugin registry with built-in agents (go-backend, reviewer, ci-fixer, docs)
