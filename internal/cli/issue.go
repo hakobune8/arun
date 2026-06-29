@@ -65,7 +65,7 @@ func init() {
 
 	issueListCmd.Flags().StringVarP(&issueRepo, "repo", "r", "", "Repository (owner/name)")
 	issueListCmd.Flags().StringVarP(&issueState, "state", "s", "open", "Issue state (open/closed/all)")
-	_ = issueListCmd.MarkFlagRequired("repo")  //nolint:errcheck // cobra returns error only for invalid flag name
+	_ = issueListCmd.MarkFlagRequired("repo") //nolint:errcheck // cobra returns error only for invalid flag name
 
 	issueFetchCmd.Flags().StringVarP(&issueRepo, "repo", "r", "", "Repository (owner/name)")
 	_ = issueFetchCmd.MarkFlagRequired("repo") //nolint:errcheck // cobra returns error only for invalid flag name

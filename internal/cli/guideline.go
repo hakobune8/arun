@@ -53,9 +53,9 @@ var glSearchCmd = &cobra.Command{
 }
 
 var (
-	glDir      string
-	glQuery    string
-	glLimit    int
+	glDir   string
+	glQuery string
+	glLimit int
 )
 
 func init() {

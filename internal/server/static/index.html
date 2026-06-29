@@ -6,58 +6,77 @@
 <title>AgentOS</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0d1117;color:#c9d1d9;line-height:1.6}
-.header{background:#161b22;border-bottom:1px solid #30363d;padding:12px 24px;display:flex;align-items:center;gap:16px}
-.header h1{font-size:18px;color:#f0f6fc;cursor:pointer}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0d1117;color:#c9d1d9;line-height:1.6;min-width:320px}
+.header{background:#161b22;border-bottom:1px solid #30363d;padding:12px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:10}
+.brand{display:flex;align-items:baseline;gap:10px;flex:0 0 auto}
+.header h1{font-size:18px;color:#f0f6fc;cursor:pointer;white-space:nowrap}
 .header h1:hover{color:#58a6ff}
 .header span{color:#8b949e;font-size:12px}
-.nav{display:flex;gap:4px;margin-left:24px}
-.nav a{padding:6px 12px;color:#8b949e;text-decoration:none;font-size:13px;border-radius:6px;cursor:pointer}
+.nav{display:flex;gap:4px;margin-left:8px;overflow-x:auto;min-width:0;scrollbar-width:thin}
+.nav a{padding:6px 12px;color:#8b949e;text-decoration:none;font-size:13px;border-radius:6px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
 .nav a:hover{color:#c9d1d9;background:#1c2128}
 .nav a.active{color:#f0f6fc;background:#1c2128}
-.container{max-width:1200px;margin:0 auto;padding:24px}
-.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;margin-bottom:16px}
+.container{max-width:1200px;margin:0 auto;padding:24px;width:100%}
+.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;margin-bottom:16px;overflow:hidden}
 .card h2{font-size:15px;margin-bottom:12px;color:#f0f6fc}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
 .stat{text-align:center;padding:16px}
 .stat-value{font-size:28px;font-weight:600;color:#58a6ff}
 .stat-label{font-size:11px;color:#8b949e;margin-top:4px}
-table{width:100%;border-collapse:collapse}
+table{width:100%;border-collapse:collapse;display:block;overflow-x:auto;white-space:nowrap}
+thead,tbody{display:table;width:100%;min-width:640px}
 th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #30363d;font-size:13px}
 th{color:#8b949e;font-weight:500}
 tr:hover{background:#1c2128}
-.status{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px}
+.status{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;line-height:1.4;white-space:nowrap;background:#30363d;color:#c9d1d9;border:1px solid #484f58}
 .status-completed{background:#23863620;color:#3fb950;border:1px solid #238636}
 .status-failed{background:#da363320;color:#f85149;border:1px solid #da3633}
 .status-pending{background:#d2992220;color:#d29922;border:1px solid #d29922}
 .status-planning,.status-executing,.status-testing,.status-reviewing{background:#58a6ff20;color:#58a6ff;border:1px solid #58a6ff}
+.status-success,.status-open{background:#23863620;color:#3fb950;border:1px solid #238636}
+.status-pass{background:#23863620;color:#3fb950;border:1px solid #238636}
 a{color:#58a6ff;text-decoration:none;cursor:pointer}
 a:hover{text-decoration:underline}
 pre{background:#0d1117;padding:12px;border-radius:6px;overflow-x:auto;font-size:12px;max-height:400px;overflow-y:auto}
 .page{display:none}
 .page.active{display:block}
-.btn{padding:8px 16px;background:#238636;border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:13px}
+.btn{padding:8px 16px;background:#238636;border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:13px;min-height:36px;white-space:nowrap}
 .btn:hover{background:#2ea043}
+.btn:disabled{opacity:.55;cursor:not-allowed}
 .btn-secondary{background:#21262d;border:1px solid #30363d}
 .btn-secondary:hover{background:#30363d}
 .form-group{margin-bottom:12px}
 .form-group label{display:block;font-size:12px;color:#8b949e;margin-bottom:4px}
 .form-group input,.form-group textarea,.form-group select{width:100%;padding:8px 10px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px}
 .form-group textarea{min-height:80px;resize:vertical}
-.search-box{display:flex;gap:8px;margin-bottom:12px}
-.search-box input{flex:1;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px}
-.search-box select{padding:8px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px}
+.search-box{display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap}
+.search-box input{flex:1 1 220px;min-width:0;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px}
+.search-box select{flex:0 1 180px;min-width:140px;padding:8px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px}
 .agent-card{border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:8px}
 .agent-card h3{font-size:14px;color:#f0f6fc;margin-bottom:4px}
 .agent-card p{font-size:12px;color:#8b949e}
 .agent-card .tags{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap}
 .agent-card .tag{background:#1c2128;color:#8b949e;padding:2px 8px;border-radius:4px;font-size:11px}
+.empty{color:#8b949e;font-size:13px;padding:12px 0}
+@media (max-width:720px){
+  .header{align-items:flex-start;flex-direction:column;padding:12px 16px;gap:10px}
+  .brand{width:100%;justify-content:space-between}
+  .nav{width:100%;margin-left:0;padding-bottom:2px}
+  .container{padding:16px}
+  .card{padding:16px}
+  .grid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+  .stat-value{font-size:24px}
+  .search-box{align-items:stretch}
+  .search-box input,.search-box select,.search-box .btn{width:100%;flex:1 1 100%}
+}
 </style>
 </head>
 <body>
 <div class="header">
-  <h1 onclick="showPage('dashboard')">AgentOS</h1>
-  <span>v1.0</span>
+  <div class="brand">
+    <h1 onclick="showPage('dashboard')">AgentOS</h1>
+    <span>v1.0</span>
+  </div>
   <div class="nav">
     <a class="active" onclick="showPage('dashboard')" data-page="dashboard">Dashboard</a>
     <a onclick="showPage('runs')" data-page="runs">Runs</a>
@@ -209,7 +228,8 @@ function escape(s) {
 }
 
 function statusSpan(s) {
-  return '<span class="status status-' + s + '">' + s + '</span>';
+  const value = String(s || 'pending');
+  return '<span class="status status-' + escape(value.toLowerCase()) + '">' + escape(value) + '</span>';
 }
 
 function ago(ts) {
@@ -236,7 +256,9 @@ async function loadDashboard() {
       {label:'Failed',val:failed,color:'#f85149'},{label:'In Progress',val:pending,color:'#d29922'}
     ].map(s => '<div class="card stat"><div class="stat-value" style="color:'+(s.color||'#58a6ff')+'">'+s.val+'</div><div class="stat-label">'+s.label+'</div></div>').join('');
 
-    document.getElementById('recentRunsBody').innerHTML = runs.slice(0,10).map(r =>
+    document.getElementById('recentRunsBody').innerHTML = runs.length === 0
+      ? '<tr><td colspan="5" class="empty">No runs yet.</td></tr>'
+      : runs.slice(0,10).map(r =>
       '<tr><td><a onclick="showRunDetail(\''+r.id+'\')">'+escape(r.id)+'</a></td>' +
       '<td>' + statusSpan(r.state ? r.state.status : 'pending') + '</td>' +
       '<td>' + escape(r.state ? r.state.profile_name : '-') + '</td>' +
@@ -266,7 +288,9 @@ function renderRuns() {
     return true;
   });
 
-  document.getElementById('runsBody').innerHTML = filtered.map(r =>
+  document.getElementById('runsBody').innerHTML = filtered.length === 0
+    ? '<tr><td colspan="5" class="empty">No runs match the current filters.</td></tr>'
+    : filtered.map(r =>
     '<tr><td><a onclick="showRunDetail(\''+r.id+'\')">'+escape(r.id)+'</a></td>' +
     '<td>' + statusSpan(r.state ? r.state.status : 'pending') + '</td>' +
     '<td>' + escape(r.state ? r.state.profile_name : '-') + '</td>' +
@@ -305,7 +329,7 @@ async function loadAgents() {
   try {
     const agents = await api('/api/agents');
     document.getElementById('agentsList').innerHTML = agents.length === 0
-      ? '<p style="color:#8b949e">No agents registered.</p>'
+      ? '<p class="empty">No agents registered.</p>'
       : agents.map(a =>
         '<div class="agent-card">' +
         '<h3>' + escape(a.Name) + ' <span style="color:#8b949e;font-size:11px">v' + escape(a.Version) + '</span></h3>' +

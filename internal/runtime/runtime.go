@@ -21,8 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -146,7 +144,7 @@ func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 		ProfileName: r.Profile.Name,
 		Branch:      tk.Branch,
 	}
-	_ = r.Store.Save(record) //nolint:errcheck // best-effort save
+	_ = r.Store.Save(record)                                                    //nolint:errcheck // best-effort save
 	_ = r.Logger.Log("info", "runtime", "starting run", map[string]interface{}{ //nolint:errcheck // best-effort log
 		"task_id": tk.ID,
 		"profile": r.Profile.Name,
@@ -183,15 +181,15 @@ func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 		return fmt.Errorf("create plan: %w", err)
 	}
 	r.emit(ctx, tk.ID, event.TypePlanningFinished, map[string]interface{}{
-		"steps":  len(plan.Steps),
+		"steps":   len(plan.Steps),
 		"summary": plan.Summary,
 	})
 
-	_ = r.Workspace.SaveFile("plan.json", mustMarshalJSON(plan)) //nolint:errcheck // best-effort save
+	_ = r.Workspace.SaveFile("plan.json", mustMarshalJSON(plan))                //nolint:errcheck // best-effort save
 	_ = r.Logger.Log("info", "runtime", "plan created", map[string]interface{}{ //nolint:errcheck // best-effort log
-		"summary":              plan.Summary,
-		"steps":                len(plan.Steps),
-		"estimated_files":      plan.EstimatedFilesChanged,
+		"summary":         plan.Summary,
+		"steps":           len(plan.Steps),
+		"estimated_files": plan.EstimatedFilesChanged,
 	})
 
 	if h := r.Hooks.AfterPlan; h != nil {
@@ -206,6 +204,7 @@ func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 
 	result, err := r.Agent.Execute(rctx, plan)
 	if err != nil {
+		r.saveExecutionArtifacts(result)
 		r.emit(ctx, tk.ID, event.TypeRunFailed, map[string]string{"error": err.Error(), "phase": "execute"})
 		record.Status = state.RunStatusFailed
 		record.Error = err.Error()
@@ -216,15 +215,7 @@ func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 		return fmt.Errorf("execute plan: %w", err)
 	}
 
-	if result.Diff != "" {
-		_ = r.Workspace.SaveFile("diff.patch", []byte(result.Diff)) //nolint:errcheck // best-effort save
-	}
-	if result.TestLog != "" {
-		_ = r.Workspace.SaveFile("test.log", []byte(result.TestLog)) //nolint:errcheck // best-effort save
-	}
-	if result.LintLog != "" {
-		_ = r.Workspace.SaveFile("lint.log", []byte(result.LintLog)) //nolint:errcheck // best-effort save
-	}
+	r.saveExecutionArtifacts(result)
 
 	if h := r.Hooks.AfterExecute; h != nil {
 		if err := h(ctx, rctx, result); err != nil {
@@ -287,6 +278,21 @@ func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 	}
 
 	return nil
+}
+
+func (r *Runtime) saveExecutionArtifacts(result *ExecutionResult) {
+	if result == nil {
+		return
+	}
+	if result.Diff != "" {
+		_ = r.Workspace.SaveFile("diff.patch", []byte(result.Diff)) //nolint:errcheck // best-effort save
+	}
+	if result.TestLog != "" {
+		_ = r.Workspace.SaveFile("test.log", []byte(result.TestLog)) //nolint:errcheck // best-effort save
+	}
+	if result.LintLog != "" {
+		_ = r.Workspace.SaveFile("lint.log", []byte(result.LintLog)) //nolint:errcheck // best-effort save
+	}
 }
 
 func (r *Runtime) generateSummary(tk *task.Task, record *state.RunRecord, diff string, review *ReviewResult) string {
@@ -394,8 +400,4 @@ func stripJSONFences(s string) string {
 	s = strings.TrimSuffix(s, "```")
 	s = strings.TrimSpace(s)
 	return s
-}
-
-func init() {
-	_ = os.MkdirAll(filepath.Join(os.TempDir(), ".agentos", "runs"), 0o755)
 }

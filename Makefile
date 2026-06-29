@@ -16,7 +16,7 @@ vet:
 	go vet ./...
 
 lint:
-	gofmt -d . 2>&1 | grep -q . && echo "Formatting issues found" || true
+	test -z "$$(gofmt -l .)"
 	go vet ./...
 
 clean:

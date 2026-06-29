@@ -64,10 +64,10 @@ var memClearCmd = &cobra.Command{
 }
 
 var (
-	memContent   string
-	memType      string
-	memSearchQ   string
-	memLimit     int
+	memContent string
+	memType    string
+	memSearchQ string
+	memLimit   int
 )
 
 func init() {

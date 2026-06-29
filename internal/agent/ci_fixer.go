@@ -26,8 +26,8 @@ import (
 
 // CIFixer analyzes CI check failures and generates fix suggestions using an LLM.
 type CIFixer struct {
-	llm    llm.LLMClient
-	gh     *github.Client
+	llm llm.LLMClient
+	gh  *github.Client
 }
 
 // NewCIFixer creates a new CIFixer with the given LLM and GitHub clients.
@@ -48,9 +48,9 @@ type CIFixResult struct {
 
 // FailedCheck describes a single CI check that failed, including its name, conclusion, and annotations.
 type FailedCheck struct {
-	Name       string
-	Conclusion string
-	Logs       string
+	Name        string
+	Conclusion  string
+	Logs        string
 	Annotations string
 }
 

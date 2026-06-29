@@ -12,16 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sandbox
+package apphome
 
-// Workspace is a type alias for LocalSandbox for backward compatibility.
-// Deprecated: Use Sandbox interface or LocalSandbox instead.
-//
-//nolint:revive // stutter is acceptable for backward compatibility
-type Workspace = LocalSandbox
+import (
+	"path/filepath"
+	"testing"
+)
 
-// NewWorkspace creates a LocalSandbox.
-// Deprecated: Use New() with Config or NewLocalSandbox() instead.
-func NewWorkspace(rootDir string) *LocalSandbox {
-	return NewLocalSandbox(rootDir)
+func TestDir_UsesAgentOSHome(t *testing.T) {
+	expected := t.TempDir()
+	t.Setenv("AGENTOS_HOME", expected)
+
+	if got := Dir(); got != expected {
+		t.Fatalf("Dir() = %q, want %q", got, expected)
+	}
+}
+
+func TestSubdirectories(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("AGENTOS_HOME", root)
+
+	if got := RunsDir(); got != filepath.Join(root, "runs") {
+		t.Fatalf("RunsDir() = %q", got)
+	}
+	if got := VectorsDir(); got != filepath.Join(root, "vectors") {
+		t.Fatalf("VectorsDir() = %q", got)
+	}
 }

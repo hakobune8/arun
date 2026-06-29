@@ -51,7 +51,7 @@ func init() {
 	checksListCmd.Flags().StringVarP(&checksRepo, "repo", "r", "", "Repository (owner/name)")
 	checksListCmd.Flags().StringVarP(&checksRef, "ref", "", "", "Git ref (branch, SHA)")
 	_ = checksListCmd.MarkFlagRequired("repo") //nolint:errcheck // cobra returns error only for invalid flag name
-	_ = checksListCmd.MarkFlagRequired("ref")   //nolint:errcheck // cobra returns error only for invalid flag name
+	_ = checksListCmd.MarkFlagRequired("ref")  //nolint:errcheck // cobra returns error only for invalid flag name
 }
 
 func listChecks() error {

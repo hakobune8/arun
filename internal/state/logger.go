@@ -44,13 +44,13 @@ type ToolLogEntry struct {
 // LLMLogEntry records an LLM API request/response pair including token
 // counts and duration.
 type LLMLogEntry struct {
-	Timestamp  time.Time `json:"timestamp"`
-	Request    any       `json:"request"`
-	Response   any       `json:"response"`
-	Model      string    `json:"model"`
-	Duration   string    `json:"duration"`
-	PromptTokens int     `json:"prompt_tokens,omitempty"`
-	CompletionTokens int `json:"completion_tokens,omitempty"`
+	Timestamp        time.Time `json:"timestamp"`
+	Request          any       `json:"request"`
+	Response         any       `json:"response"`
+	Model            string    `json:"model"`
+	Duration         string    `json:"duration"`
+	PromptTokens     int       `json:"prompt_tokens,omitempty"`
+	CompletionTokens int       `json:"completion_tokens,omitempty"`
 }
 
 // Logger writes structured JSON log entries (generic logs, tool calls, LLM

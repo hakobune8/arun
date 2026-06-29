@@ -35,7 +35,9 @@ func NewSearchTool(workspace string) *SearchTool {
 
 func (t *SearchTool) Name() string { return "search" }
 
-func (t *SearchTool) Description() string { return "Search for a pattern across files in the workspace" }
+func (t *SearchTool) Description() string {
+	return "Search for a pattern across files in the workspace"
+}
 
 func (t *SearchTool) Run(ctx context.Context, input ToolInput) ToolOutput {
 	pattern, _ := input["pattern"].(string)

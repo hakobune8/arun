@@ -22,6 +22,8 @@ import (
 	"path/filepath"
 
 	"github.com/kazyamaz200/agentos/internal/agent"
+	"github.com/kazyamaz200/agentos/internal/apphome"
+	"github.com/kazyamaz200/agentos/internal/factory"
 	agentosgh "github.com/kazyamaz200/agentos/internal/github"
 	"github.com/kazyamaz200/agentos/internal/llm"
 	"github.com/kazyamaz200/agentos/internal/profile"
@@ -34,6 +36,7 @@ import (
 var (
 	taskFile       string
 	profileFile    string
+	definitionFile string
 	runAgentName   string
 	dryRun         bool
 	verbose        bool
@@ -42,14 +45,15 @@ var (
 )
 
 var runCmd = &cobra.Command{
-	Use:   "run --task <task.yaml> --profile <profile.yaml>",
+	Use:   "run --task <task.yaml> (--profile <profile.yaml> | --definition <definition.yaml>)",
 	Short: "Run a coding task",
 	Long: `Run a coding task with AgentOS.
-Reads a task YAML and profile YAML, plans the implementation,
+Reads a task YAML and profile or definition YAML, plans the implementation,
 executes the plan against the target repository, and produces a patch.
 
 Example:
-  agentos run --task examples/task.issue.yaml --profile profiles/go_backend.yaml`,
+  agentos run --task examples/task.issue.yaml --profile profiles/go_backend.yaml
+  agentos run --task examples/task.issue.yaml --definition definitions/go-backend.yaml`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runTask(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -61,13 +65,13 @@ Example:
 func init() {
 	runCmd.Flags().StringVar(&taskFile, "task", "", "Path to task YAML file")
 	runCmd.Flags().StringVar(&profileFile, "profile", "", "Path to profile YAML file")
+	runCmd.Flags().StringVar(&definitionFile, "definition", "", "Path to agent definition YAML file")
 	runCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview actions without making changes")
 	runCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
 	runCmd.Flags().BoolVar(&runCreatePR, "pr", false, "Create a PR after successful run")
 	runCmd.Flags().StringVar(&runPRRepo, "pr-repo", "", "GitHub repo for PR (owner/name)")
 	runCmd.Flags().StringVar(&runAgentName, "agent", "", "Agent name from registry (overrides profile agent)")
-	_ = runCmd.MarkFlagRequired("task")    //nolint:errcheck // cobra returns error only for invalid flag name
-	_ = runCmd.MarkFlagRequired("profile") //nolint:errcheck // cobra returns error only for invalid flag name
+	_ = runCmd.MarkFlagRequired("task") //nolint:errcheck // cobra returns error only for invalid flag name
 }
 
 func runTask() error {
@@ -76,9 +80,9 @@ func runTask() error {
 		return fmt.Errorf("load task: %w", err)
 	}
 
-	prof, err := profile.Load(profileFile)
+	prof, err := loadRunProfile()
 	if err != nil {
-		return fmt.Errorf("load profile: %w", err)
+		return err
 	}
 
 	repoPath := tk.Repo
@@ -95,6 +99,9 @@ func runTask() error {
 	}
 
 	llmConfig := llm.DefaultConfig()
+	if prof.LLM.Model != "" {
+		llmConfig.ModelCoder = prof.LLM.Model
+	}
 	llmClient := llm.NewLiteLLMClient(llmConfig)
 
 	if verbose {
@@ -167,14 +174,32 @@ func createPRFromRun(tk *task.Task) error {
 }
 
 func readRunArtifact(tk *task.Task, name string) string {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	path := filepath.Join(homeDir, ".agentos", "runs", tk.ID, name)
+	path := filepath.Join(apphome.RunsDir(), tk.ID, name)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return ""
 	}
 	return string(data)
+}
+
+func loadRunProfile() (*profile.Profile, error) {
+	if profileFile == "" && definitionFile == "" {
+		return nil, fmt.Errorf("one of --profile or --definition is required")
+	}
+	if profileFile != "" && definitionFile != "" {
+		return nil, fmt.Errorf("--profile and --definition are mutually exclusive")
+	}
+	if profileFile != "" {
+		prof, err := profile.Load(profileFile)
+		if err != nil {
+			return nil, fmt.Errorf("load profile: %w", err)
+		}
+		return prof, nil
+	}
+
+	def, err := agent.LoadDefinition(definitionFile)
+	if err != nil {
+		return nil, fmt.Errorf("load definition: %w", err)
+	}
+	return factory.ProfileFromDefinition(def), nil
 }

@@ -16,6 +16,8 @@ package factory
 
 import (
 	"testing"
+
+	"github.com/kazyamaz200/agentos/internal/agent"
 )
 
 func TestAgentDef_Defaults(t *testing.T) {
@@ -43,12 +45,12 @@ func TestAgentDef_FullDefinition(t *testing.T) {
 	t.Parallel()
 
 	def := AgentDef{
-		Name:        "test-agent",
-		Profile:     "default",
-		Role:        "tester",
-		Model:       "gpt-4",
+		Name:         "test-agent",
+		Profile:      "default",
+		Role:         "tester",
+		Model:        "gpt-4",
 		SystemPrompt: "You are a test agent",
-		Tools:       []string{"read_file", "write_file"},
+		Tools:        []string{"read_file", "write_file"},
 	}
 	def.Limits.MaxIterations = 25
 	def.Limits.MaxRetries = 3
@@ -150,5 +152,60 @@ func TestNewAgentRunner(t *testing.T) {
 	r := NewAgentRunner(f)
 	if r == nil {
 		t.Fatal("NewAgentRunner returned nil")
+	}
+}
+
+func TestProfileFromDefinition(t *testing.T) {
+	t.Parallel()
+
+	def := &agent.Definition{
+		APIVersion: agent.CurrentSchemaVersion,
+		Kind:       "Agent",
+		Metadata: agent.DefinitionMetadata{
+			Name:   "go-backend",
+			Labels: map[string]string{"role": "backend"},
+		},
+		Spec: agent.DefinitionSpec{
+			LLM: agent.LLMConfig{
+				Model:       "coder",
+				Temperature: 0.1,
+				MaxTokens:   4096,
+			},
+			Tools: agent.ToolsConfig{Allow: []string{"read_file", "test"}},
+			Safety: agent.SafetyConfig{
+				DenyCommands: []string{"sudo"},
+			},
+			Commands: agent.CommandsConfig{
+				Test: "go test ./...",
+				Lint: "go vet ./...",
+			},
+			Limits: agent.LimitsConfig{
+				MaxRetries:    2,
+				MaxIterations: 5,
+			},
+		},
+	}
+
+	prof := ProfileFromDefinition(def)
+	if prof.Name != "go-backend" {
+		t.Fatalf("Name = %q", prof.Name)
+	}
+	if prof.Role != "backend" {
+		t.Fatalf("Role = %q", prof.Role)
+	}
+	if prof.LLM.Model != "coder" || prof.LLM.MaxTokens != 4096 {
+		t.Fatalf("LLM not mapped: %+v", prof.LLM)
+	}
+	if prof.Commands.Test != "go test ./..." || prof.Commands.Lint != "go vet ./..." {
+		t.Fatalf("commands not mapped: %+v", prof.Commands)
+	}
+	if prof.Limits.MaxRetries != 2 || prof.Limits.MaxIterations != 5 {
+		t.Fatalf("limits not mapped: %+v", prof.Limits)
+	}
+	if len(prof.Tools.Allow) != 2 || prof.Tools.Allow[1] != "test" {
+		t.Fatalf("tools not mapped: %+v", prof.Tools.Allow)
+	}
+	if len(prof.Tools.DenyCommands) != 1 || prof.Tools.DenyCommands[0] != "sudo" {
+		t.Fatalf("deny commands not mapped: %+v", prof.Tools.DenyCommands)
 	}
 }

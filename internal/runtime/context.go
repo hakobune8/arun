@@ -22,9 +22,9 @@ import (
 	"github.com/kazyamaz200/agentos/internal/llm"
 	"github.com/kazyamaz200/agentos/internal/profile"
 	"github.com/kazyamaz200/agentos/internal/sandbox"
+	"github.com/kazyamaz200/agentos/internal/state"
 	"github.com/kazyamaz200/agentos/internal/task"
 	"github.com/kazyamaz200/agentos/internal/tools"
-	"github.com/kazyamaz200/agentos/internal/state"
 )
 
 // RunContext holds the context for a single task execution, including task, profile, LLM, sandbox, and configuration.
@@ -34,11 +34,11 @@ type RunContext struct {
 	Profile    *profile.Profile
 	LLM        llm.LLMClient
 	Workspace  sandbox.Sandbox
-	Registry  *tools.Registry
-	Logger    *state.Logger
-	Store     *state.RunStore
-	Config    *Config
-	Iteration int
+	Registry   *tools.Registry
+	Logger     *state.Logger
+	Store      *state.RunStore
+	Config     *Config
+	Iteration  int
 	MaxRetries int
 }
 

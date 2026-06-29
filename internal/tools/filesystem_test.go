@@ -61,10 +61,50 @@ func TestReadFileTool_NonExistent(t *testing.T) {
 func TestReadFileTool_PathTraversal(t *testing.T) {
 	t.Parallel()
 
-	tool := NewReadFileTool(t.TempDir())
-	out := tool.Run(context.Background(), ToolInput{"file": "../etc/passwd"})
+	parent := t.TempDir()
+	workspace := filepath.Join(parent, "workspace")
+	if err := os.Mkdir(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(parent, "secret.txt"), []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tool := NewReadFileTool(workspace)
+	out := tool.Run(context.Background(), ToolInput{"file": "../secret.txt"})
 	if out.Success {
 		t.Fatal("expected failure for path traversal")
+	}
+}
+
+func TestReadFileTool_RejectsAbsolutePath(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	secret := filepath.Join(dir, "secret.txt")
+	if err := os.WriteFile(secret, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tool := NewReadFileTool(dir)
+	out := tool.Run(context.Background(), ToolInput{"file": secret})
+	if out.Success {
+		t.Fatal("expected failure for absolute path")
+	}
+}
+
+func TestReadFileTool_RejectsSecretFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=value"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tool := NewReadFileTool(dir)
+	out := tool.Run(context.Background(), ToolInput{"file": ".env"})
+	if out.Success {
+		t.Fatal("expected failure for secret file")
 	}
 }
 
@@ -128,6 +168,41 @@ func TestWriteFileTool_Overwrite(t *testing.T) {
 	data, _ := os.ReadFile(filepath.Join(dir, "existing.txt"))
 	if string(data) != "new" {
 		t.Errorf("got %q, want %q", string(data), "new")
+	}
+}
+
+func TestWriteFileTool_RejectsPathTraversal(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+	workspace := filepath.Join(parent, "workspace")
+	if err := os.Mkdir(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	tool := NewWriteFileTool(workspace)
+	out := tool.Run(context.Background(), ToolInput{
+		"file":    "../outside.txt",
+		"content": "secret",
+	})
+	if out.Success {
+		t.Fatal("expected failure for path traversal")
+	}
+	if _, err := os.Stat(filepath.Join(parent, "outside.txt")); !os.IsNotExist(err) {
+		t.Fatalf("outside file should not exist, stat err=%v", err)
+	}
+}
+
+func TestWriteFileTool_RejectsSecretFile(t *testing.T) {
+	t.Parallel()
+
+	tool := NewWriteFileTool(t.TempDir())
+	out := tool.Run(context.Background(), ToolInput{
+		"file":    ".env",
+		"content": "TOKEN=value",
+	})
+	if out.Success {
+		t.Fatal("expected failure for secret file")
 	}
 }
 

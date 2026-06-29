@@ -29,9 +29,9 @@ import (
 
 // Factory creates and manages agent instances from configuration templates.
 type Factory struct {
-	profiles   map[string]*profile.Profile
-	llmConfig  llm.Config
-	workDir    string
+	profiles  map[string]*profile.Profile
+	llmConfig llm.Config
+	workDir   string
 }
 
 // NewFactory creates a new Factory with the given working directory.
@@ -222,6 +222,31 @@ func BuildAgentFromDefinition(defPath, workDir string) (runtime.Agent, llm.LLMCl
 	}
 
 	return agt, llmClient, nil
+}
+
+// ProfileFromDefinition converts a versioned agent Definition into the legacy
+// Profile shape used by Runtime. This keeps CLI execution paths consistent
+// while definitions become the public v1 format.
+func ProfileFromDefinition(def *agent.Definition) *profile.Profile {
+	prof := profile.DefaultProfile()
+	prof.Name = def.Metadata.Name
+	prof.Role = def.Metadata.Labels["role"]
+	prof.LLM.Provider = "litellm"
+	prof.LLM.Model = def.Spec.LLM.Model
+	prof.LLM.Temperature = def.Spec.LLM.Temperature
+	prof.LLM.MaxTokens = def.Spec.LLM.MaxTokens
+	prof.Tools.Allow = def.Spec.Tools.Allow
+	prof.Tools.DenyCommands = def.Spec.Safety.DenyCommands
+	prof.Commands.Test = def.Spec.Commands.Test
+	prof.Commands.Lint = def.Spec.Commands.Lint
+	prof.Commands.Build = def.Spec.Commands.Build
+	if def.Spec.Limits.MaxRetries > 0 {
+		prof.Limits.MaxRetries = def.Spec.Limits.MaxRetries
+	}
+	if def.Spec.Limits.MaxIterations > 0 {
+		prof.Limits.MaxIterations = def.Spec.Limits.MaxIterations
+	}
+	return &prof
 }
 
 // AgentRunner executes agents created by the factory.

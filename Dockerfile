@@ -12,9 +12,14 @@ RUN CGO_ENABLED=0 go build -ldflags "-X github.com/kazyamaz200/agentos/internal/
 FROM alpine:3.19
 
 RUN apk add --no-cache ca-certificates tzdata bash git
+RUN addgroup -S agentos && adduser -S agentos -G agentos
+RUN mkdir -p /workspace /home/agentos/.agentos && chown -R agentos:agentos /workspace /home/agentos
 
 WORKDIR /workspace
 COPY --from=builder /build/agentos /usr/local/bin/agentos
+USER agentos
+ENV HOME=/home/agentos
+ENV AGENTOS_HOME=/home/agentos/.agentos
 
 EXPOSE 8080
 

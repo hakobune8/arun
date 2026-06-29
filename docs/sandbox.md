@@ -31,7 +31,8 @@ sb.SaveFile("diff.patch", data)
 
 ### DockerSandbox (future)
 
-Containerized execution with resource limits (stub, not yet implemented).
+Containerized execution with resource limits is planned but not implemented in
+v1.0. Selecting `Backend: "docker"` currently returns an explicit error.
 
 ## Configuration
 

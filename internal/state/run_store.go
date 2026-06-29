@@ -29,14 +29,14 @@ type RunStatus string
 
 // Standard run status values.
 const (
-	RunStatusPending    RunStatus = "pending"
-	RunStatusPlanning   RunStatus = "planning"
-	RunStatusExecuting  RunStatus = "executing"
-	RunStatusTesting    RunStatus = "testing"
-	RunStatusReviewing  RunStatus = "reviewing"
-	RunStatusCompleted  RunStatus = "completed"
-	RunStatusFailed     RunStatus = "failed"
-	RunStatusCancelled  RunStatus = "canceled"
+	RunStatusPending   RunStatus = "pending"
+	RunStatusPlanning  RunStatus = "planning"
+	RunStatusExecuting RunStatus = "executing"
+	RunStatusTesting   RunStatus = "testing"
+	RunStatusReviewing RunStatus = "reviewing"
+	RunStatusCompleted RunStatus = "completed"
+	RunStatusFailed    RunStatus = "failed"
+	RunStatusCancelled RunStatus = "canceled"
 )
 
 // RunRecord stores the metadata and current status of an agent run.

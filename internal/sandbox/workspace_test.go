@@ -75,8 +75,8 @@ func TestWorkspace_RunPath(t *testing.T) {
 }
 
 func TestWorkspace_PrepareRun(t *testing.T) {
-	t.Parallel()
-
+	home := t.TempDir()
+	t.Setenv("AGENTOS_HOME", home)
 	ws := NewWorkspace(t.TempDir())
 	err := ws.PrepareRun("task-42")
 	if err != nil {
@@ -87,6 +87,9 @@ func TestWorkspace_PrepareRun(t *testing.T) {
 	}
 	if ws.RunDir == "" {
 		t.Error("RunDir should not be empty")
+	}
+	if want := filepath.Join(home, "runs", "task-42"); ws.RunDir != want {
+		t.Errorf("RunDir = %q, want %q", ws.RunDir, want)
 	}
 	if _, err := os.Stat(ws.RunDir); os.IsNotExist(err) {
 		t.Error("RunDir was not created")

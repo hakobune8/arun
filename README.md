@@ -36,7 +36,7 @@ helm install agentos agentos/agentos \
 - **Coding Guidelines** — YAML-defined guidelines with semantic search
 - **Past PR Search** — Search across previous runs and PRs
 - **MCP Integration** — Connect to MCP servers for external tools
-- **Docker Sandbox** — Isolated execution in Docker containers
+- **Sandbox Interface** — Local execution today, Docker backend planned
 - **Web UI** — Built-in web dashboard for runs and search
 - **Agent Factory** — Create agents dynamically from profile templates
 - **Multi-Agent Orchestration** — Coordinate multiple agents on complex tasks
@@ -160,7 +160,7 @@ limits:
 
 ## Run Artifacts
 
-Each run saves to `.agentos/runs/{task_id}/`:
+Each run saves to `${AGENTOS_HOME}/runs/{task_id}/`. If `AGENTOS_HOME` is not set, AgentOS uses `~/.agentos`.
 
 ```
 task.yaml         # Original task
@@ -178,9 +178,9 @@ pr_body.md        # Pull request body draft
 ## Safety
 
 - **Command denylist**: `rm -rf`, `sudo`, `curl`, `wget`, `ssh`, `scp` are denied by default
-- **Secret detection**: `.env`, `*.pem`, `id_rsa*`, `id_ed25519*` are never read
-- **Branch protection**: Direct changes to `main` are prohibited
-- **File limits**: Maximum changed files enforced per run
+- **Secret detection**: `.env`, `*.pem`, `id_rsa*`, `id_ed25519*` are blocked by filesystem tools
+- **Branch handling**: Runs create and work on the task branch when possible
+- **File limits**: Maximum changed file limits are defined in profiles and planned for enforcement
 - **Retry limits**: Automatic retry with configurable maximum
 
 ## Documentation
@@ -210,6 +210,7 @@ pr_body.md        # Pull request body draft
 | `LITELLM_BASE_URL` | `http://localhost:4000` | LiteLLM proxy URL |
 | `LITELLM_API_KEY` | `sk-local` | API key for LiteLLM |
 | `AGENTOS_MODEL_CODER` | `coder` | Model for coding tasks |
+| `AGENTOS_HOME` | `~/.agentos` | State directory for run artifacts and local vector indexes |
 | `GITHUB_TOKEN` | - | GitHub personal access token for API operations |
 | `GH_TOKEN` | - | Alternative GitHub token (fallback) |
 | `AGENTOS_MODEL_EMBEDDING` | `text-embedding-ada-002` | Model for embeddings |
@@ -224,7 +225,7 @@ pr_body.md        # Pull request body draft
 - [x] Agent plugin registry with built-in agents (go-backend, reviewer, ci-fixer, docs)
 - [x] Structured event bus with typed events and file store persistence
 - [x] Pluggable memory layer (VectorStore, JSONStore)
-- [x] Sandbox interface (local, Docker stub)
+- [x] Sandbox interface (local backend; Docker backend stub)
 - [x] Versioned Agent Definition schema (apiVersion: agentos.io/v1)
 - [x] Agent Factory: Definition → Runnable Agent
 - [x] Multi-agent orchestration (sequential/parallel)
@@ -238,7 +239,7 @@ pr_body.md        # Pull request body draft
 ### v0.4 — Shipped
 - [x] MCP client (JSON-RPC stdio) with tool listing and calling
 - [x] MCP tool adapter → Tool registry integration
-- [x] Docker sandbox for isolated execution
+- [ ] Docker sandbox for isolated execution
 - [x] Web UI with dashboard, run viewer, and search
 
 ### v0.3 — Shipped

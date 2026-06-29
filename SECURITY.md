@@ -34,4 +34,4 @@ When using AgentOS:
 3. **Branch Protection**: AgentOS will refuse to commit directly to protected branches (main, master).
 4. **Secret Detection**: Secret file patterns (`.pem`, `id_rsa*`, etc.) are detected and blocked from being written.
 5. **Web UI**: The built-in web server has no authentication by default. Use a reverse proxy with HTTPS for production deployments.
-6. **Docker Sandbox**: For untrusted code execution, enable the Docker sandbox to isolate the agent's filesystem access.
+6. **Sandboxing**: The v1.0 runtime uses the local sandbox backend. For untrusted code execution, run AgentOS inside an external container, VM, or isolated Kubernetes workload boundary.

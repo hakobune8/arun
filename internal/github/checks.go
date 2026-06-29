@@ -49,8 +49,8 @@ func (c *Client) GetCheckRunAnnotations(checkRunID int) (string, error) {
 	path := fmt.Sprintf("/%s/check-runs/%d/annotations", c.RepoPath(), checkRunID)
 
 	var annotations []struct {
-		Path        string `json:"path"`
-		Message     string `json:"message"`
+		Path            string `json:"path"`
+		Message         string `json:"message"`
 		AnnotationLevel string `json:"annotation_level"`
 	}
 	if err := c.doJSON("GET", path, nil, &annotations); err != nil {

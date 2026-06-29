@@ -16,6 +16,7 @@ package memory
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -39,6 +40,16 @@ func (m *mockEmbedder) EmbedQuery(_ context.Context, _ string) ([]float32, error
 }
 
 func (m *mockEmbedder) Model() string { return "test" }
+
+func TestDefaultConfig_UsesAgentOSHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("AGENTOS_HOME", home)
+
+	cfg := DefaultConfig()
+	if cfg.Path != filepath.Join(home, "memory.jsonl") {
+		t.Fatalf("Path = %q", cfg.Path)
+	}
+}
 
 func TestMemoryStore_Save_StoresEntry(t *testing.T) {
 	t.Parallel()

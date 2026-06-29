@@ -44,6 +44,7 @@ dockers:
     dockerfile: Dockerfile
     build_flag_templates:
       - "--platform=linux/amd64"
+      - "--build-arg=VERSION={{ .Version }}"
       - "--label=org.opencontainers.image.source=https://github.com/kazyamaz200/agentos"
       - "--label=org.opencontainers.image.version={{ .Version }}"
 
