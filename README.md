@@ -68,59 +68,39 @@ export AGENTOS_MODEL_CODER=coder
 
 ## Quick Start
 
+See the [Quick Start Guide](docs/quickstart.md) for a step-by-step walkthrough.
+
+### CLI Reference
+
 ```bash
 # Run a coding task
-agentos run --task examples/task.issue.yaml --profile profiles/go_backend.yaml
+agentos run --task task.yaml --profile profiles/go_backend.yaml
 
-# Run and create a PR
-agentos run --task examples/task.issue.yaml --profile profiles/go_backend.yaml --pr --pr-repo owner/repo
+# Run using a definition file (v1.0 format)
+agentos run --task task.yaml --definition definitions/go-backend.yaml
+
+# View version
+agentos version
+
+# List registered agents
+agentos agent list
 
 # Review code changes
 agentos review --repo ./my-project --profile profiles/reviewer.yaml
 
-# GitHub Issue operations
-agentos issue list --repo owner/repo
-agentos issue fetch 42 --repo owner/repo
-
-# GitHub Pull Request operations
-agentos pr list --repo owner/repo
-agentos pr create --repo owner/repo --title "Fix bug" --head agent/fix --body "PR description"
-
-# CI check operations
-agentos checks list --repo owner/repo --ref main
-
-# CI Fix Agent
-agentos ci-fix --repo owner/repo --ref main
-
-# Vector search across memory, guidelines, and past PRs
-agentos search --query "error handling pattern" --type all
-agentos search --query "validation logic" --type guideline
-
-# Agent memory operations
-agentos memory save --content "Fixed issue #42: added input validation" --type pr
-agentos memory search --query "input validation"
-
-# MCP server operations
-agentos mcp connect --command "npx @anthropic/mcp-serve"
-agentos mcp call --command "npx @anthropic/mcp-serve" --tool read_file --arg path=main.go
+# Multi-agent orchestration
+agentos orchestrate --agents "go-backend,reviewer" --task "Implement user auth"
 
 # Start Web UI
 agentos serve --port 8080
 
-# Agent management
-agentos agent create --template profiles/agents/template.yaml
-agentos agent run --agent coder --task "Add validation"
+# Search across memory, guidelines, and past PRs
+agentos search --query "error handling pattern" --type all
 
-# Multi-agent orchestration
-agentos orchestrate --template profiles/agents/template.yaml --task "Implement user auth"
-agentos orchestrate --template profiles/agents/template.yaml --task "Fix all lint errors" --strategy parallel
-
-# Coding guideline management
-agentos guideline load --dir guidelines/
-agentos guideline search --query "error handling"
-
-# Check version
-agentos version
+# GitHub operations
+agentos issue list --repo owner/repo
+agentos pr create --repo owner/repo --title "Fix bug" --head agent/fix
+agentos checks list --repo owner/repo --ref main
 ```
 
 ## Task YAML
@@ -200,6 +180,7 @@ pr_body.md        # Pull request body draft
 
 ## Documentation
 
+- [Quick Start](docs/quickstart.md) — Get up and running in 5 minutes
 - [Architecture](docs/architecture.md) — System architecture overview
 - [Configuration](docs/configuration.md) — LiteLLM, Qdrant, Docker, MCP, templates
 - [Profiles](docs/profiles.md) — Profile YAML schema reference
