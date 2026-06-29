@@ -747,3 +747,58 @@ func TestServer_JSONEndpoints(t *testing.T) {
 		}
 	}
 }
+
+func TestServer_AuthDisabledByDefault(t *testing.T) {
+	t.Parallel()
+	s := NewServer(0)
+	w := serveRequest(s, "GET", "/api/auth/session", nil)
+	assertStatus(t, w.Code, http.StatusOK)
+	if !strings.Contains(w.Body.String(), `"authRequired":false`) {
+		t.Fatalf("session = %s, want authRequired false", w.Body.String())
+	}
+}
+
+func TestServer_AuthRequiredProtectsWorkAPIs(t *testing.T) {
+	t.Setenv("AGENTOS_AUTH_REQUIRED", "true")
+	t.Setenv("AGENTOS_SESSION_SECRET", "test-secret")
+	s := NewServer(0)
+
+	protected := []string{
+		"/api/runs",
+		"/api/search?q=test",
+		"/api/github/issues?repo=owner/repo",
+		"/api/orchestrates",
+	}
+	for _, path := range protected {
+		w := serveRequest(s, "GET", path, nil)
+		assertStatus(t, w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestServer_LLMSettingsDoesNotExposeSecret(t *testing.T) {
+	t.Setenv("LITELLM_BASE_URL", "http://litellm.test")
+	t.Setenv("LITELLM_API_KEY", "secret-key")
+	t.Setenv("AGENTOS_MODEL_CODER", "coder-test")
+	s := NewServer(0)
+
+	w := serveRequest(s, "GET", "/api/settings/llm", nil)
+	assertStatus(t, w.Code, http.StatusOK)
+	body := w.Body.String()
+	if strings.Contains(body, "secret-key") || strings.Contains(body, "LITELLM_API_KEY") {
+		t.Fatalf("LLM settings leaked secret metadata: %s", body)
+	}
+	if !strings.Contains(body, `"keyConfigured":true`) || !strings.Contains(body, `"model":"coder-test"`) {
+		t.Fatalf("LLM settings = %s, want configured coder-test preset", body)
+	}
+}
+
+func TestParseLLMPresets(t *testing.T) {
+	raw := `[{"id":"staips","name":"STAIPS","provider":"litellm","baseUrl":"http://litellm:4000/","model":"coder","apiKeyEnv":"LITELLM_API_KEY"}]`
+	presets := parseLLMPresets(raw)
+	if len(presets) != 1 {
+		t.Fatalf("len(presets) = %d, want 1", len(presets))
+	}
+	if presets[0].BaseURL != "http://litellm:4000" || presets[0].APIKeyEnv != "LITELLM_API_KEY" {
+		t.Fatalf("preset = %+v", presets[0])
+	}
+}

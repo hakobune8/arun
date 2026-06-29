@@ -61,11 +61,15 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
 .detail-header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
 .detail-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .repo-pill{background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:4px 8px;font-size:12px;color:#8b949e}
+.auth-area{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:13px;color:#8b949e}
+.auth-area img{width:24px;height:24px;border-radius:50%}
+.auth-card{max-width:520px;margin:48px auto}
 .empty{color:#8b949e;font-size:13px;padding:12px 0}
 .error{color:#f85149;font-size:13px}
 @media (max-width:720px){
   .header{align-items:flex-start;flex-direction:column;padding:12px 16px;gap:10px}
   .nav{width:100%;margin-left:0}
+  .auth-area{margin-left:0;width:100%;justify-content:space-between}
   .container{padding:16px}
   .card{padding:16px}
   .grid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
@@ -84,9 +88,17 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
     <a class="active" onclick="showPage('orchestrates')" data-page="orchestrates">Orchestrates</a>
     <a onclick="showPage('agents')" data-page="agents">Agents</a>
   </div>
+  <div id="authArea" class="auth-area"></div>
 </div>
 
 <div class="container">
+  <div id="authGate" class="card auth-card" style="display:none">
+    <h2>Sign In</h2>
+    <p class="muted" style="margin-bottom:16px">Sign in with GitHub to create orchestrations, run agents, and view repository data.</p>
+    <a class="btn" href="/auth/login">Sign in with GitHub</a>
+  </div>
+
+  <div id="appContent">
   <div id="page-orchestrates" class="page active">
     <div class="card">
       <div class="detail-header">
@@ -109,7 +121,7 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
         <form onsubmit="submitOrchestrate(event)">
           <div class="form-group">
             <label>Repository</label>
-            <input type="text" id="orchRepo" value="" placeholder="owner/repo or https://github.com/owner/repo.git" required>
+            <input type="text" id="orchRepo" value="" placeholder="https://github.com/owner/repo.git" required>
           </div>
           <div class="form-group">
             <label>Base Branch</label>
@@ -125,6 +137,11 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
               <option value="sequential">Sequential</option>
               <option value="parallel">Parallel</option>
             </select>
+          </div>
+          <div class="form-group">
+            <label>LLM Preset</label>
+            <select id="orchLLMPreset"></select>
+            <p id="orchLLMPresetMeta" class="muted" style="margin-top:4px"></p>
           </div>
           <div class="form-group">
             <label>Task Description</label>
@@ -154,6 +171,7 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
       <div id="agentsList"></div>
     </div>
   </div>
+  </div>
 </div>
 
 <script>
@@ -161,25 +179,33 @@ const BASE = '';
 let selectedOrchestrateId = '';
 let currentOrchestration = null;
 let orchPoll = null;
+let authSession = {authRequired:false,authenticated:true};
+let llmSettings = {defaultPreset:'default',presets:[]};
 
 function showPage(name) {
+  if (!canUseApp()) return;
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   document.querySelector('.nav a[data-page="' + name + '"]').classList.add('active');
   if (name === 'orchestrates') {
     loadOrchAgentCheckboxes();
+    loadLLMSettings();
     loadOrchestrates();
   }
   if (name === 'agents') loadAgents();
 }
 
 function showOrchPanel(name) {
+  if (!canUseApp()) return;
   document.querySelectorAll('.orch-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
   document.getElementById('orch-panel-' + name).classList.add('active');
   document.querySelector('.tabs button[data-orch-panel="' + name + '"]').classList.add('active');
-  if (name === 'new') loadOrchAgentCheckboxes();
+  if (name === 'new') {
+    loadOrchAgentCheckboxes();
+    renderLLMSelect('orchLLMPreset', 'orchLLMPresetMeta');
+  }
   if (name === 'list') loadOrchestrates();
   if (name === 'detail') renderOrchestrationDetail();
 }
@@ -188,6 +214,72 @@ async function api(path, opts) {
   const res = await fetch(BASE + path, opts);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
+}
+
+function canUseApp() {
+  return !authSession.authRequired || authSession.authenticated;
+}
+
+async function loadSession() {
+  try {
+    authSession = await api('/api/auth/session');
+  } catch(e) {
+    authSession = {authRequired:false,authenticated:true};
+  }
+  renderAuth();
+}
+
+function renderAuth() {
+  const area = document.getElementById('authArea');
+  const gate = document.getElementById('authGate');
+  const app = document.getElementById('appContent');
+  if (authSession.authRequired && !authSession.authenticated) {
+    area.innerHTML = '<a class="btn btn-secondary" href="/auth/login">Sign in</a>';
+    gate.style.display = 'block';
+    app.style.display = 'none';
+    return;
+  }
+  gate.style.display = 'none';
+  app.style.display = 'block';
+  if (authSession.authenticated && authSession.user) {
+    const avatar = authSession.user.avatarUrl ? '<img src="' + escape(authSession.user.avatarUrl) + '" alt="">' : '';
+    area.innerHTML = avatar + '<span>' + escape(authSession.user.login) + '</span><a href="/auth/logout">Sign out</a>';
+    return;
+  }
+  area.innerHTML = '';
+}
+
+async function loadLLMSettings() {
+  try {
+    llmSettings = await api('/api/settings/llm');
+  } catch(e) {
+    llmSettings = {defaultPreset:'default',presets:[]};
+  }
+  renderLLMSelect('orchLLMPreset', 'orchLLMPresetMeta');
+}
+
+function renderLLMSelect(selectID, metaID, selected) {
+  const select = document.getElementById(selectID);
+  if (!select) return;
+  const presets = llmSettings.presets || [];
+  if (presets.length === 0) {
+    select.innerHTML = '<option value="">Default</option>';
+    return;
+  }
+  const chosen = selected || llmSettings.defaultPreset;
+  select.innerHTML = presets.map(p =>
+    '<option value="' + escape(p.id) + '"' + (p.id === chosen ? ' selected' : '') + '>' + escape(p.name || p.id) + ' / ' + escape(p.model) + '</option>'
+  ).join('');
+  select.onchange = () => renderLLMMeta(selectID, metaID);
+  renderLLMMeta(selectID, metaID);
+}
+
+function renderLLMMeta(selectID, metaID) {
+  const meta = document.getElementById(metaID);
+  const select = document.getElementById(selectID);
+  if (!meta || !select) return;
+  const preset = (llmSettings.presets || []).find(p => p.id === select.value);
+  meta.textContent = preset ? preset.provider + ' / ' + preset.baseUrl + ' / ' + (preset.keyConfigured ? 'key configured' : 'no key') : '';
 }
 
 function escape(s) {
@@ -248,7 +340,8 @@ async function submitOrchestrate(e) {
         repo: document.getElementById('orchRepo').value.trim(),
         baseBranch: document.getElementById('orchBaseBranch').value.trim() || 'main',
         task: document.getElementById('orchTask').value,
-        strategy: document.getElementById('orchStrategy').value
+        strategy: document.getElementById('orchStrategy').value,
+        llmPreset: document.getElementById('orchLLMPreset').value
       })
     });
     status.textContent = 'Started: ' + result.id;
@@ -330,7 +423,7 @@ function renderOrchestrationDetail() {
   div.innerHTML =
     '<div class="card">' +
     '<div class="detail-header"><div><h2>' + escape(r.id) + ' ' + statusSpan(r.status) + '</h2>' +
-    '<div class="detail-meta"><span class="repo-pill">' + escape(r.repo || '-') + '</span><span class="repo-pill">' + escape(r.baseBranch || '-') + '</span><span class="repo-pill">' + escape(r.strategy || '-') + '</span></div></div>' +
+    '<div class="detail-meta"><span class="repo-pill">' + escape(r.repo || '-') + '</span><span class="repo-pill">' + escape(r.baseBranch || '-') + '</span><span class="repo-pill">' + escape(r.strategy || '-') + '</span><span class="repo-pill">' + escape(r.llmPreset || '-') + '</span></div></div>' +
     '<button class="btn btn-secondary" onclick="refreshCurrentOrchestration()">Refresh</button></div>' +
     '<p class="muted" style="margin-top:12px">' + escape(r.task || '') + '</p>' +
     (r.error ? '<p class="error" style="margin-top:10px">' + escape(r.error) + '</p>' : '') +
@@ -392,15 +485,24 @@ function renderScopedRunForm(r) {
   const options = agents.length === 0
     ? '<option value="">No agents</option>'
     : agents.map(a => '<option value="' + escape(a) + '">' + escape(a) + '</option>').join('');
+  const presetOptions = llmPresetOptions(r.llmPreset);
   return '<div class="card"><h2>Run Agent</h2><form onsubmit="submitScopedRun(event)">' +
     '<div class="search-row">' +
     '<select id="scopedRunAgent" required>' + options + '</select>' +
     '<input type="text" id="scopedRunTask" placeholder="Task for the selected agent" required>' +
     '<button class="btn" type="submit">Run</button>' +
     '</div>' +
+    '<div class="form-group"><label>LLM Preset</label><select id="scopedRunLLMPreset">' + presetOptions + '</select></div>' +
     '<div class="form-group"><label>Description</label><textarea id="scopedRunDescription" placeholder="Optional details for this partial run"></textarea></div>' +
     '<p id="scopedRunStatus" class="muted">Repository: ' + escape(r.repo || '-') + '</p>' +
     '</form></div>';
+}
+
+function llmPresetOptions(selected) {
+  const presets = llmSettings.presets || [];
+  if (presets.length === 0) return '<option value="">Default</option>';
+  const chosen = selected || llmSettings.defaultPreset;
+  return presets.map(p => '<option value="' + escape(p.id) + '"' + (p.id === chosen ? ' selected' : '') + '>' + escape(p.name || p.id) + ' / ' + escape(p.model) + '</option>').join('');
 }
 
 async function submitScopedRun(e) {
@@ -418,7 +520,8 @@ async function submitScopedRun(e) {
         agent: document.getElementById('scopedRunAgent').value,
         task: document.getElementById('scopedRunTask').value,
         description: document.getElementById('scopedRunDescription').value,
-        repo: currentOrchestration.repoPath
+        repo: currentOrchestration.repoPath,
+        llmPreset: document.getElementById('scopedRunLLMPreset').value
       })
     });
     status.innerHTML = 'Run started: ' + escape(result.id);
@@ -539,8 +642,15 @@ async function loadAgents() {
   }
 }
 
-loadOrchAgentCheckboxes();
-loadOrchestrates();
+async function init() {
+  await loadSession();
+  if (!canUseApp()) return;
+  await loadLLMSettings();
+  loadOrchAgentCheckboxes();
+  loadOrchestrates();
+}
+
+init();
 </script>
 </body>
 </html>

@@ -21,7 +21,8 @@ helm repo update
 # Install AgentOS
 helm install agentos agentos/agentos \
   --namespace agentos --create-namespace \
-  --set env.LITELLM_BASE_URL=http://litellm:4000
+  --set env.LITELLM_BASE_URL=http://litellm:4000 \
+  --set secrets.litellmApiKey=<litellm-api-key>
 ```
 
 ### From Local Chart
@@ -29,7 +30,8 @@ helm install agentos agentos/agentos \
 ```bash
 helm install agentos ./charts/agentos \
   --namespace agentos --create-namespace \
-  --set env.LITELLM_BASE_URL=http://litellm:4000
+  --set env.LITELLM_BASE_URL=http://litellm:4000 \
+  --set secrets.litellmApiKey=<litellm-api-key>
 ```
 
 ## Configuration
@@ -39,6 +41,7 @@ helm install agentos ./charts/agentos \
 | Parameter | Description | Example |
 |-----------|-------------|---------|
 | `env.LITELLM_BASE_URL` | LiteLLM proxy URL | `http://litellm:4000` |
+| `secrets.litellmApiKey` or `secrets.existingSecret` | LiteLLM API key source | `agentos-secrets` |
 
 ### Optional
 
@@ -51,6 +54,11 @@ See [values.yaml](../charts/agentos/values.yaml) for all available options.
 | `env.AGENTOS_HOME` | `/home/agentos/.agentos` | State directory for run artifacts and local vector indexes |
 | `env.QDRANT_URL` | `""` | Qdrant vector DB URL (optional) |
 | `env.GITHUB_TOKEN` | `""` | GitHub API token (optional) |
+| `auth.required` | `false` | Require GitHub login for work-triggering APIs |
+| `auth.github.clientId` | `""` | GitHub OAuth App client ID |
+| `auth.github.callbackUrl` | `""` | GitHub OAuth callback URL |
+| `llm.presets` | default LiteLLM preset | Admin-defined LLM presets shown in the Web UI |
+| `secrets.existingSecret` | `""` | Existing Kubernetes Secret containing sensitive values |
 | `persistence.size` | `10Gi` | Storage for run artifacts |
 | `ingress.enabled` | `false` | Enable Ingress |
 | `resources.limits.cpu` | `500m` | CPU limit |
@@ -65,10 +73,58 @@ is lost when the pod is recreated.
 
 ## Security
 
-The container runs as a non-root `agentos` user by default. The built-in Web UI
-does not provide authentication; expose it through an authenticated ingress,
-VPN, or reverse proxy for shared environments. Optional NetworkPolicy rendering
-can be enabled with `networkPolicy.enabled=true`.
+The container runs as a non-root `agentos` user by default. For shared
+environments, enable GitHub login and keep API keys in Kubernetes Secrets.
+Optional NetworkPolicy rendering can be enabled with
+`networkPolicy.enabled=true`.
+
+### GitHub Login
+
+Create a GitHub OAuth App with a callback URL that matches the public URL for
+your deployment:
+
+```text
+https://agentos.example.com/auth/callback
+```
+
+Then install or upgrade with authentication enabled:
+
+```bash
+kubectl -n agentos create secret generic agentos-secrets \
+  --from-literal=LITELLM_API_KEY=<litellm-api-key> \
+  --from-literal=GITHUB_TOKEN=<github-token> \
+  --from-literal=GITHUB_OAUTH_CLIENT_SECRET=<oauth-client-secret> \
+  --from-literal=AGENTOS_SESSION_SECRET=<random-32-byte-secret>
+
+helm upgrade --install agentos ./charts/agentos \
+  --namespace agentos --create-namespace \
+  --set secrets.existingSecret=agentos-secrets \
+  --set auth.required=true \
+  --set auth.github.clientId=<oauth-client-id> \
+  --set auth.github.callbackUrl=https://agentos.example.com/auth/callback \
+  --set auth.cookieSecure=true
+```
+
+When authentication is enabled, the Web UI shows the signed-in GitHub identity
+and work-triggering APIs require a valid signed session.
+
+### LLM Presets
+
+Use `llm.presets` to expose administrator-approved model choices in the Web UI.
+Only public metadata is returned to browsers; API key values are read from
+environment variables backed by Kubernetes Secrets.
+
+```yaml
+llm:
+  defaultPreset: staips
+  presets:
+    - id: staips
+      name: STAIPS coder
+      provider: litellm
+      baseUrl: http://staips-litellm.staips-edge.svc.cluster.local
+      model: staips-chat
+      apiKeyEnv: LITELLM_API_KEY
+```
 
 ### GitHub Container Registry
 
