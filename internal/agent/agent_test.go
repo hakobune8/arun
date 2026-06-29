@@ -14,11 +14,16 @@
 
 package agent
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/kazyamaz200/agentos/internal/llm"
+)
 
 func TestBaseAgent_New(t *testing.T) {
 	t.Parallel()
-	a := NewBaseAgent("test-agent")
+	mock := llm.NewMockLLMClient(nil)
+	a := NewBaseAgent("test-agent", mock)
 	if a == nil {
 		t.Fatal("expected non-nil agent")
 	}
@@ -29,8 +34,20 @@ func TestBaseAgent_New(t *testing.T) {
 
 func TestBaseAgent_Name(t *testing.T) {
 	t.Parallel()
-	a := NewBaseAgent("my-agent")
+	mock := llm.NewMockLLMClient(nil)
+	a := NewBaseAgent("my-agent", mock)
 	if got := a.Name(); got != "my-agent" {
 		t.Errorf("expected 'my-agent', got %q", got)
 	}
+}
+
+func TestBaseAgent_ImplementsRuntimeAgent(t *testing.T) {
+	t.Parallel()
+	mock := llm.NewMockLLMClient(nil)
+	a := NewBaseAgent("test", mock)
+	// Compile-time check: assert that *BaseAgent satisfies the interface.
+	var _ interface {
+		Name() string
+	} = a
+	_ = a.Name()
 }

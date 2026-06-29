@@ -73,8 +73,8 @@ func runReview() error {
 	ws := sandbox.NewWorkspace(reviewRepo)
 	cfg := &runtime.Config{Verbose: true}
 
-	planner := agent.NewPlanner(llmClient)
-	rt := runtime.NewRuntime(llmClient, prof, ws, cfg, planner)
+	agt := agent.NewBaseAgent(prof.Name, llmClient)
+	rt := runtime.NewRuntime(llmClient, prof, ws, cfg, agt)
 
 	mockTask := &task.Task{
 		ID:   "review-" + reviewRepo,

@@ -36,12 +36,16 @@ type Step struct {
 	Reasoning   string   `json:"reasoning"`
 }
 
-// ExecutionResult holds the outcome of executing a plan, including per-step results and a diff.
+// ExecutionResult holds the outcome of executing a plan, including per-step results,
+// diff, test/lint output, and retry count.
 type ExecutionResult struct {
 	StepResults []StepResult `json:"step_results"`
 	Diff        string       `json:"diff"`
 	Success     bool         `json:"success"`
 	Error       string       `json:"error,omitempty"`
+	TestLog     string       `json:"test_log,omitempty"`
+	LintLog     string       `json:"lint_log,omitempty"`
+	Retries     int          `json:"retries,omitempty"`
 }
 
 // StepResult captures the outcome of a single plan step execution.

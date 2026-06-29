@@ -36,13 +36,28 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Planner defines the interface for generating execution plans from task context.
-type Planner interface {
+// Agent defines the interface for a coding agent that can plan, execute, and review tasks.
+// Runtime can execute any Agent implementation without knowing its concrete type.
+type Agent interface {
+	Name() string
 	Plan(ctx *RunContext) (*Plan, error)
+	Execute(ctx *RunContext, plan *Plan) (*ExecutionResult, error)
+	Review(ctx *RunContext, result *ExecutionResult) (*ReviewResult, error)
 }
 
-// Runtime manages the end-to-end execution of a coding task, including planning,
-// execution, testing, linting, review, and artifact generation.
+// LifecycleHooks provides optional callbacks that are invoked at key points
+// during a run. All hooks are optional (nil is safe).
+type LifecycleHooks struct {
+	BeforeRun    func(ctx context.Context, rctx *RunContext) error
+	AfterPlan    func(ctx context.Context, rctx *RunContext, plan *Plan) error
+	AfterExecute func(ctx context.Context, rctx *RunContext, result *ExecutionResult) error
+	AfterReview  func(ctx context.Context, rctx *RunContext, review *ReviewResult) error
+	AfterRun     func(ctx context.Context, rctx *RunContext, result *ExecutionResult) error
+	OnFail       func(ctx context.Context, rctx *RunContext, err error) error
+}
+
+// Runtime manages the end-to-end execution of a coding task through an Agent,
+// including lifecycle hooks, state persistence, and artifact generation.
 type Runtime struct {
 	LLM       llm.LLMClient
 	Registry  *tools.Registry
@@ -52,11 +67,12 @@ type Runtime struct {
 	Logger    *state.Logger
 	Profile   *profile.Profile
 	Config    *Config
-	Planner   Planner
+	Agent     Agent
+	Hooks     LifecycleHooks
 }
 
-// NewRuntime creates a new Runtime with the given LLM client, profile, workspace, config, and planner.
-func NewRuntime(llmClient llm.LLMClient, prof *profile.Profile, workspace *sandbox.Workspace, cfg *Config, planner Planner) *Runtime {
+// NewRuntime creates a new Runtime with the given dependencies.
+func NewRuntime(llmClient llm.LLMClient, prof *profile.Profile, workspace *sandbox.Workspace, cfg *Config, agent Agent) *Runtime {
 	registry := tools.NewRegistry()
 	policy := safety.NewCommandPolicy(prof.Tools.DenyCommands)
 
@@ -83,17 +99,21 @@ func NewRuntime(llmClient llm.LLMClient, prof *profile.Profile, workspace *sandb
 		Logger:    logger,
 		Profile:   prof,
 		Config:    cfg,
-		Planner:   planner,
+		Agent:     agent,
 	}
 }
 
-// Run executes a coding task end-to-end: plan, execute, test, lint, review, and generate artifacts.
+// Run executes a coding task through the configured Agent.
+// It delegates planning, execution, and review to the Agent while
+// managing lifecycle hooks, state persistence, and artifact generation.
 func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 	startTime := time.Now()
 
 	if err := r.Workspace.PrepareRun(tk.ID); err != nil {
 		return fmt.Errorf("prepare run: %w", err)
 	}
+
+	rctx := NewRunContext(ctx, tk, r)
 
 	record := &state.RunRecord{
 		TaskID:      tk.ID,
@@ -116,15 +136,24 @@ func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 		return fmt.Errorf("save profile.yaml: %w", err)
 	}
 
+	if h := r.Hooks.BeforeRun; h != nil {
+		if err := h(ctx, rctx); err != nil {
+			return fmt.Errorf("before run hook: %w", err)
+		}
+	}
+
+	// --- Plan ---
 	record.Status = state.RunStatusPlanning
 	_ = r.Store.Save(record) //nolint:errcheck // best-effort save
 
-	rctx := NewRunContext(ctx, tk, r)
-	plan, err := r.Planner.Plan(rctx)
+	plan, err := r.Agent.Plan(rctx)
 	if err != nil {
 		record.Status = state.RunStatusFailed
 		record.Error = err.Error()
 		_ = r.Store.Save(record) //nolint:errcheck // best-effort save
+		if h := r.Hooks.OnFail; h != nil {
+			_ = h(ctx, rctx, err) //nolint:errcheck // best-effort hook
+		}
 		return fmt.Errorf("create plan: %w", err)
 	}
 
@@ -135,77 +164,63 @@ func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 		"estimated_files":      plan.EstimatedFilesChanged,
 	})
 
+	if h := r.Hooks.AfterPlan; h != nil {
+		if err := h(ctx, rctx, plan); err != nil {
+			return fmt.Errorf("after plan hook: %w", err)
+		}
+	}
+
+	// --- Execute ---
 	record.Status = state.RunStatusExecuting
 	_ = r.Store.Save(record) //nolint:errcheck // best-effort save
 
-	result, err := r.executePlan(ctx, tk, plan)
+	result, err := r.Agent.Execute(rctx, plan)
 	if err != nil {
 		record.Status = state.RunStatusFailed
 		record.Error = err.Error()
 		_ = r.Store.Save(record) //nolint:errcheck // best-effort save
+		if h := r.Hooks.OnFail; h != nil {
+			_ = h(ctx, rctx, err) //nolint:errcheck // best-effort hook
+		}
 		return fmt.Errorf("execute plan: %w", err)
 	}
 
 	if result.Diff != "" {
 		_ = r.Workspace.SaveFile("diff.patch", []byte(result.Diff)) //nolint:errcheck // best-effort save
 	}
-
-	record.Status = state.RunStatusTesting
-	_ = r.Store.Save(record) //nolint:errcheck // best-effort save
-
-	testResult := r.runTests(ctx, tk)
-	if testResult != "" {
-		_ = r.Workspace.SaveFile("test.log", []byte(testResult)) //nolint:errcheck // best-effort save
+	if result.TestLog != "" {
+		_ = r.Workspace.SaveFile("test.log", []byte(result.TestLog)) //nolint:errcheck // best-effort save
+	}
+	if result.LintLog != "" {
+		_ = r.Workspace.SaveFile("lint.log", []byte(result.LintLog)) //nolint:errcheck // best-effort save
 	}
 
-	lintResult := r.runLint(ctx, tk)
-	if lintResult != "" {
-		_ = r.Workspace.SaveFile("lint.log", []byte(lintResult)) //nolint:errcheck // best-effort save
-	}
-
-	retryCount := 0
-	maxRetries := r.Profile.Limits.MaxRetries
-	for (testResult != "" || lintResult != "") && retryCount < maxRetries {
-		retryCount++
-		_ = r.Logger.Log("info", "runtime", "retry attempt", map[string]interface{}{ //nolint:errcheck // best-effort log
-			"attempt": retryCount,
-			"max":     maxRetries,
-		})
-
-		record.Iteration = retryCount
-		record.Status = state.RunStatusExecuting
-		_ = r.Store.Save(record) //nolint:errcheck // best-effort save
-
-		result, err = r.executePlan(ctx, tk, plan)
-		if err != nil {
-			continue
-		}
-		if result.Diff != "" {
-		_ = r.Workspace.SaveFile("diff.patch", []byte(result.Diff)) //nolint:errcheck // best-effort save
-		}
-
-		testResult = r.runTests(ctx, tk)
-		if testResult != "" {
-			_ = r.Workspace.SaveFile("test.log", []byte(testResult)) //nolint:errcheck // best-effort save
-		}
-		lintResult = r.runLint(ctx, tk)
-		if lintResult != "" {
-			_ = r.Workspace.SaveFile("lint.log", []byte(lintResult)) //nolint:errcheck // best-effort save
+	if h := r.Hooks.AfterExecute; h != nil {
+		if err := h(ctx, rctx, result); err != nil {
+			return fmt.Errorf("after execute hook: %w", err)
 		}
 	}
 
+	// --- Review ---
 	record.Status = state.RunStatusReviewing
 	_ = r.Store.Save(record) //nolint:errcheck // best-effort save
 
-	diffContent := ""
-	if result != nil {
-		diffContent = result.Diff
-	}
-	reviewResult, err := r.reviewResults(ctx, tk, diffContent, testResult)
+	reviewResult, err := r.Agent.Review(rctx, result)
 	if err != nil {
 		_ = r.Logger.Log("warn", "runtime", "review failed", err.Error()) //nolint:errcheck // best-effort log
 	}
 
+	if h := r.Hooks.AfterReview; h != nil {
+		if err := h(ctx, rctx, reviewResult); err != nil {
+			return fmt.Errorf("after review hook: %w", err)
+		}
+	}
+
+	// --- Artifacts ---
+	diffContent := ""
+	if result != nil {
+		diffContent = result.Diff
+	}
 	summary := r.generateSummary(tk, record, diffContent, reviewResult)
 	_ = r.Workspace.SaveFile("summary.md", []byte(summary)) //nolint:errcheck // best-effort save
 
@@ -219,205 +234,18 @@ func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 	duration := time.Since(startTime)
 	_ = r.Logger.Log("info", "runtime", "run completed", map[string]interface{}{ //nolint:errcheck // best-effort log
 		"duration": duration.String(),
-		"retries":  retryCount,
+		"retries":  result.Retries,
 	})
 
 	slog.Info("run completed", "duration", duration.Round(time.Second), "path", r.Workspace.RunPath())
 
+	if h := r.Hooks.AfterRun; h != nil {
+		if err := h(ctx, rctx, result); err != nil {
+			return fmt.Errorf("after run hook: %w", err)
+		}
+	}
+
 	return nil
-}
-
-func (r *Runtime) executePlan(ctx context.Context, tk *task.Task, plan *Plan) (*ExecutionResult, error) {
-	result := &ExecutionResult{Success: true}
-
-	gitTool := &tools.GitTool{RepoPath: r.Workspace.RootDir}
-	currentBranch, _ := gitTool.CurrentBranch(ctx)
-
-	if currentBranch != tk.Branch {
-		coResult := gitTool.Run(ctx, tools.ToolInput{
-			"subcommand": "checkout_new_branch",
-			"args":       tk.Branch,
-		})
-		if !coResult.Success {
-			_ = r.Logger.Log("warn", "runtime", "branch checkout", coResult.Error) //nolint:errcheck // best-effort log
-		}
-	}
-
-	for _, step := range plan.Steps {
-		_ = r.Logger.Log("info", "executor", fmt.Sprintf("step %d: %s", step.StepNumber, step.Description), nil) //nolint:errcheck // best-effort log
-
-		stepResult := StepResult{
-			StepNumber: step.StepNumber,
-			Action:     step.Action,
-		}
-		stepStart := time.Now()
-
-		switch step.Action {
-		case "search":
-			tool, ok := r.Registry.Get("search")
-			if !ok {
-				stepResult.Error = "search tool not found"
-				stepResult.Success = false
-			} else {
-				pattern := ""
-				if len(step.TargetFiles) > 0 {
-					pattern = step.TargetFiles[0]
-				}
-				output := tool.Run(ctx, tools.ToolInput{"pattern": pattern})
-				stepResult.Success = output.Success
-				if output.Success {
-					stepResult.Output = fmt.Sprintf("%v", output.Data)
-				} else {
-					stepResult.Error = output.Error
-				}
-			}
-
-		case "read":
-			tool, ok := r.Registry.Get("read_file")
-			if !ok {
-				stepResult.Error = "read_file tool not found"
-				stepResult.Success = false
-			} else {
-				for _, f := range step.TargetFiles {
-					output := tool.Run(ctx, tools.ToolInput{"file": f})
-					if !output.Success {
-						stepResult.Error = output.Error
-						stepResult.Success = false
-						break
-					}
-					stepResult.Output += fmt.Sprintf("=== %s ===\n%s\n", f, output.Data)
-				}
-				stepResult.Success = true
-			}
-
-		case "shell":
-			tool, ok := r.Registry.Get("shell")
-			if !ok {
-				stepResult.Error = "shell tool not found"
-				stepResult.Success = false
-			} else {
-				desc := step.Description
-				output := tool.Run(ctx, tools.ToolInput{"command": desc})
-				stepResult.Success = output.Success
-				if output.Success {
-					if data, ok := output.Data.(map[string]string); ok {
-						stepResult.Output = data["stdout"]
-					}
-				} else {
-					stepResult.Error = output.Error
-				}
-			}
-
-		default:
-			stepResult.Error = fmt.Sprintf("unknown action: %s", step.Action)
-			stepResult.Success = false
-		}
-
-		stepResult.Duration = time.Since(stepStart)
-		result.StepResults = append(result.StepResults, stepResult)
-
-		_ = r.Logger.LogTool(step.Action, step, stepResult, stepResult.Duration) //nolint:errcheck // best-effort log
-	}
-
-	diffContent, err := gitTool.Diff(ctx)
-	if err == nil {
-		result.Diff = diffContent
-	}
-
-	return result, nil
-}
-
-func (r *Runtime) runTests(ctx context.Context, tk *task.Task) string {
-	testCmd := r.Profile.Commands.Test
-	if testCmd == "" {
-		testCmd = "go test ./..."
-	}
-
-	_ = r.Logger.Log("info", "tester", "running tests", map[string]string{"command": testCmd}) //nolint:errcheck // best-effort log
-
-	tool := tools.NewTestTool(r.Workspace.RootDir)
-	output := tool.Run(ctx, tools.ToolInput{"command": testCmd})
-
-	logData := ""
-	if data, ok := output.Data.(map[string]string); ok {
-		logData = data["stdout"] + "\n" + data["stderr"]
-	}
-
-	if !output.Success {
-		_ = r.Logger.Log("warn", "tester", "tests failed", map[string]string{ //nolint:errcheck // best-effort log
-			"output": logData,
-			"error":  output.Error,
-		})
-		return logData
-	}
-
-	_ = r.Logger.Log("info", "tester", "tests passed", nil) //nolint:errcheck // best-effort log
-	return ""
-}
-
-func (r *Runtime) runLint(ctx context.Context, tk *task.Task) string {
-	lintCmd := r.Profile.Commands.Lint
-	if lintCmd == "" {
-		return ""
-	}
-
-	_ = r.Logger.Log("info", "linter", "running lint", map[string]string{"command": lintCmd}) //nolint:errcheck // best-effort log
-
-	tool := tools.NewShellTool(r.Policy, r.Workspace.RootDir)
-	output := tool.Run(ctx, tools.ToolInput{"command": lintCmd})
-
-	logData := ""
-	if data, ok := output.Data.(map[string]string); ok {
-		logData = data["stdout"] + "\n" + data["stderr"]
-	}
-
-	if !output.Success {
-		_ = r.Logger.Log("warn", "linter", "lint failed", map[string]string{ //nolint:errcheck // best-effort log
-			"output": logData,
-			"error":  output.Error,
-		})
-		return logData
-	}
-
-	_ = r.Logger.Log("info", "linter", "lint passed", nil) //nolint:errcheck // best-effort log
-	return ""
-}
-
-func (r *Runtime) reviewResults(ctx context.Context, tk *task.Task, diff, testLog string) (*ReviewResult, error) {
-	if diff == "" {
-		return &ReviewResult{Approved: true, Summary: "No changes to review"}, nil
-	}
-
-	systemMsg := llm.Message{Role: llm.RoleSystem, Content: llm.SystemPromptReviewer}
-	userMsg := llm.Message{
-		Role: llm.RoleUser,
-		Content: fmt.Sprintf(`Review the following diff for task: %s
-
-Description: %s
-
-Diff:
-%s
-
-Test output:
-%s`, tk.Title, tk.Description, diff, testLog),
-	}
-
-	resp, err := r.LLM.Chat(ctx, llm.ChatRequest{
-		Model:       r.LLM.ModelName(),
-		Messages:    []llm.Message{systemMsg, userMsg},
-		Temperature: 0.1,
-		MaxTokens:   r.Profile.LLM.MaxTokens,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("LLM review request: %w", err)
-	}
-
-	review, err := ParseReview(resp)
-	if err != nil {
-		return nil, fmt.Errorf("parse review: %w", err)
-	}
-
-	return review, nil
 }
 
 func (r *Runtime) generateSummary(tk *task.Task, record *state.RunRecord, diff string, review *ReviewResult) string {
