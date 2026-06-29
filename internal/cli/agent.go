@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package cli implements the command-line interface commands for AgentOS.
 package cli
 
 import (
@@ -20,6 +19,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/kazyamaz200/agentos/internal/agent"
 	"github.com/kazyamaz200/agentos/internal/factory"
 	"github.com/spf13/cobra"
 )
@@ -84,21 +84,22 @@ func init() {
 }
 
 func runAgentList() error {
-	wd, _ := os.Getwd()
-	f := factory.NewFactory(wd)
-	agents, err := f.ListAgents()
-	if err != nil {
-		return err
-	}
+	reg := agent.DefaultRegistry()
+	agents := reg.List()
 
 	if len(agents) == 0 {
-		fmt.Println("No agents registered. Use 'agentos agent create' to create one.")
+		fmt.Println("No agents registered.")
 		return nil
 	}
 
 	fmt.Println("Registered agents:")
-	for _, name := range agents {
-		fmt.Printf("  - %s\n", name)
+	for _, info := range agents {
+		fmt.Printf("  %s v%s\n", info.Name, info.Version)
+		fmt.Printf("    %s\n", info.Description)
+		if len(info.RequiredTools) > 0 {
+			fmt.Printf("    Tools: %v\n", info.RequiredTools)
+		}
+		fmt.Println()
 	}
 	return nil
 }
