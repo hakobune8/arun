@@ -13,6 +13,9 @@
 - Multi-agent orchestration wired to actual runtime execution (#99)
 - Tool Description() method on all built-in tools and MCP adapter (#92)
 - Registry validation, lifecycle support, and duplicate detection (#92)
+- Helm chart for Kubernetes deployment (#104)
+- Documentation for Event Bus, Agent Definitions, Factory, Memory, Sandbox,
+  Orchestrator, Embedding, Search, Guidelines, and MCP (#102)
 
 ### Changed
 - Runtime delegates planning/execution/review to Agent interface
