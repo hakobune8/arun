@@ -14,14 +14,25 @@ spec:
       labels:
         {{- include "agentos.selectorLabels" . | nindent 8 }}
     spec:
+      {{- $podSecurityContext := default dict (get .Values "podSecurityContext") }}
+      {{- $securityContext := default dict (get .Values "securityContext") }}
+      {{- $capabilities := default dict (get $securityContext "capabilities") }}
+      {{- $env := default dict (get .Values "env") }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        fsGroup: {{ default 101 (get $podSecurityContext "fsGroup") }}
+        runAsGroup: {{ default 101 (get $podSecurityContext "runAsGroup") }}
+        runAsNonRoot: {{ default true (get $podSecurityContext "runAsNonRoot") }}
+        runAsUser: {{ default 100 (get $podSecurityContext "runAsUser") }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
+            allowPrivilegeEscalation: {{ default false (get $securityContext "allowPrivilegeEscalation") }}
+            capabilities:
+              drop:
+                {{- default (list "ALL") (get $capabilities "drop") | toYaml | nindent 16 }}
+            readOnlyRootFilesystem: {{ default false (get $securityContext "readOnlyRootFilesystem") }}
           args:
             - serve
             - --port
@@ -58,7 +69,7 @@ spec:
             - name: AGENTOS_MODEL_CODER
               value: "{{ .Values.env.AGENTOS_MODEL_CODER }}"
             - name: AGENTOS_HOME
-              value: "{{ .Values.env.AGENTOS_HOME }}"
+              value: "{{ default "/home/agentos/.agentos" (get $env "AGENTOS_HOME") }}"
             - name: QDRANT_URL
               value: "{{ .Values.env.QDRANT_URL }}"
             - name: QDRANT_API_KEY
