@@ -7,150 +7,337 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0d1117;color:#c9d1d9;line-height:1.6}
-.header{background:#161b22;border-bottom:1px solid #30363d;padding:16px 24px;display:flex;align-items:center;gap:16px}
-.header h1{font-size:20px;color:#f0f6fc}
-.header span{color:#8b949e;font-size:14px}
+.header{background:#161b22;border-bottom:1px solid #30363d;padding:12px 24px;display:flex;align-items:center;gap:16px}
+.header h1{font-size:18px;color:#f0f6fc;cursor:pointer}
+.header h1:hover{color:#58a6ff}
+.header span{color:#8b949e;font-size:12px}
+.nav{display:flex;gap:4px;margin-left:24px}
+.nav a{padding:6px 12px;color:#8b949e;text-decoration:none;font-size:13px;border-radius:6px;cursor:pointer}
+.nav a:hover{color:#c9d1d9;background:#1c2128}
+.nav a.active{color:#f0f6fc;background:#1c2128}
 .container{max-width:1200px;margin:0 auto;padding:24px}
 .card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;margin-bottom:16px}
-.card h2{font-size:16px;margin-bottom:12px;color:#f0f6fc}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.card h2{font-size:15px;margin-bottom:12px;color:#f0f6fc}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
 .stat{text-align:center;padding:16px}
-.stat-value{font-size:32px;font-weight:600;color:#58a6ff}
-.stat-label{font-size:12px;color:#8b949e;margin-top:4px}
-.search-box{display:flex;gap:8px;margin-bottom:16px}
-.search-box input{flex:1;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:14px}
-.search-box button{padding:8px 16px;background:#238636;border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:14px}
-.search-box button:hover{background:#2ea043}
+.stat-value{font-size:28px;font-weight:600;color:#58a6ff}
+.stat-label{font-size:11px;color:#8b949e;margin-top:4px}
 table{width:100%;border-collapse:collapse}
-th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #30363d;font-size:14px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #30363d;font-size:13px}
 th{color:#8b949e;font-weight:500}
 tr:hover{background:#1c2128}
-.status{display:inline-block;padding:2px 8px;border-radius:12px;font-size:12px}
+.status{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px}
 .status-completed{background:#23863620;color:#3fb950;border:1px solid #238636}
 .status-failed{background:#da363320;color:#f85149;border:1px solid #da3633}
-a{color:#58a6ff;text-decoration:none}
+.status-pending{background:#d2992220;color:#d29922;border:1px solid #d29922}
+.status-planning,.status-executing,.status-testing,.status-reviewing{background:#58a6ff20;color:#58a6ff;border:1px solid #58a6ff}
+a{color:#58a6ff;text-decoration:none;cursor:pointer}
 a:hover{text-decoration:underline}
-pre{background:#0d1117;padding:12px;border-radius:6px;overflow-x:auto;font-size:13px}
+pre{background:#0d1117;padding:12px;border-radius:6px;overflow-x:auto;font-size:12px;max-height:400px;overflow-y:auto}
+.page{display:none}
+.page.active{display:block}
+.btn{padding:8px 16px;background:#238636;border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:13px}
+.btn:hover{background:#2ea043}
+.btn-secondary{background:#21262d;border:1px solid #30363d}
+.btn-secondary:hover{background:#30363d}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:12px;color:#8b949e;margin-bottom:4px}
+.form-group input,.form-group textarea,.form-group select{width:100%;padding:8px 10px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px}
+.form-group textarea{min-height:80px;resize:vertical}
+.search-box{display:flex;gap:8px;margin-bottom:12px}
+.search-box input{flex:1;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px}
+.search-box select{padding:8px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px}
+.agent-card{border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:8px}
+.agent-card h3{font-size:14px;color:#f0f6fc;margin-bottom:4px}
+.agent-card p{font-size:12px;color:#8b949e}
+.agent-card .tags{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap}
+.agent-card .tag{background:#1c2128;color:#8b949e;padding:2px 8px;border-radius:4px;font-size:11px}
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>AgentOS</h1>
+  <h1 onclick="showPage('dashboard')">AgentOS</h1>
   <span>v1.0</span>
+  <div class="nav">
+    <a class="active" onclick="showPage('dashboard')" data-page="dashboard">Dashboard</a>
+    <a onclick="showPage('runs')" data-page="runs">Runs</a>
+    <a onclick="showPage('agents')" data-page="agents">Agents</a>
+    <a onclick="showPage('search')" data-page="search">Search</a>
+    <a onclick="showPage('new-run')" data-page="new-run">New Run</a>
+  </div>
 </div>
+
 <div class="container">
-  <div class="grid">
-    <div class="card stat">
-      <div class="stat-value" id="totalRuns">-</div>
-      <div class="stat-label">Total Runs</div>
-    </div>
-    <div class="card stat">
-      <div class="stat-value" id="completedRuns">-</div>
-      <div class="stat-label">Completed</div>
-    </div>
-    <div class="card stat">
-      <div class="stat-value" id="failedRuns">-</div>
-      <div class="stat-label">Failed</div>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>Search</h2>
-    <div class="search-box">
-      <input type="text" id="searchQuery" placeholder="Search memory, guidelines, PRs..." onkeydown="if(event.key==='Enter')doSearch()">
-      <button onclick="doSearch()">Search</button>
-    </div>
-    <div id="searchResults"></div>
-  </div>
-
+<div id="page-dashboard" class="page active">
+  <div class="grid" id="statsGrid"></div>
   <div class="card">
     <h2>Recent Runs</h2>
-    <table>
-      <thead><tr><th>ID</th><th>Status</th><th>Profile</th><th>Actions</th></tr></thead>
-      <tbody id="runsTable"></tbody>
-    </table>
+    <table><thead><tr><th>ID</th><th>Status</th><th>Agent</th><th>Time</th><th></th></tr></thead><tbody id="recentRunsBody"></tbody></table>
   </div>
+</div>
 
+<div id="page-runs" class="page">
+  <div class="card">
+    <h2>Run History</h2>
+    <div id="runFilters" class="search-box">
+      <input type="text" id="runFilter" placeholder="Filter by ID..." oninput="loadRuns()">
+      <select id="statusFilter" onchange="loadRuns()"><option value="">All Status</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="pending">Pending</option></select>
+    </div>
+    <table><thead><tr><th>ID</th><th>Status</th><th>Agent</th><th>Created</th><th></th></tr></thead><tbody id="runsBody"></tbody></table>
+  </div>
   <div class="card" id="runDetail" style="display:none">
-    <h2>Run Detail</h2>
+    <h2 id="runDetailTitle">Run Detail</h2>
     <div id="runDetailContent"></div>
   </div>
 </div>
 
+<div id="page-agents" class="page">
+  <div class="card">
+    <h2>Registered Agents</h2>
+    <div id="agentsList"></div>
+  </div>
+</div>
+
+<div id="page-search" class="page">
+  <div class="card">
+    <h2>Search</h2>
+    <div class="search-box">
+      <input type="text" id="searchQuery" placeholder="Search memory, guidelines, PRs..." onkeydown="if(event.key==='Enter')doSearch()">
+      <select id="searchSource"><option value="">All Sources</option><option value="memory">Memory</option><option value="guideline">Guidelines</option><option value="pr">PRs</option></select>
+      <button class="btn" onclick="doSearch()">Search</button>
+    </div>
+    <div id="searchResults"></div>
+  </div>
+</div>
+
+<div id="page-new-run" class="page">
+  <div class="card">
+    <h2>New Run</h2>
+    <form onsubmit="submitRun(event)">
+      <div class="form-group">
+        <label>Agent</label>
+        <select id="runAgent" required></select>
+      </div>
+      <div class="form-group">
+        <label>Task Title</label>
+        <input type="text" id="runTitle" placeholder="e.g. Add input validation to API" required>
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <textarea id="runDescription" placeholder="Describe what the agent should do..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Repository Path</label>
+        <input type="text" id="runRepo" placeholder="./my-repo or /absolute/path" value=".">
+      </div>
+      <button type="submit" class="btn">Start Run</button>
+      <span id="runStatus" style="margin-left:12px;font-size:13px;color:#8b949e"></span>
+    </form>
+  </div>
+</div>
+</div>
+
 <script>
-async function fetchJSON(url) {
-  const res = await fetch(url);
+const BASE = '';
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelector('.nav a[data-page="' + name + '"]').classList.add('active');
+  if (name === 'dashboard') loadDashboard();
+  if (name === 'runs') loadRuns();
+  if (name === 'agents') loadAgents();
+  if (name === 'new-run') loadAgentSelect();
+}
+
+async function api(path, opts) {
+  const res = await fetch(BASE + path, opts);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
-async function loadStats() {
-  try {
-    const runs = await fetchJSON('/api/runs');
-    document.getElementById('totalRuns').textContent = runs.length;
-    const completed = runs.filter(r => r.state && r.state.status === 'completed').length;
-    const failed = runs.filter(r => r.state && r.state.status === 'failed').length;
-    document.getElementById('completedRuns').textContent = completed;
-    document.getElementById('failedRuns').textContent = failed;
-
-    const tbody = document.getElementById('runsTable');
-    tbody.innerHTML = runs.slice(0, 20).map(r => {
-      const status = r.state ? r.state.status : 'unknown';
-      const profile = r.state ? r.state.profile_name : '-';
-      const cls = status === 'completed' ? 'status-completed' : status === 'failed' ? 'status-failed' : '';
-      return `<tr>
-        <td><a href="javascript:void(0)" onclick="loadRun('${r.id}')">${r.id}</a></td>
-        <td><span class="status ${cls}">${status}</span></td>
-        <td>${profile}</td>
-        <td><a href="javascript:void(0)" onclick="loadRun('${r.id}')">View</a></td>
-      </tr>`;
-    }).join('');
-  } catch (e) { console.error(e); }
+function escape(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
 }
 
-async function loadRun(id) {
+function statusSpan(s) {
+  return '<span class="status status-' + s + '">' + s + '</span>';
+}
+
+function ago(ts) {
+  if (!ts) return '-';
+  const ms = Date.now() - new Date(ts).getTime();
+  if (ms < 60000) return Math.floor(ms/1000) + 's ago';
+  if (ms < 3600000) return Math.floor(ms/60000) + 'm ago';
+  if (ms < 86400000) return Math.floor(ms/3600000) + 'h ago';
+  return Math.floor(ms/86400000) + 'd ago';
+}
+
+// --- Dashboard ---
+
+async function loadDashboard() {
   try {
-    const data = await fetchJSON('/api/runs/' + id);
+    const runs = await api('/api/runs');
+    const total = runs.length;
+    const completed = runs.filter(r => r.state && r.state.status === 'completed').length;
+    const failed = runs.filter(r => r.state && r.state.status === 'failed').length;
+    const pending = total - completed - failed;
+
+    document.getElementById('statsGrid').innerHTML = [
+      {label:'Total Runs',val:total},{label:'Completed',val:completed,color:'#3fb950'},
+      {label:'Failed',val:failed,color:'#f85149'},{label:'In Progress',val:pending,color:'#d29922'}
+    ].map(s => '<div class="card stat"><div class="stat-value" style="color:'+(s.color||'#58a6ff')+'">'+s.val+'</div><div class="stat-label">'+s.label+'</div></div>').join('');
+
+    document.getElementById('recentRunsBody').innerHTML = runs.slice(0,10).map(r =>
+      '<tr><td><a onclick="showRunDetail(\''+r.id+'\')">'+escape(r.id)+'</a></td>' +
+      '<td>' + statusSpan(r.state ? r.state.status : 'pending') + '</td>' +
+      '<td>' + escape(r.state ? r.state.profile_name : '-') + '</td>' +
+      '<td>' + ago(r.state ? r.state.started_at : null) + '</td>' +
+      '<td><a onclick="showRunDetail(\''+r.id+'\')">View</a></td></tr>'
+    ).join('');
+  } catch(e) { console.error(e); }
+}
+
+// --- Runs ---
+
+let allRuns = [];
+
+async function loadRuns() {
+  try {
+    allRuns = await api('/api/runs');
+    renderRuns();
+  } catch(e) { console.error(e); }
+}
+
+function renderRuns() {
+  const filter = (document.getElementById('runFilter')||{value:''}).value.toLowerCase();
+  const status = (document.getElementById('statusFilter')||{value:''}).value;
+  const filtered = allRuns.filter(r => {
+    if (filter && !r.id.toLowerCase().includes(filter)) return false;
+    if (status && (!r.state || r.state.status !== status)) return false;
+    return true;
+  });
+
+  document.getElementById('runsBody').innerHTML = filtered.map(r =>
+    '<tr><td><a onclick="showRunDetail(\''+r.id+'\')">'+escape(r.id)+'</a></td>' +
+    '<td>' + statusSpan(r.state ? r.state.status : 'pending') + '</td>' +
+    '<td>' + escape(r.state ? r.state.profile_name : '-') + '</td>' +
+    '<td>' + ago(r.state ? r.state.started_at : null) + '</td>' +
+    '<td><a onclick="showRunDetail(\''+r.id+'\')">View</a></td></tr>'
+  ).join('');
+}
+
+async function showRunDetail(id) {
+  try {
+    const data = await api('/api/runs/' + id);
     const div = document.getElementById('runDetail');
     div.style.display = 'block';
+    document.getElementById('runDetailTitle').textContent = 'Run: ' + id;
     const content = document.getElementById('runDetailContent');
-    let html = '<p><strong>ID:</strong> ' + data.id + '</p>';
 
+    let html = '';
     if (data.artifacts) {
-      for (const [name, text] of Object.entries(data.artifacts)) {
-        html += '<h3 style="margin-top:12px;font-size:14px">' + name + '</h3>';
-        html += '<pre>' + escapeHtml(text.substring(0, 2000)) + '</pre>';
+      const order = ['run_state.json','plan.json','diff.patch','summary.md','test.log','lint.log','task.yaml','profile.yaml','pr_body.md'];
+      for (const name of order) {
+        if (data.artifacts[name]) {
+          html += '<h3 style="margin-top:12px;font-size:13px;color:#8b949e">' + name + '</h3>';
+          html += '<pre>' + escape(data.artifacts[name].substring(0,5000)) + '</pre>';
+        }
       }
     }
     content.innerHTML = html;
-  } catch (e) { console.error(e); }
+    showPage('runs');
+    document.getElementById('runDetail').scrollIntoView({behavior:'smooth'});
+  } catch(e) { console.error(e); }
 }
+
+// --- Agents ---
+
+async function loadAgents() {
+  try {
+    const agents = await api('/api/agents');
+    document.getElementById('agentsList').innerHTML = agents.length === 0
+      ? '<p style="color:#8b949e">No agents registered.</p>'
+      : agents.map(a =>
+        '<div class="agent-card">' +
+        '<h3>' + escape(a.Name) + ' <span style="color:#8b949e;font-size:11px">v' + escape(a.Version) + '</span></h3>' +
+        '<p>' + escape(a.Description) + '</p>' +
+        (a.Author ? '<p style="font-size:11px;color:#8b949e;margin-top:4px">Author: ' + escape(a.Author) + '</p>' : '') +
+        '<div class="tags">' + (a.RequiredTools || []).map(t => '<span class="tag">' + escape(t) + '</span>').join('') + '</div>' +
+        '</div>'
+      ).join('');
+  } catch(e) { console.error(e); }
+}
+
+// --- Search ---
 
 async function doSearch() {
   const q = document.getElementById('searchQuery').value;
   if (!q) return;
+  const src = document.getElementById('searchSource').value;
+  const url = '/api/search?q=' + encodeURIComponent(q) + (src ? '&source=' + src : '');
+
   try {
-    const results = await fetchJSON('/api/search?q=' + encodeURIComponent(q));
+    const results = await api(url);
     const div = document.getElementById('searchResults');
     if (results.length === 0) {
-      div.innerHTML = '<p style="color:#8b949e">No results.</p>';
+      div.innerHTML = '<p style="color:#8b949e;font-size:13px">No results for "' + escape(q) + '".</p>';
       return;
     }
     div.innerHTML = results.map(r =>
-      '<div style="padding:8px 0;border-bottom:1px solid #30363d">' +
-      '<span style="color:#8b949e;font-size:12px">[' + r.source + ']</span> ' +
-      escapeHtml(r.content) + '</div>'
+      '<div style="padding:10px 0;border-bottom:1px solid #30363d">' +
+      '<span style="color:#8b949e;font-size:11px">[' + escape(r.source || 'unknown') + ']</span> ' +
+      '<span style="font-size:13px">' + escape(r.content || r.title || '') + '</span>' +
+      '</div>'
     ).join('');
-  } catch (e) { console.error(e); }
+  } catch(e) {
+    document.getElementById('searchResults').innerHTML = '<p style="color:#f85149">Error: ' + escape(e.message) + '</p>';
+  }
 }
 
-function escapeHtml(s) {
-  const d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
+// --- New Run ---
+
+async function loadAgentSelect() {
+  try {
+    const agents = await api('/api/agents');
+    const sel = document.getElementById('runAgent');
+    sel.innerHTML = agents.map(a => '<option value="' + escape(a.Name) + '">' + escape(a.Name) + ' — ' + escape(a.Description) + '</option>').join('');
+  } catch(e) { console.error(e); }
 }
 
-loadStats();
+async function submitRun(e) {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type=submit]');
+  const status = document.getElementById('runStatus');
+  btn.disabled = true;
+  status.textContent = 'Starting run...';
+
+  try {
+    const result = await api('/api/runs', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        agent: document.getElementById('runAgent').value,
+        task: document.getElementById('runTitle').value,
+        description: document.getElementById('runDescription').value,
+        repo: document.getElementById('runRepo').value,
+      })
+    });
+    status.innerHTML = 'Run started: <a onclick="showRunDetail(\'' + result.id + '\')">' + result.id + '</a>';
+    btn.disabled = false;
+    setTimeout(() => { loadRuns(); }, 500);
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+    btn.disabled = false;
+  }
+}
+
+// --- Init ---
+
+loadDashboard();
 </script>
 </body>
 </html>
