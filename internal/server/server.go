@@ -31,7 +31,9 @@ import (
 
 	"github.com/kazyamaz200/agentos/internal/agent"
 	"github.com/kazyamaz200/agentos/internal/embedding"
+	agentosgh "github.com/kazyamaz200/agentos/internal/github"
 	"github.com/kazyamaz200/agentos/internal/llm"
+	"github.com/kazyamaz200/agentos/internal/orchestrator"
 	"github.com/kazyamaz200/agentos/internal/runtime"
 	"github.com/kazyamaz200/agentos/internal/sandbox"
 	"github.com/kazyamaz200/agentos/internal/search"
@@ -77,6 +79,8 @@ func NewServer(port int) *Server {
 	mux.HandleFunc("/api/runs/", s.handleRunDetail)
 	mux.HandleFunc("/api/search", s.handleSearch)
 	mux.HandleFunc("/api/health", s.handleHealth)
+	mux.HandleFunc("/api/github/", s.handleGitHub)
+	mux.HandleFunc("/api/orchestrate", s.handleOrchestrate)
 
 	staticSub, err := fs.Sub(staticFS, "static")
 	if err == nil {
@@ -295,6 +299,132 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(results) //nolint:errcheck // best-effort
 }
 
+// --- GitHub ---
+
+func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	repo := r.URL.Query().Get("repo")
+	if repo == "" {
+		http.Error(w, "repo query param required", http.StatusBadRequest)
+		return
+	}
+	parts := splitRepo(repo)
+	if len(parts) != 2 {
+		http.Error(w, "repo must be owner/name", http.StatusBadRequest)
+		return
+	}
+	client := agentosgh.NewClient(parts[0], parts[1])
+
+	path := r.URL.Path[len("/api/github/"):]
+	switch path {
+	case "issues":
+		state := r.URL.Query().Get("state")
+		if state == "" {
+			state = "open"
+		}
+		issues, err := client.ListIssues(state)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(issues) //nolint:errcheck // best-effort response
+
+	case "pulls":
+		state := r.URL.Query().Get("state")
+		prs, err := client.ListPRs(state)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(prs) //nolint:errcheck // best-effort response
+
+	case "checks":
+		ref := r.URL.Query().Get("ref")
+		if ref == "" {
+			ref = "main"
+		}
+		suites, err := client.GetCheckSuites(ref)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(suites) //nolint:errcheck // best-effort response
+
+	default:
+		http.Error(w, "unknown github resource: "+path, http.StatusNotFound)
+	}
+}
+
+// --- Orchestrate ---
+
+type orchestrateRequest struct {
+	Agents   []string `json:"agents"`
+	Task     string   `json:"task"`
+	Strategy string   `json:"strategy"`
+}
+
+func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST required", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "read body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var req orchestrateRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		http.Error(w, "parse body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Agents) == 0 || req.Task == "" {
+		http.Error(w, "agents and task are required", http.StatusBadRequest)
+		return
+	}
+
+	agents := make(map[string]runtime.Agent)
+	for _, name := range req.Agents {
+		a, err := s.agentReg.Create(name, s.llmClient)
+		if err != nil {
+			http.Error(w, "lookup agent "+name+": "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		agents[name] = a
+	}
+
+	cfg := &runtime.Config{Verbose: false}
+	orch := orchestrator.NewOrchestrator(s.llmClient, s.sandbox, agents, cfg)
+
+	if req.Strategy == "parallel" {
+		orch.SetStrategy(orchestrator.StrategyParallel)
+	}
+
+	plan, err := orch.Plan(r.Context(), req.Task)
+	if err != nil {
+		http.Error(w, "plan: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	results, err := orch.Execute(r.Context(), plan)
+	if err != nil {
+		http.Error(w, "execute: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	summary := orch.MergeResults(results)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck // best-effort response
+		"plan":    plan,
+		"results": results,
+		"summary": summary,
+	})
+}
+
 // --- Store ---
 
 func newVectorStore() vector.VectorStore {
@@ -315,6 +445,15 @@ func generateID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
 	return "run-" + hex.EncodeToString(b)
+}
+
+func splitRepo(repo string) []string {
+	for i := 0; i < len(repo); i++ {
+		if repo[i] == '/' {
+			return []string{repo[:i], repo[i+1:]}
+		}
+	}
+	return nil
 }
 
 func corsMiddleware(next http.Handler) http.Handler {

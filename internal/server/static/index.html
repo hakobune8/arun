@@ -63,6 +63,8 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow-x:auto;font-size:
     <a onclick="showPage('runs')" data-page="runs">Runs</a>
     <a onclick="showPage('agents')" data-page="agents">Agents</a>
     <a onclick="showPage('search')" data-page="search">Search</a>
+    <a onclick="showPage('github')" data-page="github">GitHub</a>
+    <a onclick="showPage('orchestrate')" data-page="orchestrate">Orchestrate</a>
     <a onclick="showPage('new-run')" data-page="new-run">New Run</a>
   </div>
 </div>
@@ -110,6 +112,48 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow-x:auto;font-size:
   </div>
 </div>
 
+<div id="page-github" class="page">
+  <div class="card">
+    <h2>GitHub Integration</h2>
+    <div class="search-box">
+      <input type="text" id="ghRepo" placeholder="owner/repo" value="" onkeydown="if(event.key==='Enter')loadGitHub()">
+      <select id="ghTab" onchange="loadGitHub()">
+        <option value="issues">Issues</option>
+        <option value="pulls">Pull Requests</option>
+        <option value="checks">CI Checks</option>
+      </select>
+      <button class="btn" onclick="loadGitHub()">Load</button>
+    </div>
+    <div id="githubContent"><p style="color:#8b949e;font-size:13px">Enter a repository to view issues, PRs, or CI checks.</p></div>
+  </div>
+</div>
+
+<div id="page-orchestrate" class="page">
+  <div class="card">
+    <h2>Multi-Agent Orchestration</h2>
+    <form onsubmit="submitOrchestrate(event)">
+      <div class="form-group">
+        <label>Agents</label>
+        <div id="orchAgents"></div>
+      </div>
+      <div class="form-group">
+        <label>Strategy</label>
+        <select id="orchStrategy">
+          <option value="sequential">Sequential</option>
+          <option value="parallel">Parallel</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Task Description</label>
+        <textarea id="orchTask" placeholder="Describe what the agents should accomplish..." required></textarea>
+      </div>
+      <button type="submit" class="btn">Start Orchestration</button>
+      <span id="orchStatus" style="margin-left:12px;font-size:13px;color:#8b949e"></span>
+    </form>
+    <div id="orchResults" style="margin-top:16px"></div>
+  </div>
+</div>
+
 <div id="page-new-run" class="page">
   <div class="card">
     <h2>New Run</h2>
@@ -149,6 +193,7 @@ function showPage(name) {
   if (name === 'runs') loadRuns();
   if (name === 'agents') loadAgents();
   if (name === 'new-run') loadAgentSelect();
+  if (name === 'orchestrate') loadOrchAgentCheckboxes();
 }
 
 async function api(path, opts) {
@@ -333,6 +378,102 @@ async function submitRun(e) {
     status.textContent = 'Error: ' + e.message;
     btn.disabled = false;
   }
+}
+
+// --- GitHub ---
+
+async function loadGitHub() {
+  const repo = document.getElementById('ghRepo').value.trim();
+  if (!repo) return;
+  const tab = document.getElementById('ghTab').value;
+  const div = document.getElementById('githubContent');
+  div.innerHTML = '<p style="color:#8b949e">Loading...</p>';
+
+  try {
+    const data = await api('/api/github/' + tab + '?repo=' + encodeURIComponent(repo));
+    if (data.length === 0) {
+      div.innerHTML = '<p style="color:#8b949e">No ' + tab + ' found for ' + escape(repo) + '.</p>';
+      return;
+    }
+
+    if (tab === 'issues') {
+      div.innerHTML = '<table><thead><tr><th>#</th><th>Title</th><th>State</th><th>Labels</th></tr></thead><tbody>' +
+        data.map(i => '<tr><td>#' + i.number + '</td><td>' + escape(i.title) + '</td><td>' + statusSpan(i.state) + '</td><td>' + (i.labels||[]).map(l => '<span class="tag">'+escape(l.name)+'</span>').join('') + '</td></tr>').join('') +
+        '</tbody></table>';
+    } else if (tab === 'pulls') {
+      div.innerHTML = '<table><thead><tr><th>#</th><th>Title</th><th>State</th><th>Branch</th></tr></thead><tbody>' +
+        data.map(p => '<tr><td>#' + p.number + '</td><td>' + escape(p.title) + '</td><td>' + statusSpan(p.state) + '</td><td>' + escape(p.head && (p.head.label || '')) + '</td></tr>').join('') +
+        '</tbody></table>';
+    } else if (tab === 'checks') {
+      div.innerHTML = '<table><thead><tr><th>Name</th><th>Status</th><th>Conclusion</th></tr></thead><tbody>' +
+        data.map(c => '<tr><td>' + escape(c.check_runs ? c.check_runs[0] && c.check_runs[0].name : c.name || '') + '</td><td>' + statusSpan(c.status || '') + '</td><td>' + statusSpan(c.conclusion || (c.status === 'completed' ? 'success' : 'pending')) + '</td></tr>').join('') +
+        '</tbody></table>';
+    }
+  } catch(e) {
+    div.innerHTML = '<p style="color:#f85149">Error: ' + escape(e.message) + '</p>';
+  }
+}
+
+async function loadOrchAgentCheckboxes() {
+  try {
+    const agents = await api('/api/agents');
+    document.getElementById('orchAgents').innerHTML = agents.map(a =>
+      '<label style="display:inline-flex;align-items:center;gap:6px;margin:4px 8px 4px 0;font-size:13px;cursor:pointer">' +
+      '<input type="checkbox" value="' + escape(a.Name) + '"> ' + escape(a.Name) +
+      '</label>'
+    ).join('');
+  } catch(e) { console.error(e); }
+}
+
+// --- Orchestrate ---
+
+async function submitOrchestrate(e) {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type=submit]');
+  const status = document.getElementById('orchStatus');
+  const resultsDiv = document.getElementById('orchResults');
+  btn.disabled = true;
+  status.textContent = 'Planning...';
+  resultsDiv.innerHTML = '';
+
+  const checked = Array.from(document.querySelectorAll('#orchAgents input:checked')).map(c => c.value);
+  if (checked.length === 0) {
+    status.textContent = 'Select at least one agent.';
+    btn.disabled = false;
+    return;
+  }
+
+  try {
+    const result = await api('/api/orchestrate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        agents: checked,
+        task: document.getElementById('orchTask').value,
+        strategy: document.getElementById('orchStrategy').value,
+      })
+    });
+
+    let html = '<h3 style="color:#3fb950;margin-bottom:8px">Orchestration Complete</h3>';
+
+    if (result.plan && result.plan.subtasks) {
+      html += '<h4 style="margin-top:12px;color:#8b949e">Plan</h4><ul>';
+      result.plan.subtasks.forEach(s => {
+        html += '<li style="padding:4px 0;font-size:13px">' + statusSpan('PASS') + ' <strong>' + escape(s.id) + '</strong>: ' + escape(s.description) + ' <span style="color:#8b949e">→ ' + escape(s.agent_type) + '</span></li>';
+      });
+      html += '</ul>';
+    }
+
+    if (result.summary) {
+      html += '<h4 style="margin-top:12px;color:#8b949e">Summary</h4><pre>' + escape(result.summary) + '</pre>';
+    }
+
+    resultsDiv.innerHTML = html;
+    status.textContent = '';
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+  }
+  btn.disabled = false;
 }
 
 // --- Init ---
