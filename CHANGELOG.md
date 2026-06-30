@@ -1,6 +1,39 @@
 # Changelog
 
-## [Unreleased] - v1.0
+## [v1.1] - 2026-06-30
+
+### Added
+- GitHub App installation token support for repository write operations.
+- First-class Issue and Pull Request creation in orchestration records.
+- RBAC checks and audit logs for automation actions.
+- Centralized secret redaction for logs, reports, and generated artifacts.
+- Explicit orchestration quality gates for expected outputs, tests, lint, and diffs.
+- Live Web UI orchestration progress with logs, timeline events, and cancellation.
+- Language and template controls for generated artifacts and GitHub output.
+- Responsive Web UI improvements for mobile and narrow viewports.
+- Issue-triggered orchestration through labels, slash-style commands, and manual import.
+- Source issue status comments for issue-sourced orchestration runs.
+- Issue close policies and human approval gates for conservative automation.
+- Task-context recommendations for agent sets, templates, quality gates, and close policy defaults.
+
+### Changed
+- Web UI orchestration creation now exposes recommendations, GitHub output controls, quality gates, and approval state.
+- GitHub automation defaults favor human approval for higher-risk or operations-oriented tasks.
+- Orchestration completion records include GitHub metadata such as source issue, branch, pull request, close policy, approval status, and source close state.
+
+### Notes
+- GitHub-to-AgentOS webhook delivery is not required for v1.1 because deployments may not be reachable from GitHub.
+- The `on_pr_merge` close policy is recorded for manual follow-up; webhook-based automatic PR merge detection is deferred.
+
+## [v1.0.1] - 2026-06-30
+
+### Fixed
+- Empty remote repositories now complete multi-agent orchestration through deterministic fallback artifacts.
+- `go-backend`, `docs`, and `ci-fixer` agents create expected fallback files when LLM execution returns no usable outputs.
+- Timed-out contexts can still produce deterministic fallback artifacts.
+- No-op orchestration success is prevented when expected outputs are missing.
+
+## [v1.0.0] - 2026-06-29
 
 ### Added
 - Runtime Agent interface (Plan, Execute, Review) with lifecycle hooks (#91)
