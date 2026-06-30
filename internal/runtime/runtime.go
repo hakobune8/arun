@@ -302,14 +302,15 @@ func (r *Runtime) saveExecutionArtifacts(result *ExecutionResult) {
 	if result == nil {
 		return
 	}
+	redactor := safety.NewRedactor()
 	if result.Diff != "" {
-		_ = r.Workspace.SaveFile("diff.patch", []byte(result.Diff)) //nolint:errcheck // best-effort save
+		_ = r.Workspace.SaveFile("diff.patch", []byte(redactor.RedactString(result.Diff))) //nolint:errcheck // best-effort save
 	}
 	if result.TestLog != "" {
-		_ = r.Workspace.SaveFile("test.log", []byte(result.TestLog)) //nolint:errcheck // best-effort save
+		_ = r.Workspace.SaveFile("test.log", []byte(redactor.RedactString(result.TestLog))) //nolint:errcheck // best-effort save
 	}
 	if result.LintLog != "" {
-		_ = r.Workspace.SaveFile("lint.log", []byte(result.LintLog)) //nolint:errcheck // best-effort save
+		_ = r.Workspace.SaveFile("lint.log", []byte(redactor.RedactString(result.LintLog))) //nolint:errcheck // best-effort save
 	}
 }
 
@@ -340,7 +341,7 @@ func (r *Runtime) generateSummary(tk *task.Task, record *state.RunRecord, diff s
 		}
 	}
 
-	return b.String()
+	return safety.NewRedactor().RedactString(b.String())
 }
 
 func (r *Runtime) generatePRBody(tk *task.Task, plan *Plan, diff string, review *ReviewResult) string {
@@ -370,7 +371,7 @@ func (r *Runtime) generatePRBody(tk *task.Task, plan *Plan, diff string, review 
 		b.WriteString(review.Summary)
 	}
 
-	return b.String()
+	return safety.NewRedactor().RedactString(b.String())
 }
 
 func mustMarshalJSON(v interface{}) []byte {

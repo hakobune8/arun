@@ -44,6 +44,7 @@ import (
 	"github.com/kazyamaz200/agentos/internal/orchestrator"
 	"github.com/kazyamaz200/agentos/internal/profile"
 	"github.com/kazyamaz200/agentos/internal/runtime"
+	"github.com/kazyamaz200/agentos/internal/safety"
 	"github.com/kazyamaz200/agentos/internal/sandbox"
 	"github.com/kazyamaz200/agentos/internal/search"
 	"github.com/kazyamaz200/agentos/internal/task"
@@ -314,7 +315,7 @@ func (s *Server) handleRunDetail(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if data, err := os.ReadFile(path); err == nil {
-			result["artifacts"].(map[string]string)[name] = string(data)
+			result["artifacts"].(map[string]string)[name] = safety.NewRedactor().RedactString(string(data))
 		}
 	}
 
@@ -762,7 +763,7 @@ func saveOrchestrationRecord(record *orchestrationRecord) error {
 		return err
 	}
 	path := filepath.Join(orchestrationsDir(), record.ID+".json")
-	data, err := json.MarshalIndent(record, "", "  ")
+	data, err := json.MarshalIndent(safety.NewRedactor().RedactValue(record), "", "  ")
 	if err != nil {
 		return err
 	}

@@ -239,6 +239,31 @@ func TestServer_RunDetail_RejectsInvalidID(t *testing.T) {
 	assertStatus(t, w.Code, http.StatusBadRequest)
 }
 
+func TestServer_RunDetail_RedactsArtifacts(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("AGENTOS_HOME", home)
+
+	runID := "run-0123456789abcdef"
+	runDir := filepath.Join(home, "runs", runID)
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(runDir, "summary.md"),
+		[]byte("Authorization: Bearer ghp_123456789012345678901234567890123456"),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewServer(0)
+	w := serveRequest(s, "GET", "/api/runs/"+runID, nil)
+	assertStatus(t, w.Code, http.StatusOK)
+	if strings.Contains(w.Body.String(), "ghp_123456789012345678901234567890123456") {
+		t.Fatalf("run detail leaked token: %s", w.Body.String())
+	}
+}
+
 // --- GitHub ---
 
 func TestServer_GitHub_MissingRepo(t *testing.T) {

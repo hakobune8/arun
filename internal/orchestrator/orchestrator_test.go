@@ -61,6 +61,33 @@ func TestMergeResults(t *testing.T) {
 	}
 }
 
+func TestMergeResults_RedactsSecrets(t *testing.T) {
+	t.Parallel()
+
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(t.TempDir()),
+		map[string]runtime.Agent{},
+		&runtime.Config{},
+	)
+
+	merged := o.MergeResults([]SubtaskResult{
+		{
+			SubtaskID: "step-1",
+			Output:    "created token ghp_123456789012345678901234567890123456",
+			Error:     "Cookie: agentos_session=signed-session-value",
+		},
+	})
+	for _, leaked := range []string{
+		"ghp_123456789012345678901234567890123456",
+		"signed-session-value",
+	} {
+		if strings.Contains(merged, leaked) {
+			t.Fatalf("merged output leaked %q: %s", leaked, merged)
+		}
+	}
+}
+
 func TestDefaultAgent_Empty(t *testing.T) {
 	t.Parallel()
 
