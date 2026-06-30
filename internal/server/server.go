@@ -63,6 +63,7 @@ var runIDPattern = regexp.MustCompile(`^run-[0-9a-f]{16}$`)
 var githubRepoPathPattern = regexp.MustCompile(`^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$`)
 var gitRefPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$`)
 var customAgentNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{1,62}$`)
+var scenarioVariableNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,62}$`)
 
 // Server serves the AgentOS web UI and API endpoints.
 type Server struct {
@@ -118,6 +119,7 @@ func NewServer(port int) *Server {
 	mux.HandleFunc("/api/search", s.handleSearch)
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/github/", s.handleGitHub)
+	mux.HandleFunc("/api/orchestrate/templates", s.handleOrchestrateTemplates)
 	mux.HandleFunc("/api/orchestrate/recommend", s.handleOrchestrateRecommend)
 	mux.HandleFunc("/api/orchestrate/from-issue", s.handleOrchestrateFromIssue)
 	mux.HandleFunc("/api/orchestrate", s.handleOrchestrate)
@@ -211,6 +213,51 @@ func (s *Server) handleRepositoryAgents(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	_ = json.NewEncoder(w).Encode(repositoryAgentsResponse{Agents: defs}) //nolint:errcheck // best-effort
+}
+
+func (s *Server) handleOrchestrateTemplates(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	user, ok := s.requireAuth(w, r)
+	if !ok {
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST required", http.StatusMethodNotAllowed)
+		return
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "read body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	var req orchestrateTemplatesRequest
+	if len(bytes.TrimSpace(body)) > 0 {
+		if err := json.Unmarshal(body, &req); err != nil {
+			http.Error(w, "parse body: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+	req.Repo = strings.TrimSpace(req.Repo)
+	req.BaseBranch = defaultBaseBranch(req.BaseBranch)
+	if !s.requireAutomationPermission(w, r, user, "orchestrate.templates.list", "repository", req.Repo, "") {
+		return
+	}
+
+	templates := builtInScenarioTemplates(s.agentReg)
+	if req.Repo != "" {
+		repoPath, err := resolveOrchestrateRepo(req.Repo, req.BaseBranch)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		repoTemplates, err := loadRepositoryScenarioTemplates(repoPath, s.agentReg)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		templates = append(templates, repoTemplates...)
+	}
+	_ = json.NewEncoder(w).Encode(templates) //nolint:errcheck // best-effort
 }
 
 // --- Settings ---
@@ -512,15 +559,16 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 // --- Orchestrate ---
 
 type orchestrateRequest struct {
-	Agents         []string                  `json:"agents"`
-	CustomAgents   []agent.Definition        `json:"customAgents,omitempty"`
-	Repo           string                    `json:"repo"`
-	BaseBranch     string                    `json:"baseBranch"`
-	Task           string                    `json:"task"`
-	Strategy       string                    `json:"strategy"`
-	LLMPreset      string                    `json:"llmPreset"`
-	OutputLanguage string                    `json:"outputLanguage,omitempty"`
-	GitHub         *orchestrateGitHubRequest `json:"github,omitempty"`
+	Agents         []string                   `json:"agents"`
+	CustomAgents   []agent.Definition         `json:"customAgents,omitempty"`
+	Scenario       *scenarioTemplateSelection `json:"scenarioTemplate,omitempty"`
+	Repo           string                     `json:"repo"`
+	BaseBranch     string                     `json:"baseBranch"`
+	Task           string                     `json:"task"`
+	Strategy       string                     `json:"strategy"`
+	LLMPreset      string                     `json:"llmPreset"`
+	OutputLanguage string                     `json:"outputLanguage,omitempty"`
+	GitHub         *orchestrateGitHubRequest  `json:"github,omitempty"`
 }
 
 type orchestrateGitHubRequest struct {
@@ -558,6 +606,38 @@ type orchestrateRecommendRequest struct {
 	Task       string `json:"task"`
 }
 
+type orchestrateTemplatesRequest struct {
+	Repo       string `json:"repo"`
+	BaseBranch string `json:"baseBranch"`
+}
+
+type scenarioTemplateSelection struct {
+	ID     string `json:"id"`
+	Name   string `json:"name,omitempty"`
+	Source string `json:"source,omitempty"`
+}
+
+type scenarioTemplateVariable struct {
+	Name        string `json:"name" yaml:"name"`
+	Label       string `json:"label,omitempty" yaml:"label,omitempty"`
+	Placeholder string `json:"placeholder,omitempty" yaml:"placeholder,omitempty"`
+	Default     string `json:"default,omitempty" yaml:"default,omitempty"`
+	Required    bool   `json:"required,omitempty" yaml:"required,omitempty"`
+}
+
+type scenarioTemplate struct {
+	ID                string                     `json:"id" yaml:"id"`
+	Name              string                     `json:"name" yaml:"name"`
+	Description       string                     `json:"description,omitempty" yaml:"description,omitempty"`
+	Source            string                     `json:"source,omitempty" yaml:"source,omitempty"`
+	Agents            []string                   `json:"agents" yaml:"agents"`
+	Strategy          string                     `json:"strategy,omitempty" yaml:"strategy,omitempty"`
+	CreatePullRequest bool                       `json:"createPullRequest,omitempty" yaml:"createPullRequest,omitempty"`
+	RequireApproval   bool                       `json:"requireApproval,omitempty" yaml:"requireApproval,omitempty"`
+	TaskTemplate      string                     `json:"taskTemplate" yaml:"taskTemplate"`
+	Variables         []scenarioTemplateVariable `json:"variables,omitempty" yaml:"variables,omitempty"`
+}
+
 type orchestrationRecommendation struct {
 	Preset            string   `json:"preset"`
 	Confidence        float64  `json:"confidence"`
@@ -577,6 +657,7 @@ type orchestrationRecord struct {
 	Task           string                       `json:"task"`
 	Agents         []string                     `json:"agents"`
 	CustomAgents   []agent.Definition           `json:"customAgents,omitempty"`
+	Scenario       *scenarioTemplateSelection   `json:"scenarioTemplate,omitempty"`
 	Strategy       string                       `json:"strategy"`
 	LLMPreset      string                       `json:"llmPreset"`
 	OutputLanguage string                       `json:"outputLanguage,omitempty"`
@@ -790,6 +871,7 @@ func (s *Server) startOrchestration(w http.ResponseWriter, r *http.Request, user
 	}
 	artifactConfig := loadArtifactConfig(repoPath)
 	applyArtifactConfig(req, artifactConfig)
+	scenarioSelection := resolveScenarioTemplateSelection(req.Scenario, repoPath, s.agentReg)
 
 	agents := make(map[string]runtime.Agent)
 	customAgents, err := validateCustomAgentDefinitions(req.CustomAgents, s.agentReg)
@@ -833,6 +915,7 @@ func (s *Server) startOrchestration(w http.ResponseWriter, r *http.Request, user
 		Task:           req.Task,
 		Agents:         req.Agents,
 		CustomAgents:   selectedCustomAgentDefinitions(req.Agents, customByName),
+		Scenario:       scenarioSelection,
 		Strategy:       req.Strategy,
 		LLMPreset:      presetID,
 		OutputLanguage: normalizeOutputLanguage(req.OutputLanguage),
@@ -2211,6 +2294,291 @@ func applyArtifactConfig(req *orchestrateRequest, cfg artifactConfig) {
 	if strings.TrimSpace(req.GitHub.PRTemplate) == "" && cfg.Templates.PullRequest.Body != "" {
 		req.GitHub.PRTemplate = "repository"
 	}
+}
+
+func builtInScenarioTemplates(registry *agent.Registry) []scenarioTemplate {
+	templates := []scenarioTemplate{
+		{
+			ID:                "go-http-service-bootstrap",
+			Name:              "Go HTTP Service Bootstrap",
+			Description:       "Create or extend a Go HTTP service while preserving repository layout.",
+			Source:            "built-in",
+			Agents:            availableAgentNames(registry, "go-backend", "docs", "qa", "reviewer"),
+			Strategy:          "sequential",
+			CreatePullRequest: true,
+			TaskTemplate: `Bootstrap or extend a Go HTTP service in {{repo}} on {{baseBranch}}.
+
+Package or module focus: {{packageName}}
+Endpoints or handlers: {{endpoints}}
+
+Preserve the existing repository layout and conventions. Add or update tests, document how to run the service, and summarize validation.`,
+			Variables: []scenarioTemplateVariable{
+				{Name: "repo", Label: "Repository", Placeholder: "owner/repo", Required: true},
+				{Name: "baseBranch", Label: "Base branch", Default: "main", Required: true},
+				{Name: "packageName", Label: "Package or module", Placeholder: "internal/server"},
+				{Name: "endpoints", Label: "Endpoints", Placeholder: "GET /health, POST /items"},
+			},
+		},
+		{
+			ID:                "bug-fix-with-tests",
+			Name:              "Bug Fix With Tests",
+			Description:       "Fix a defect, add regression coverage, and review the result.",
+			Source:            "built-in",
+			Agents:            availableAgentNames(registry, "go-backend", "qa", "reviewer"),
+			Strategy:          "sequential",
+			CreatePullRequest: true,
+			TaskTemplate: `Fix the bug in {{repo}} on {{baseBranch}}.
+
+Bug or issue: {{targetIssue}}
+Expected behavior: {{expectedBehavior}}
+Relevant files or components: {{scope}}
+
+Add focused regression tests, keep the change minimal, and include validation results.`,
+			Variables: []scenarioTemplateVariable{
+				{Name: "repo", Label: "Repository", Placeholder: "owner/repo", Required: true},
+				{Name: "baseBranch", Label: "Base branch", Default: "main", Required: true},
+				{Name: "targetIssue", Label: "Bug or issue", Placeholder: "Issue URL, number, or description", Required: true},
+				{Name: "expectedBehavior", Label: "Expected behavior", Placeholder: "What should happen"},
+				{Name: "scope", Label: "Files or components", Placeholder: "internal/foo, cmd/bar"},
+			},
+		},
+		{
+			ID:                "documentation-only-update",
+			Name:              "Documentation-Only Update",
+			Description:       "Update README or docs without code changes unless needed for examples.",
+			Source:            "built-in",
+			Agents:            availableAgentNames(registry, "docs", "reviewer"),
+			Strategy:          "sequential",
+			CreatePullRequest: true,
+			TaskTemplate: `Update documentation in {{repo}} on {{baseBranch}}.
+
+Documentation target: {{docTarget}}
+Audience or use case: {{audience}}
+Required details: {{details}}
+
+Match existing documentation style. Keep commands copy-pasteable and avoid unrelated code changes.`,
+			Variables: []scenarioTemplateVariable{
+				{Name: "repo", Label: "Repository", Placeholder: "owner/repo", Required: true},
+				{Name: "baseBranch", Label: "Base branch", Default: "main", Required: true},
+				{Name: "docTarget", Label: "Doc target", Placeholder: "README.md, docs/deployment.md", Required: true},
+				{Name: "audience", Label: "Audience", Placeholder: "operators, contributors, API users"},
+				{Name: "details", Label: "Required details", Placeholder: "configuration, examples, troubleshooting"},
+			},
+		},
+		{
+			ID:                "ci-failure-fixer",
+			Name:              "CI Failure Fixer",
+			Description:       "Diagnose and fix failing CI with local validation.",
+			Source:            "built-in",
+			Agents:            availableAgentNames(registry, "ci-fixer", "qa", "reviewer"),
+			Strategy:          "sequential",
+			CreatePullRequest: true,
+			TaskTemplate: `Fix CI failures for {{repo}} on {{baseBranch}}.
+
+Workflow or check: {{workflow}}
+Failure URL or log excerpt: {{failure}}
+
+Preserve existing workflow intent, mirror CI validation locally where practical, and summarize the root cause.`,
+			Variables: []scenarioTemplateVariable{
+				{Name: "repo", Label: "Repository", Placeholder: "owner/repo", Required: true},
+				{Name: "baseBranch", Label: "Base branch", Default: "main", Required: true},
+				{Name: "workflow", Label: "Workflow or check", Placeholder: "CI / lint"},
+				{Name: "failure", Label: "Failure detail", Placeholder: "Actions URL or error excerpt", Required: true},
+			},
+		},
+		{
+			ID:                "security-remediation",
+			Name:              "Security Remediation",
+			Description:       "Address security or code-scanning findings with validation notes.",
+			Source:            "built-in",
+			Agents:            availableAgentNames(registry, "security", "go-backend", "qa", "reviewer"),
+			Strategy:          "sequential",
+			CreatePullRequest: true,
+			RequireApproval:   true,
+			TaskTemplate: `Remediate the security finding in {{repo}} on {{baseBranch}}.
+
+Finding: {{finding}}
+Affected area: {{scope}}
+Required constraints: {{constraints}}
+
+Prefer narrow defensive fixes, add tests or manual verification notes, and document residual risk.`,
+			Variables: []scenarioTemplateVariable{
+				{Name: "repo", Label: "Repository", Placeholder: "owner/repo", Required: true},
+				{Name: "baseBranch", Label: "Base branch", Default: "main", Required: true},
+				{Name: "finding", Label: "Finding", Placeholder: "CodeQL alert, dependency advisory, or description", Required: true},
+				{Name: "scope", Label: "Affected area", Placeholder: "auth/session/dependencies"},
+				{Name: "constraints", Label: "Constraints", Placeholder: "No dependency upgrades beyond patch releases"},
+			},
+		},
+		{
+			ID:                "release-preparation",
+			Name:              "Release Preparation",
+			Description:       "Prepare changelog, checklist, and release readiness updates.",
+			Source:            "built-in",
+			Agents:            availableAgentNames(registry, "release-manager", "docs", "qa", "reviewer"),
+			Strategy:          "sequential",
+			CreatePullRequest: true,
+			RequireApproval:   true,
+			TaskTemplate: `Prepare release materials for {{repo}} on {{baseBranch}}.
+
+Release version: {{version}}
+Scope since: {{since}}
+Required artifacts: {{artifacts}}
+
+Update changelog or release docs according to repository conventions. Include validation, known gaps, and rollback considerations.`,
+			Variables: []scenarioTemplateVariable{
+				{Name: "repo", Label: "Repository", Placeholder: "owner/repo", Required: true},
+				{Name: "baseBranch", Label: "Base branch", Default: "main", Required: true},
+				{Name: "version", Label: "Version", Placeholder: "v1.2.0", Required: true},
+				{Name: "since", Label: "Scope since", Placeholder: "v1.1.0 or commit SHA"},
+				{Name: "artifacts", Label: "Artifacts", Placeholder: "CHANGELOG.md, upgrade guide, chart values"},
+			},
+		},
+		{
+			ID:                "frontend-ui-change",
+			Name:              "Frontend UI Change",
+			Description:       "Implement a focused UI change with responsive and accessibility checks.",
+			Source:            "built-in",
+			Agents:            availableAgentNames(registry, "go-backend", "qa", "reviewer"),
+			Strategy:          "sequential",
+			CreatePullRequest: true,
+			TaskTemplate: `Implement the frontend UI change in {{repo}} on {{baseBranch}}.
+
+Screen or flow: {{screen}}
+Change requested: {{change}}
+Validation target: {{validation}}
+
+Follow existing frontend conventions, keep text and controls responsive, and include browser or build verification notes.`,
+			Variables: []scenarioTemplateVariable{
+				{Name: "repo", Label: "Repository", Placeholder: "owner/repo", Required: true},
+				{Name: "baseBranch", Label: "Base branch", Default: "main", Required: true},
+				{Name: "screen", Label: "Screen or flow", Placeholder: "Dashboard, New Orchestration"},
+				{Name: "change", Label: "Change requested", Placeholder: "Add filter controls", Required: true},
+				{Name: "validation", Label: "Validation target", Placeholder: "desktop/mobile screenshots, npm test"},
+			},
+		},
+	}
+	return templates
+}
+
+func availableAgentNames(registry *agent.Registry, names ...string) []string {
+	var available []string
+	for _, name := range names {
+		if registry == nil || registry.Has(name) {
+			available = append(available, name)
+		}
+	}
+	return available
+}
+
+func loadRepositoryScenarioTemplates(repoPath string, registry *agent.Registry) ([]scenarioTemplate, error) {
+	dir := filepath.Join(repoPath, ".agentos", "scenarios")
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return []scenarioTemplate{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read .agentos/scenarios: %w", err)
+	}
+
+	var templates []scenarioTemplate
+	for _, entry := range entries {
+		if entry.IsDir() || (!strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml")) {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("%s: read: %w", filepath.ToSlash(filepath.Join(".agentos", "scenarios", entry.Name())), err)
+		}
+		var tmpl scenarioTemplate
+		if err := yaml.Unmarshal(raw, &tmpl); err != nil {
+			return nil, fmt.Errorf("%s: parse: %w", filepath.ToSlash(filepath.Join(".agentos", "scenarios", entry.Name())), err)
+		}
+		tmpl.Source = "repository"
+		if err := validateScenarioTemplate(&tmpl, registry); err != nil {
+			return nil, fmt.Errorf("%s: %w", filepath.ToSlash(filepath.Join(".agentos", "scenarios", entry.Name())), err)
+		}
+		templates = append(templates, tmpl)
+	}
+	sort.Slice(templates, func(i, j int) bool {
+		return templates[i].ID < templates[j].ID
+	})
+	return templates, nil
+}
+
+func validateScenarioTemplate(tmpl *scenarioTemplate, registry *agent.Registry) error {
+	tmpl.ID = strings.TrimSpace(tmpl.ID)
+	tmpl.Name = strings.TrimSpace(tmpl.Name)
+	tmpl.Strategy = strings.TrimSpace(tmpl.Strategy)
+	if tmpl.Strategy == "" {
+		tmpl.Strategy = "sequential"
+	}
+	if tmpl.ID == "" {
+		return fmt.Errorf("id is required")
+	}
+	if !customAgentNamePattern.MatchString(tmpl.ID) {
+		return fmt.Errorf("id must match %s", customAgentNamePattern.String())
+	}
+	if tmpl.Name == "" {
+		return fmt.Errorf("name is required")
+	}
+	if strings.TrimSpace(tmpl.TaskTemplate) == "" {
+		return fmt.Errorf("taskTemplate is required")
+	}
+	if tmpl.Strategy != "sequential" && tmpl.Strategy != "parallel" {
+		return fmt.Errorf("strategy must be sequential or parallel")
+	}
+	if len(tmpl.Agents) == 0 {
+		return fmt.Errorf("agents is required")
+	}
+	for _, name := range tmpl.Agents {
+		if registry != nil && !registry.Has(name) {
+			return fmt.Errorf("unknown agent %q", name)
+		}
+	}
+	seenVars := map[string]bool{}
+	for i := range tmpl.Variables {
+		name := strings.TrimSpace(tmpl.Variables[i].Name)
+		tmpl.Variables[i].Name = name
+		if name == "" {
+			return fmt.Errorf("variables[%d].name is required", i)
+		}
+		if !scenarioVariableNamePattern.MatchString(name) {
+			return fmt.Errorf("variable %q must match %s", name, scenarioVariableNamePattern.String())
+		}
+		if seenVars[name] {
+			return fmt.Errorf("duplicate variable %q", name)
+		}
+		seenVars[name] = true
+	}
+	return nil
+}
+
+func resolveScenarioTemplateSelection(selection *scenarioTemplateSelection, repoPath string, registry *agent.Registry) *scenarioTemplateSelection {
+	if selection == nil || strings.TrimSpace(selection.ID) == "" {
+		return nil
+	}
+	id := strings.TrimSpace(selection.ID)
+	builtIns := builtInScenarioTemplates(registry)
+	for i := range builtIns {
+		tmpl := builtIns[i]
+		if tmpl.ID == id {
+			return &scenarioTemplateSelection{ID: tmpl.ID, Name: tmpl.Name, Source: tmpl.Source}
+		}
+	}
+	if repoPath != "" {
+		templates, err := loadRepositoryScenarioTemplates(repoPath, registry)
+		if err == nil {
+			for i := range templates {
+				tmpl := templates[i]
+				if tmpl.ID == id {
+					return &scenarioTemplateSelection{ID: tmpl.ID, Name: tmpl.Name, Source: tmpl.Source}
+				}
+			}
+		}
+	}
+	return &scenarioTemplateSelection{ID: id, Name: strings.TrimSpace(selection.Name), Source: strings.TrimSpace(selection.Source)}
 }
 
 func loadRepositoryAgentDefinitions(repoPath string, registry *agent.Registry) ([]agent.Definition, error) {

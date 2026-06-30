@@ -588,6 +588,7 @@ func TestOrchestrationRecordStore_RoundTrip(t *testing.T) {
 				Tools: agent.ToolsConfig{Allow: []string{"read_file", "search"}},
 			},
 		}},
+		Scenario:  &scenarioTemplateSelection{ID: "security-remediation", Name: "Security Remediation", Source: "built-in"},
 		Strategy:  "parallel",
 		Status:    "completed",
 		CreatedAt: now,
@@ -606,12 +607,88 @@ func TestOrchestrationRecordStore_RoundTrip(t *testing.T) {
 	if len(got.CustomAgents) != 1 || got.CustomAgents[0].Metadata.Name != "repo-security" {
 		t.Fatalf("custom agents were not preserved: %+v", got.CustomAgents)
 	}
+	if got.Scenario == nil || got.Scenario.ID != "security-remediation" {
+		t.Fatalf("scenario template was not preserved: %+v", got.Scenario)
+	}
 	records, err := listOrchestrationRecords()
 	if err != nil {
 		t.Fatalf("listOrchestrationRecords() error = %v", err)
 	}
 	if len(records) != 1 || records[0].ID != record.ID {
 		t.Fatalf("records = %+v, want one %s", records, record.ID)
+	}
+}
+
+func TestServer_OrchestrateTemplates_ReturnsBuiltIns(t *testing.T) {
+	s := NewServer(0)
+	w := serveRequest(s, "POST", "/api/orchestrate/templates", []byte(`{"repo":"","baseBranch":"main"}`))
+	assertStatus(t, w.Code, http.StatusOK)
+	var templates []scenarioTemplate
+	if err := json.Unmarshal(w.Body.Bytes(), &templates); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(templates) < 7 {
+		t.Fatalf("templates = %d, want at least 7", len(templates))
+	}
+	if templates[0].ID == "" || templates[0].TaskTemplate == "" || len(templates[0].Agents) == 0 {
+		t.Fatalf("template missing required fields: %+v", templates[0])
+	}
+}
+
+func TestLoadRepositoryScenarioTemplates_LoadsValidTemplates(t *testing.T) {
+	repo := t.TempDir()
+	dir := filepath.Join(repo, ".agentos", "scenarios")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "docs.yaml"), []byte(`id: repo-docs
+name: Repository Docs
+description: Repository-specific documentation update
+agents:
+  - docs
+  - reviewer
+strategy: sequential
+createPullRequest: true
+taskTemplate: |
+  Update {{docTarget}} for {{repo}}.
+variables:
+  - name: repo
+    label: Repository
+    required: true
+  - name: docTarget
+    label: Doc target
+    required: true
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	templates, err := loadRepositoryScenarioTemplates(repo, agent.DefaultRegistry())
+	if err != nil {
+		t.Fatalf("loadRepositoryScenarioTemplates() error = %v", err)
+	}
+	if len(templates) != 1 || templates[0].ID != "repo-docs" || templates[0].Source != "repository" {
+		t.Fatalf("templates = %+v", templates)
+	}
+}
+
+func TestLoadRepositoryScenarioTemplates_RejectsUnknownAgent(t *testing.T) {
+	repo := t.TempDir()
+	dir := filepath.Join(repo, ".agentos", "scenarios")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "bad.yaml"), []byte(`id: bad-template
+name: Bad Template
+agents:
+  - missing-agent
+taskTemplate: Do work.
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := loadRepositoryScenarioTemplates(repo, agent.DefaultRegistry())
+	if err == nil || !strings.Contains(err.Error(), "unknown agent") {
+		t.Fatalf("error = %v, want unknown agent rejection", err)
 	}
 }
 

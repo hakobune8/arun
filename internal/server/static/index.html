@@ -155,6 +155,13 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
             <input type="text" id="orchBaseBranch" value="main" placeholder="main">
           </div>
           <div class="form-group">
+            <label>Scenario Template</label>
+            <select id="orchScenarioTemplate" onchange="renderScenarioTemplateControls()"></select>
+            <button type="button" class="btn btn-secondary" style="margin-top:8px" onclick="loadScenarioTemplates()">Reload Templates</button>
+            <div id="orchScenarioVariables"></div>
+            <div id="orchScenarioPreview"></div>
+          </div>
+          <div class="form-group">
             <label>Agents</label>
             <button type="button" class="btn btn-secondary" style="margin-bottom:8px" onclick="loadRepositoryAgents()">Load Repository Agents</button>
             <p id="orchCustomAgentsStatus" class="muted" style="margin:0 0 8px 0"></p>
@@ -247,6 +254,8 @@ let selectedOrchestrateId = '';
 let currentOrchestration = null;
 let builtInAgents = [];
 let repositoryCustomAgents = [];
+let scenarioTemplates = [];
+let selectedScenarioTemplate = null;
 let orchPoll = null;
 let authSession = {authRequired:false,authenticated:true};
 let llmSettings = {defaultPreset:'default',presets:[]};
@@ -261,6 +270,7 @@ function showPage(name) {
   if (name === 'orchestrates') {
     loadOrchAgentCheckboxes();
     loadLLMSettings();
+    loadScenarioTemplates();
     loadOrchestrates();
   }
   if (name === 'agents') loadAgents();
@@ -276,6 +286,7 @@ function showOrchPanel(name) {
   if (name === 'new') {
     loadOrchAgentCheckboxes();
     renderLLMSelect('orchLLMPreset', 'orchLLMPresetMeta');
+    loadScenarioTemplates();
   }
   if (name === 'list') loadOrchestrates();
   if (name === 'detail') renderOrchestrationDetail();
@@ -429,6 +440,92 @@ async function loadRepositoryAgents() {
   }
 }
 
+async function loadScenarioTemplates() {
+  const select = document.getElementById('orchScenarioTemplate');
+  if (!select) return;
+  select.innerHTML = '<option value="">Loading templates...</option>';
+  try {
+    scenarioTemplates = await api('/api/orchestrate/templates', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        repo: document.getElementById('orchRepo').value.trim(),
+        baseBranch: document.getElementById('orchBaseBranch').value.trim() || 'main'
+      })
+    });
+    select.innerHTML = '<option value="">No template</option>' + scenarioTemplates.map(t =>
+      '<option value="' + escapeAttr(t.id) + '">' + escape(t.name) + (t.source === 'repository' ? ' (repository)' : '') + '</option>'
+    ).join('');
+    renderScenarioTemplateControls();
+  } catch(e) {
+    scenarioTemplates = [];
+    select.innerHTML = '<option value="">Templates unavailable</option>';
+    document.getElementById('orchScenarioPreview').innerHTML = '<p class="error" style="margin-top:8px">Templates failed: ' + escape(e.message) + '</p>';
+  }
+}
+
+function renderScenarioTemplateControls() {
+  const id = document.getElementById('orchScenarioTemplate').value;
+  selectedScenarioTemplate = (scenarioTemplates || []).find(t => t.id === id) || null;
+  const vars = document.getElementById('orchScenarioVariables');
+  const preview = document.getElementById('orchScenarioPreview');
+  if (!selectedScenarioTemplate) {
+    vars.innerHTML = '';
+    preview.innerHTML = '';
+    return;
+  }
+  const fields = selectedScenarioTemplate.variables || [];
+  vars.innerHTML = '<div class="inline-grid" style="margin-top:8px">' + fields.map(v =>
+    '<input type="text" data-scenario-var="' + escapeAttr(v.name) + '" value="' + escapeAttr(defaultScenarioValue(v)) + '" placeholder="' + escapeAttr(v.label || v.placeholder || v.name) + '" oninput="renderScenarioPreview()">'
+  ).join('') + '</div>';
+  renderScenarioPreview();
+}
+
+function defaultScenarioValue(v) {
+  if (v.name === 'repo') return document.getElementById('orchRepo').value.trim() || v.default || '';
+  if (v.name === 'baseBranch') return document.getElementById('orchBaseBranch').value.trim() || v.default || 'main';
+  return v.default || '';
+}
+
+function scenarioValues() {
+  const values = {};
+  document.querySelectorAll('[data-scenario-var]').forEach(input => { values[input.dataset.scenarioVar] = input.value.trim(); });
+  return values;
+}
+
+function renderScenarioPreview() {
+  const preview = document.getElementById('orchScenarioPreview');
+  if (!selectedScenarioTemplate) {
+    preview.innerHTML = '';
+    return;
+  }
+  const task = renderScenarioTask(selectedScenarioTemplate, scenarioValues());
+  const agents = (selectedScenarioTemplate.agents || []).map(a => '<span class="tag">' + escape(a) + '</span>').join('');
+  preview.innerHTML = '<div class="agent-card" style="margin-top:10px">' +
+    '<h3>' + escape(selectedScenarioTemplate.name) + ' <span class="muted">' + escape(selectedScenarioTemplate.source || 'built-in') + '</span></h3>' +
+    '<p>' + escape(selectedScenarioTemplate.description || '') + '</p>' +
+    '<div class="tags">' + agents + '<span class="tag">' + escape(selectedScenarioTemplate.strategy || 'sequential') + '</span>' +
+    '<span class="tag">' + (selectedScenarioTemplate.createPullRequest ? 'create PR' : 'report only') + '</span>' +
+    '<span class="tag">' + (selectedScenarioTemplate.requireApproval ? 'approval recommended' : 'no approval gate') + '</span></div>' +
+    '<pre>' + escape(task) + '</pre>' +
+    '<button type="button" class="btn btn-secondary" onclick="applyScenarioTemplate()">Apply Template</button>' +
+    '</div>';
+}
+
+function renderScenarioTask(template, values) {
+  return String(template.taskTemplate || '').replace(/\\{\\{\\s*([A-Za-z][A-Za-z0-9_]*)\\s*\\}\\}/g, (_, name) => values[name] || '');
+}
+
+function applyScenarioTemplate() {
+  if (!selectedScenarioTemplate) return;
+  const task = renderScenarioTask(selectedScenarioTemplate, scenarioValues()).trim();
+  if (task) document.getElementById('orchTask').value = task;
+  const wanted = new Set(selectedScenarioTemplate.agents || []);
+  document.querySelectorAll('#orchAgents input').forEach(c => { c.checked = wanted.has(c.value); });
+  if (selectedScenarioTemplate.strategy) document.getElementById('orchStrategy').value = selectedScenarioTemplate.strategy;
+  document.getElementById('orchCreatePR').checked = !!selectedScenarioTemplate.createPullRequest;
+}
+
 async function submitOrchestrate(e) {
   e.preventDefault();
   const btn = e.target.querySelector('button[type=submit]');
@@ -447,6 +544,11 @@ async function submitOrchestrate(e) {
       body: JSON.stringify({
         agents: checked,
         customAgents: repositoryCustomAgents,
+        scenarioTemplate: selectedScenarioTemplate ? {
+          id: selectedScenarioTemplate.id,
+          name: selectedScenarioTemplate.name,
+          source: selectedScenarioTemplate.source
+        } : null,
         repo: document.getElementById('orchRepo').value.trim(),
         baseBranch: document.getElementById('orchBaseBranch').value.trim() || 'main',
         task: document.getElementById('orchTask').value,
@@ -616,7 +718,7 @@ function renderOrchestrationDetail() {
   div.innerHTML =
     '<div class="card">' +
     '<div class="detail-header"><div><h2>' + escape(r.id) + ' ' + statusSpan(r.status) + '</h2>' +
-    '<div class="detail-meta"><span class="repo-pill">' + escape(r.repo || '-') + '</span><span class="repo-pill">' + escape(r.baseBranch || '-') + '</span><span class="repo-pill">' + escape(r.strategy || '-') + '</span><span class="repo-pill">' + escape(r.llmPreset || '-') + '</span><span class="repo-pill">' + escape(r.outputLanguage || 'en') + '</span></div></div>' +
+    '<div class="detail-meta"><span class="repo-pill">' + escape(r.repo || '-') + '</span><span class="repo-pill">' + escape(r.baseBranch || '-') + '</span><span class="repo-pill">' + escape(r.strategy || '-') + '</span><span class="repo-pill">' + escape(r.llmPreset || '-') + '</span><span class="repo-pill">' + escape(r.outputLanguage || 'en') + '</span>' + renderScenarioPill(r.scenarioTemplate) + '</div></div>' +
     '<div class="actions">' + renderApprovalActions(r) + ((r.status === 'planning' || r.status === 'running') ? '<button class="btn btn-danger" onclick="cancelCurrentOrchestration()">Cancel</button>' : '') + '<button class="btn btn-secondary" onclick="refreshCurrentOrchestration()">Refresh</button></div></div>' +
     '<p class="muted" style="margin-top:12px">' + escape(r.task || '') + '</p>' +
     renderGitHubArtifacts(r.github) +
@@ -632,6 +734,11 @@ function renderOrchestrationDetail() {
     detailPanel('runs', renderRuns(r)) +
     detailPanel('search', renderSearch()) +
     detailPanel('github', renderGitHub(r));
+}
+
+function renderScenarioPill(scenario) {
+  if (!scenario || !scenario.id) return '';
+  return '<span class="repo-pill">scenario ' + escape(scenario.name || scenario.id) + '</span>';
 }
 
 function renderGitHubArtifacts(github) {
