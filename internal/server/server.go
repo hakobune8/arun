@@ -798,7 +798,8 @@ func (s *Server) startOrchestration(w http.ResponseWriter, r *http.Request, user
 		return
 	}
 	customByName := make(map[string]agent.Definition, len(customAgents))
-	for _, def := range customAgents {
+	for i := range customAgents {
+		def := customAgents[i]
 		customByName[def.Metadata.Name] = def
 	}
 	for _, name := range req.Agents {
@@ -2261,10 +2262,10 @@ func validateCustomAgentDefinitions(defs []agent.Definition, registry *agent.Reg
 			return nil, fmt.Errorf("%s: duplicate custom agent name", name)
 		}
 		seen[name] = true
-		if err := validateCustomAgentTools(def); err != nil {
+		if err := validateCustomAgentTools(&def); err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
-		if err := validateCustomAgentCommands(def); err != nil {
+		if err := validateCustomAgentCommands(&def); err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
 		validated = append(validated, def)
@@ -2272,7 +2273,7 @@ func validateCustomAgentDefinitions(defs []agent.Definition, registry *agent.Reg
 	return validated, nil
 }
 
-func validateCustomAgentTools(def agent.Definition) error {
+func validateCustomAgentTools(def *agent.Definition) error {
 	allowedTools := map[string]bool{
 		"read_file":  true,
 		"write_file": true,
@@ -2299,7 +2300,7 @@ func validateCustomAgentTools(def agent.Definition) error {
 	return nil
 }
 
-func validateCustomAgentCommands(def agent.Definition) error {
+func validateCustomAgentCommands(def *agent.Definition) error {
 	commands := []string{def.Spec.Commands.Test, def.Spec.Commands.Lint, def.Spec.Commands.Build}
 	blocked := []string{"rm -rf", "sudo", "curl ", "wget ", "ssh ", "scp ", "docker run --privileged"}
 	for _, command := range commands {
@@ -2328,8 +2329,9 @@ func selectedCustomAgentDefinitions(agentNames []string, customByName map[string
 
 func orchestrationAgentProfiles(record *orchestrationRecord, agents map[string]runtime.Agent) map[string]profile.Profile {
 	profiles := make(map[string]profile.Profile, len(record.CustomAgents))
-	for _, def := range record.CustomAgents {
-		prof := factory.ProfileFromDefinition(&def)
+	for i := range record.CustomAgents {
+		def := &record.CustomAgents[i]
+		prof := factory.ProfileFromDefinition(def)
 		profiles[def.Metadata.Name] = *prof
 	}
 	return profiles
@@ -2338,19 +2340,22 @@ func orchestrationAgentProfiles(record *orchestrationRecord, agents map[string]r
 func orchestrationAgentMetadata(record *orchestrationRecord, agents map[string]runtime.Agent, registry *agent.Registry) []orchestrator.AgentMetadata {
 	infoByName := make(map[string]agent.Info)
 	if registry != nil {
-		for _, info := range registry.List() {
+		infos := registry.List()
+		for i := range infos {
+			info := infos[i]
 			infoByName[info.Name] = info
 		}
 	}
 	customByName := make(map[string]agent.Definition, len(record.CustomAgents))
-	for _, def := range record.CustomAgents {
+	for i := range record.CustomAgents {
+		def := record.CustomAgents[i]
 		customByName[def.Metadata.Name] = def
 	}
 
 	var metadata []orchestrator.AgentMetadata
 	for _, name := range record.Agents {
 		if def, ok := customByName[name]; ok {
-			metadata = append(metadata, customAgentMetadata(def))
+			metadata = append(metadata, customAgentMetadata(&def))
 			continue
 		}
 		if info, ok := infoByName[name]; ok {
@@ -2369,7 +2374,7 @@ func orchestrationAgentMetadata(record *orchestrationRecord, agents map[string]r
 	return metadata
 }
 
-func customAgentMetadata(def agent.Definition) orchestrator.AgentMetadata {
+func customAgentMetadata(def *agent.Definition) orchestrator.AgentMetadata {
 	role := strings.TrimSpace(def.Metadata.Labels["role"])
 	if role == "" {
 		role = "repository-defined custom agent"

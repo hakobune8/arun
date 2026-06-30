@@ -145,8 +145,8 @@ func (o *Orchestrator) SetAgentMetadata(infos []AgentMetadata, profiles map[stri
 		if o.agentProfiles == nil {
 			o.agentProfiles = make(map[string]profile.Profile, len(profiles))
 		}
-		for name, prof := range profiles {
-			o.agentProfiles[name] = prof
+		for name := range profiles {
+			o.agentProfiles[name] = profiles[name]
 		}
 	}
 }
