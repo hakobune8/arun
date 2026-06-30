@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/kazyamaz200/agentos/internal/agent"
+	"github.com/kazyamaz200/agentos/internal/guideline"
 	"github.com/kazyamaz200/agentos/internal/memory"
 	"github.com/kazyamaz200/agentos/internal/orchestrator"
 )
@@ -305,6 +306,98 @@ func TestRepositoryMemory_PlanningContextAndProposals(t *testing.T) {
 	}
 	if len(pending) == 0 {
 		t.Fatal("expected pending proposals in store")
+	}
+}
+
+func TestServer_RepositoryGuidelineLifecycle(t *testing.T) {
+	t.Setenv("AGENTOS_HOME", t.TempDir())
+	s := NewServer(0)
+
+	createBody := []byte(`{"repo":"owner/repo","baseBranch":"main","title":"Server APIs","type":"architecture","content":"Place handlers under internal/server.","required":true}`)
+	w := serveRequest(s, "POST", "/api/repository-guidelines", createBody)
+	assertStatus(t, w.Code, http.StatusOK)
+	var created guideline.RepositoryGuideline
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if !created.Required || created.Status != guideline.RepositoryGuidelineActive {
+		t.Fatalf("created = %+v, want active required guideline", created)
+	}
+
+	w = serveRequest(s, "GET", "/api/repository-guidelines?repo=owner/repo&baseBranch=main&q=internal/server", nil)
+	assertStatus(t, w.Code, http.StatusOK)
+	var listed []guideline.RepositoryGuideline
+	if err := json.Unmarshal(w.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].ID != created.ID {
+		t.Fatalf("listed = %+v, want created guideline", listed)
+	}
+
+	w = serveRequest(s, "PUT", "/api/repository-guidelines/"+created.ID, []byte(`{"title":"Server API convention","content":"Keep Web UI handlers in internal/server.","type":"architecture","required":false}`))
+	assertStatus(t, w.Code, http.StatusOK)
+	var updated guideline.RepositoryGuideline
+	if err := json.Unmarshal(w.Body.Bytes(), &updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.Title != "Server API convention" || updated.Required {
+		t.Fatalf("updated = %+v, want edited advisory guideline", updated)
+	}
+
+	w = serveRequest(s, "DELETE", "/api/repository-guidelines/"+created.ID, nil)
+	assertStatus(t, w.Code, http.StatusOK)
+	var archived guideline.RepositoryGuideline
+	if err := json.Unmarshal(w.Body.Bytes(), &archived); err != nil {
+		t.Fatal(err)
+	}
+	if archived.Status != guideline.RepositoryGuidelineArchived {
+		t.Fatalf("Status = %q, want archived", archived.Status)
+	}
+}
+
+func TestRepositoryGuidelines_PlanningContextAndRequiredEnforcement(t *testing.T) {
+	t.Setenv("AGENTOS_HOME", t.TempDir())
+	store, err := repositoryGuidelineStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	required := &guideline.RepositoryGuideline{
+		Repo:     "owner/repo",
+		Branch:   "main",
+		Title:    "Run validation",
+		Type:     "validation",
+		Content:  "Run go test ./... before reporting success.",
+		Required: true,
+		Status:   guideline.RepositoryGuidelineActive,
+	}
+	if err := store.Save(ctx, required); err != nil {
+		t.Fatal(err)
+	}
+	record := &orchestrationRecord{
+		ID:         "run-0123456789abcdef",
+		Repo:       "owner/repo",
+		BaseBranch: "main",
+		Task:       "Add validation for go tests",
+	}
+	used := repositoryGuidelinesForPlanning(ctx, record, "go-backend")
+	if len(used) != 1 || !strings.Contains(taskWithRepositoryGuidelines(record.Task, used), "Run validation") {
+		t.Fatalf("used guidelines = %+v", used)
+	}
+	plan := &orchestrator.TaskPlan{Subtasks: []orchestrator.Subtask{{
+		ID:          "step-1",
+		AgentName:   "go-backend",
+		Description: "implement validation",
+	}}}
+	applied := applyRepositoryGuidelinesToPlan(plan, used)
+	if len(applied) != 1 || !strings.Contains(plan.Subtasks[0].Description, "Run go test ./...") {
+		t.Fatalf("applied = %+v description=%q", applied, plan.Subtasks[0].Description)
+	}
+	if missed := missedRequiredGuidelines(used, applied); len(missed) != 0 {
+		t.Fatalf("missed = %+v, want none", missed)
+	}
+	if missed := missedRequiredGuidelines(used, nil); len(missed) != 1 || missed[0].ID != required.ID {
+		t.Fatalf("missed = %+v, want required guideline", missed)
 	}
 }
 

@@ -134,6 +134,45 @@ Orchestration detail responses include:
 
 ---
 
+### Repository Guidelines
+
+```
+GET /api/repository-guidelines?repo={repo}&baseBranch={branch}&q={query}&status={status}&type={type}&agent={agent}
+POST /api/repository-guidelines
+PUT /api/repository-guidelines/{id}
+DELETE /api/repository-guidelines/{id}
+```
+
+Repository guidelines are scoped by repository and branch. AgentOS loads
+`.agentos/guidelines/*.md`, `*.yaml`, and `*.yml` from the target repository at
+orchestration planning time, ranks relevant active guidelines by task and agent,
+and attaches them to planned subtasks.
+
+Create or update body:
+
+```json
+{
+  "repo": "owner/repo",
+  "baseBranch": "main",
+  "title": "Web UI API convention",
+  "type": "architecture",
+  "content": "Place Web UI API handlers in internal/server.",
+  "tags": ["go-backend"],
+  "required": true,
+  "status": "active"
+}
+```
+
+`DELETE` archives the guideline by setting `status` to `archived`.
+
+Orchestration detail responses include:
+
+- `guidelinesUsed`: guidelines attached to planned subtasks.
+- `missedRequiredGuidelines`: required guidelines that were loaded but not
+  attached to any subtask.
+
+---
+
 ## Authentication
 
 Authentication is optional. Local development can run without login. Production

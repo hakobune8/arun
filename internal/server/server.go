@@ -44,6 +44,7 @@ import (
 	"github.com/kazyamaz200/agentos/internal/embedding"
 	"github.com/kazyamaz200/agentos/internal/factory"
 	agentosgh "github.com/kazyamaz200/agentos/internal/github"
+	"github.com/kazyamaz200/agentos/internal/guideline"
 	"github.com/kazyamaz200/agentos/internal/llm"
 	"github.com/kazyamaz200/agentos/internal/memory"
 	"github.com/kazyamaz200/agentos/internal/orchestrator"
@@ -120,6 +121,8 @@ func NewServer(port int) *Server {
 	mux.HandleFunc("/api/search", s.handleSearch)
 	mux.HandleFunc("/api/repository-memory", s.handleRepositoryMemory)
 	mux.HandleFunc("/api/repository-memory/", s.handleRepositoryMemoryItem)
+	mux.HandleFunc("/api/repository-guidelines", s.handleRepositoryGuidelines)
+	mux.HandleFunc("/api/repository-guidelines/", s.handleRepositoryGuidelineItem)
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/github/", s.handleGitHub)
 	mux.HandleFunc("/api/orchestrate/templates", s.handleOrchestrateTemplates)
@@ -652,30 +655,32 @@ type orchestrationRecommendation struct {
 }
 
 type orchestrationRecord struct {
-	ID              string                       `json:"id"`
-	Actor           string                       `json:"actor,omitempty"`
-	Repo            string                       `json:"repo"`
-	RepoPath        string                       `json:"repoPath,omitempty"`
-	BaseBranch      string                       `json:"baseBranch"`
-	Task            string                       `json:"task"`
-	Agents          []string                     `json:"agents"`
-	CustomAgents    []agent.Definition           `json:"customAgents,omitempty"`
-	Scenario        *scenarioTemplateSelection   `json:"scenarioTemplate,omitempty"`
-	Strategy        string                       `json:"strategy"`
-	LLMPreset       string                       `json:"llmPreset"`
-	OutputLanguage  string                       `json:"outputLanguage,omitempty"`
-	Status          string                       `json:"status"`
-	Error           string                       `json:"error,omitempty"`
-	Plan            *orchestrator.TaskPlan       `json:"plan,omitempty"`
-	Subtasks        []orchestrationSubtaskState  `json:"subtasks,omitempty"`
-	Results         []orchestrator.SubtaskResult `json:"results,omitempty"`
-	Events          []orchestrationEvent         `json:"events,omitempty"`
-	Summary         string                       `json:"summary,omitempty"`
-	MemoryUsed      []memory.RepositoryEntry     `json:"memoryUsed,omitempty"`
-	MemoryProposals []memory.RepositoryEntry     `json:"memoryProposals,omitempty"`
-	GitHub          *orchestrationGitHubState    `json:"github,omitempty"`
-	CreatedAt       time.Time                    `json:"createdAt"`
-	UpdatedAt       time.Time                    `json:"updatedAt"`
+	ID                       string                                 `json:"id"`
+	Actor                    string                                 `json:"actor,omitempty"`
+	Repo                     string                                 `json:"repo"`
+	RepoPath                 string                                 `json:"repoPath,omitempty"`
+	BaseBranch               string                                 `json:"baseBranch"`
+	Task                     string                                 `json:"task"`
+	Agents                   []string                               `json:"agents"`
+	CustomAgents             []agent.Definition                     `json:"customAgents,omitempty"`
+	Scenario                 *scenarioTemplateSelection             `json:"scenarioTemplate,omitempty"`
+	Strategy                 string                                 `json:"strategy"`
+	LLMPreset                string                                 `json:"llmPreset"`
+	OutputLanguage           string                                 `json:"outputLanguage,omitempty"`
+	Status                   string                                 `json:"status"`
+	Error                    string                                 `json:"error,omitempty"`
+	Plan                     *orchestrator.TaskPlan                 `json:"plan,omitempty"`
+	Subtasks                 []orchestrationSubtaskState            `json:"subtasks,omitempty"`
+	Results                  []orchestrator.SubtaskResult           `json:"results,omitempty"`
+	Events                   []orchestrationEvent                   `json:"events,omitempty"`
+	Summary                  string                                 `json:"summary,omitempty"`
+	MemoryUsed               []memory.RepositoryEntry               `json:"memoryUsed,omitempty"`
+	MemoryProposals          []memory.RepositoryEntry               `json:"memoryProposals,omitempty"`
+	GuidelinesUsed           []guideline.AppliedRepositoryGuideline `json:"guidelinesUsed,omitempty"`
+	MissedRequiredGuidelines []guideline.RepositoryGuideline        `json:"missedRequiredGuidelines,omitempty"`
+	GitHub                   *orchestrationGitHubState              `json:"github,omitempty"`
+	CreatedAt                time.Time                              `json:"createdAt"`
+	UpdatedAt                time.Time                              `json:"updatedAt"`
 }
 
 type orchestrationEvent struct {
@@ -966,10 +971,17 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 	if len(record.MemoryUsed) > 0 {
 		appendOrchestrationEvent(record, "memory.loaded", "", fmt.Sprintf("Loaded %d repository memory entries", len(record.MemoryUsed)))
 	}
+	loadRepositoryGuidelinesForRecord(runCtx, record)
+	repositoryGuidelines := repositoryGuidelinesForPlanning(runCtx, record, "")
+	if len(repositoryGuidelines) > 0 {
+		appendOrchestrationEvent(record, "guidelines.loaded", "", fmt.Sprintf("Loaded %d repository guidelines", len(repositoryGuidelines)))
+	}
 
 	planCtx, cancelPlan := context.WithTimeout(runCtx, orchestratePlanTimeout())
 	defer cancelPlan()
-	plan, err := orch.Plan(planCtx, taskWithRepositoryMemory(record.Task, record.MemoryUsed))
+	planningTask := taskWithRepositoryMemory(record.Task, record.MemoryUsed)
+	planningTask = taskWithRepositoryGuidelines(planningTask, repositoryGuidelines)
+	plan, err := orch.Plan(planCtx, planningTask)
 	if err != nil {
 		if errors.Is(planCtx.Err(), context.Canceled) || errors.Is(runCtx.Err(), context.Canceled) {
 			s.stopCanceledOrchestration(record, "Orchestration canceled during planning")
@@ -989,6 +1001,11 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 	}
 	if s.stopCanceledOrchestration(record, "Orchestration canceled") {
 		return
+	}
+	record.GuidelinesUsed = applyRepositoryGuidelinesToPlan(plan, repositoryGuidelines)
+	record.MissedRequiredGuidelines = missedRequiredGuidelines(repositoryGuidelines, record.GuidelinesUsed)
+	if len(record.MissedRequiredGuidelines) > 0 {
+		appendOrchestrationEvent(record, "guidelines.required_missed", "", fmt.Sprintf("%d required guidelines were not attached to subtasks", len(record.MissedRequiredGuidelines)))
 	}
 	appendOrchestrationEvent(record, "planning.finished", "", fmt.Sprintf("Planning finished with %d subtasks", len(plan.Subtasks)))
 	record.Plan = plan

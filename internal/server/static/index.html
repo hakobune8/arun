@@ -193,8 +193,10 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
             <textarea id="orchTask" placeholder="Describe what the agents should accomplish..." required></textarea>
             <button type="button" class="btn btn-secondary" style="margin-top:8px" onclick="recommendOrchestration()">Recommend</button>
             <button type="button" class="btn btn-secondary" style="margin-top:8px" onclick="loadOrchMemoryPreview()">Load Memory</button>
+            <button type="button" class="btn btn-secondary" style="margin-top:8px" onclick="loadOrchGuidelinePreview()">Load Guidelines</button>
             <div id="orchRecommendation"></div>
             <div id="orchMemoryPreview"></div>
+            <div id="orchGuidelinePreview"></div>
           </div>
           <div class="form-group">
             <label>GitHub Artifacts</label>
@@ -646,6 +648,25 @@ async function loadOrchMemoryPreview() {
   }
 }
 
+async function loadOrchGuidelinePreview() {
+  const div = document.getElementById('orchGuidelinePreview');
+  const repo = document.getElementById('orchRepo').value.trim();
+  const branch = document.getElementById('orchBaseBranch').value.trim() || 'main';
+  const q = document.getElementById('orchTask').value.trim();
+  if (!repo || !q) {
+    div.innerHTML = '<p class="error" style="margin-top:8px">Enter repository and task first.</p>';
+    return;
+  }
+  div.innerHTML = '<p class="empty">Loading repository guidelines...</p>';
+  try {
+    const url = '/api/repository-guidelines?repo=' + encodeURIComponent(repo) + '&baseBranch=' + encodeURIComponent(branch) + '&status=active&q=' + encodeURIComponent(q);
+    const entries = await api(url);
+    div.innerHTML = '<div class="agent-card" style="margin-top:10px"><strong>Repository Guidelines</strong>' + renderGuidelineEntries(entries, false) + '</div>';
+  } catch(e) {
+    div.innerHTML = '<p class="error" style="margin-top:8px">Guideline load failed: ' + escape(e.message) + '</p>';
+  }
+}
+
 function renderRecommendation(rec) {
   const confidence = Math.round((rec.confidence || 0) * 100);
   const agents = (rec.agents || []).map(a => '<span class="tag">' + escape(a) + '</span>').join('');
@@ -773,12 +794,14 @@ function renderOrchestrationDetail() {
     detailTabButton('dashboard', 'Dashboard') +
     detailTabButton('runs', 'Runs') +
     detailTabButton('memory', 'Memory') +
+    detailTabButton('guidelines', 'Guidelines') +
     detailTabButton('search', 'Search') +
     detailTabButton('github', 'GitHub') +
     '</div></div>' +
     detailPanel('dashboard', renderDashboard(r)) +
     detailPanel('runs', renderRuns(r)) +
     detailPanel('memory', renderMemory(r)) +
+    detailPanel('guidelines', renderGuidelines(r)) +
     detailPanel('search', renderSearch()) +
     detailPanel('github', renderGitHub(r));
 }
@@ -935,6 +958,119 @@ async function editRepositoryMemory(id) {
 async function deleteRepositoryMemory(id) {
   await api('/api/repository-memory/' + encodeURIComponent(id), { method: 'DELETE' });
   await refreshCurrentOrchestration();
+}
+
+function renderGuidelines(r) {
+  const used = r.guidelinesUsed || [];
+  const missed = r.missedRequiredGuidelines || [];
+  return '<div class="card"><h2>Repository Guidelines</h2>' +
+    '<p class="muted">Active guidelines used during planning, plus required guidelines that were not attached to subtasks.</p>' +
+    '<h3>Applied</h3>' + renderAppliedGuidelines(used) +
+    '<h3>Required Misses</h3>' + renderGuidelineEntries(missed, false) +
+    '<h3>Create Guideline</h3>' + renderGuidelineForm(r) +
+    '<div style="margin-top:12px"><button class="btn btn-secondary" onclick="loadRepositoryGuidelineList()">Refresh Repository Guidelines</button></div>' +
+    '<div id="repositoryGuidelineList" style="margin-top:12px"></div></div>';
+}
+
+function renderAppliedGuidelines(entries) {
+  if (!entries || entries.length === 0) return '<p class="empty">No applied repository guidelines.</p>';
+  return entries.map(g => '<div style="padding:10px 0;border-bottom:1px solid #30363d">' +
+    '<div class="detail-meta"><span class="tag">' + escape(g.subtaskId || '-') + '</span><span class="tag">' + escape(g.agentName || '-') + '</span>' +
+    (g.required ? '<span class="tag">required</span>' : '<span class="tag">advisory</span>') + '</div>' +
+    '<p style="margin:8px 0">' + escape(g.title || g.guidelineId || '') + '</p>' +
+    '</div>').join('');
+}
+
+function renderGuidelineForm(r) {
+  return '<form onsubmit="createRepositoryGuideline(event)">' +
+    '<div class="inline-grid">' +
+    '<input type="text" id="guidelineTitle" placeholder="Title" required>' +
+    '<select id="guidelineType"><option value="general">general</option><option value="architecture">architecture</option><option value="validation">validation</option><option value="security">security</option><option value="frontend">frontend</option><option value="ops">ops</option></select>' +
+    '</div>' +
+    '<div class="form-group" style="margin-top:8px"><textarea id="guidelineContent" placeholder="Guideline content" required></textarea></div>' +
+    '<div class="checkbox-row"><label><input type="checkbox" id="guidelineRequired">Required</label></div>' +
+    '<button class="btn" type="submit">Create Guideline</button>' +
+    '<span id="guidelineCreateStatus" class="muted" style="margin-left:12px">Repository: ' + escape((r && r.repo) || '-') + '</span>' +
+    '</form>';
+}
+
+function renderGuidelineEntries(entries, actions) {
+  if (!entries || entries.length === 0) return '<p class="empty">No repository guidelines.</p>';
+  window.repositoryGuidelineCache = window.repositoryGuidelineCache || {};
+  entries.forEach(g => { if (g.id) window.repositoryGuidelineCache[g.id] = g; });
+  return entries.map(g => '<div style="padding:10px 0;border-bottom:1px solid #30363d">' +
+    '<div class="detail-meta"><span class="tag">' + escape(g.type || 'general') + '</span><span class="tag">' + escape(g.status || '-') + '</span>' +
+    (g.required ? '<span class="tag">required</span>' : '<span class="tag">advisory</span>') + (g.source ? '<span class="tag">' + escape(g.source) + '</span>' : '') + '</div>' +
+    '<p style="margin:8px 0"><strong>' + escape(g.title || '') + '</strong></p>' +
+    '<p class="muted">' + escape(g.content || g.rule || '') + '</p>' +
+    (actions ? '<div class="actions" style="margin-top:8px"><button class="btn btn-secondary" onclick="editRepositoryGuideline(\'' + escapeAttr(g.id) + '\')">Edit</button>' +
+      '<button class="btn btn-danger" onclick="archiveRepositoryGuideline(\'' + escapeAttr(g.id) + '\')">Archive</button></div>' : '') +
+    '</div>').join('');
+}
+
+async function loadRepositoryGuidelineList() {
+  if (!currentOrchestration) return;
+  const div = document.getElementById('repositoryGuidelineList');
+  div.innerHTML = '<p class="empty">Loading...</p>';
+  try {
+    const url = '/api/repository-guidelines?repo=' + encodeURIComponent(currentOrchestration.repo || '.') + '&baseBranch=' + encodeURIComponent(currentOrchestration.baseBranch || 'main');
+    const entries = await api(url);
+    div.innerHTML = '<h3>All Repository Guidelines</h3>' + renderGuidelineEntries(entries, true);
+  } catch(e) {
+    div.innerHTML = '<p class="error">Error: ' + escape(e.message) + '</p>';
+  }
+}
+
+async function createRepositoryGuideline(e) {
+  e.preventDefault();
+  if (!currentOrchestration) return;
+  const status = document.getElementById('guidelineCreateStatus');
+  status.textContent = 'Creating...';
+  try {
+    await api('/api/repository-guidelines', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        repo: currentOrchestration.repo || '.',
+        baseBranch: currentOrchestration.baseBranch || 'main',
+        title: document.getElementById('guidelineTitle').value.trim(),
+        type: document.getElementById('guidelineType').value,
+        content: document.getElementById('guidelineContent').value.trim(),
+        required: document.getElementById('guidelineRequired').checked
+      })
+    });
+    document.getElementById('guidelineTitle').value = '';
+    document.getElementById('guidelineContent').value = '';
+    document.getElementById('guidelineRequired').checked = false;
+    status.textContent = 'Created.';
+    await loadRepositoryGuidelineList();
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function editRepositoryGuideline(id) {
+  const current = (window.repositoryGuidelineCache && window.repositoryGuidelineCache[id]) || {};
+  const content = window.prompt('Guideline content', current.content || current.rule || '');
+  if (content === null) return;
+  await api('/api/repository-guidelines/' + encodeURIComponent(id), {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      title: current.title || 'Guideline',
+      content: content,
+      type: current.type || 'general',
+      tags: current.tags || [],
+      required: !!current.required,
+      status: current.status || 'active'
+    })
+  });
+  await loadRepositoryGuidelineList();
+}
+
+async function archiveRepositoryGuideline(id) {
+  await api('/api/repository-guidelines/' + encodeURIComponent(id), { method: 'DELETE' });
+  await loadRepositoryGuidelineList();
 }
 
 function renderQualityGate(gate) {
