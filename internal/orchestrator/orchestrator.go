@@ -46,7 +46,8 @@ type Orchestrator struct {
 	llm            llm.LLMClient
 	sandbox        sandbox.Sandbox
 	agents         map[string]runtime.Agent
-	agentDefs      []agentInfo
+	agentDefs      []AgentMetadata
+	agentProfiles  map[string]profile.Profile
 	strategy       Strategy
 	cfg            *runtime.Config
 	baseBranch     string
@@ -54,27 +55,31 @@ type Orchestrator struct {
 	runID          string
 }
 
-type agentInfo struct {
-	name                 string
-	description          string
-	architectureGuidance []string
-	outputExpectations   []string
+// AgentMetadata describes an agent to the planner.
+type AgentMetadata struct {
+	Name                 string
+	Description          string
+	ArchitectureGuidance []string
+	OutputExpectations   []string
 }
 
 // NewOrchestrator creates a new Orchestrator with the given llm client, sandbox, and agents.
 func NewOrchestrator(llmClient llm.LLMClient, sb sandbox.Sandbox, agents map[string]runtime.Agent, cfg *runtime.Config) *Orchestrator {
-	var infos []agentInfo
+	var infos []AgentMetadata
+	profiles := make(map[string]profile.Profile)
 	for name, a := range agents {
 		infos = append(infos, builtInAgentInfo(name, a.Name()))
+		profiles[name] = subtaskProfile(a.Name())
 	}
 	return &Orchestrator{
-		llm:        llmClient,
-		sandbox:    sb,
-		agents:     agents,
-		agentDefs:  infos,
-		strategy:   StrategySequential,
-		cfg:        cfg,
-		baseBranch: "main",
+		llm:           llmClient,
+		sandbox:       sb,
+		agents:        agents,
+		agentDefs:     infos,
+		agentProfiles: profiles,
+		strategy:      StrategySequential,
+		cfg:           cfg,
+		baseBranch:    "main",
 	}
 }
 
@@ -128,6 +133,22 @@ func (o *Orchestrator) SetRunID(id string) {
 // SetSubtaskTimeout sets the maximum runtime for a single subtask.
 func (o *Orchestrator) SetSubtaskTimeout(timeout time.Duration) {
 	o.subtaskTimeout = timeout
+}
+
+// SetAgentMetadata overrides planner metadata and runtime profiles for selected
+// agents. It is primarily used for repository-defined custom agents.
+func (o *Orchestrator) SetAgentMetadata(infos []AgentMetadata, profiles map[string]profile.Profile) {
+	if len(infos) > 0 {
+		o.agentDefs = infos
+	}
+	if len(profiles) > 0 {
+		if o.agentProfiles == nil {
+			o.agentProfiles = make(map[string]profile.Profile, len(profiles))
+		}
+		for name, prof := range profiles {
+			o.agentProfiles[name] = prof
+		}
+	}
 }
 
 // TaskPlan represents a breakdown of a task into subtasks.
@@ -185,16 +206,16 @@ Do not include markdown, explanations, or reasoning. The assistant message conte
 
 	agentsInfo := ""
 	for _, info := range o.agentDefs {
-		agentsInfo += fmt.Sprintf("- %s: %s\n", info.name, info.description)
-		if len(info.architectureGuidance) > 0 {
+		agentsInfo += fmt.Sprintf("- %s: %s\n", info.Name, info.Description)
+		if len(info.ArchitectureGuidance) > 0 {
 			agentsInfo += "  Architecture/conventions:\n"
-			for _, item := range info.architectureGuidance {
+			for _, item := range info.ArchitectureGuidance {
 				agentsInfo += fmt.Sprintf("  - %s\n", item)
 			}
 		}
-		if len(info.outputExpectations) > 0 {
+		if len(info.OutputExpectations) > 0 {
 			agentsInfo += "  Output expectations:\n"
-			for _, item := range info.outputExpectations {
+			for _, item := range info.OutputExpectations {
 				agentsInfo += fmt.Sprintf("  - %s\n", item)
 			}
 		}
@@ -292,7 +313,7 @@ func appendContext(description, parentTask, extra string) string {
 func (o *Orchestrator) fallbackPlan(taskDesc string) *TaskPlan {
 	available := make(map[string]bool, len(o.agentDefs))
 	for _, info := range o.agentDefs {
-		available[info.name] = true
+		available[info.Name] = true
 	}
 
 	var subtasks []Subtask
@@ -321,7 +342,7 @@ func (o *Orchestrator) fallbackPlan(taskDesc string) *TaskPlan {
 		for i, info := range o.agentDefs {
 			subtasks = append(subtasks, Subtask{
 				ID:          fmt.Sprintf("step-%d", i+1),
-				AgentName:   info.name,
+				AgentName:   info.Name,
 				Description: taskDesc,
 			})
 			applyDefaultQualityGate(&subtasks[len(subtasks)-1])
@@ -331,73 +352,73 @@ func (o *Orchestrator) fallbackPlan(taskDesc string) *TaskPlan {
 	return &TaskPlan{Description: taskDesc, Subtasks: subtasks}
 }
 
-func builtInAgentInfo(name, fallbackDescription string) agentInfo {
-	info := agentInfo{name: name, description: fallbackDescription}
+func builtInAgentInfo(name, fallbackDescription string) AgentMetadata {
+	info := AgentMetadata{Name: name, Description: fallbackDescription}
 	switch name {
 	case "go-backend":
-		info.description = "Go backend coding agent that preserves existing architecture before adding idiomatic Go changes"
-		info.architectureGuidance = []string{
+		info.Description = "Go backend coding agent that preserves existing architecture before adding idiomatic Go changes"
+		info.ArchitectureGuidance = []string{
 			"Inspect existing layout before editing and follow established package, cmd/, internal/, pkg/, api/, router, and middleware conventions when present.",
 			"Prefer idiomatic standard-library Go for small services; introduce frameworks or new top-level layout only when task complexity warrants it.",
 			"Separate handlers, configuration, and tests when the repository already uses that structure; avoid over-engineering small repositories.",
 		}
-		info.outputExpectations = []string{"gofmt, go test ./..., and go vet ./... pass.", "Architecture choices are summarized when new structure is introduced."}
+		info.OutputExpectations = []string{"gofmt, go test ./..., and go vet ./... pass.", "Architecture choices are summarized when new structure is introduced."}
 	case "ci-fixer":
-		info.description = "CI fix agent for conventional GitHub Actions and validation repairs"
-		info.architectureGuidance = []string{
+		info.Description = "CI fix agent for conventional GitHub Actions and validation repairs"
+		info.ArchitectureGuidance = []string{
 			"Inspect existing workflow names, jobs, matrices, and branch-protection expectations before replacing CI structure.",
 			"Prefer actions/checkout, actions/setup-go, cache-aware Go setup, go test ./..., and go vet ./...",
 			"Keep lint, test, and optional security steps explicit and compatible with the repository's existing Go version and module layout.",
 		}
-		info.outputExpectations = []string{"Workflow YAML preserves existing job intent.", "Local validation mirrors the workflow where practical."}
+		info.OutputExpectations = []string{"Workflow YAML preserves existing job intent.", "Local validation mirrors the workflow where practical."}
 	case "docs":
-		info.description = "Documentation agent that updates practical docs while matching existing repository style"
-		info.architectureGuidance = []string{
+		info.Description = "Documentation agent that updates practical docs while matching existing repository style"
+		info.ArchitectureGuidance = []string{
 			"Inspect README.md and docs/ structure before adding sections or files.",
 			"Prefer overview, quickstart, configuration, endpoints, testing, deployment, and troubleshooting sections where relevant.",
 			"Preserve existing tone, headings, examples, and link conventions.",
 		}
-		info.outputExpectations = []string{"Docs cover changed user-visible behavior.", "Commands and examples are runnable from the repository root."}
+		info.OutputExpectations = []string{"Docs cover changed user-visible behavior.", "Commands and examples are runnable from the repository root."}
 	case "reviewer":
-		info.description = "Code review agent for correctness, tests, security, maintainability, and release readiness"
-		info.architectureGuidance = []string{
+		info.Description = "Code review agent for correctness, tests, security, maintainability, and release readiness"
+		info.ArchitectureGuidance = []string{
 			"Evaluate whether changes preserve existing repository conventions before judging style preferences.",
 			"Flag over-engineered layouts, unnecessary dependencies, and convention-breaking rewrites.",
 			"Review tests, security-sensitive behavior, maintainability, and release readiness with severity and file references.",
 		}
-		info.outputExpectations = []string{"Findings include severity and file references where applicable.", "Review states validation and release-readiness risk."}
+		info.OutputExpectations = []string{"Findings include severity and file references where applicable.", "Review states validation and release-readiness risk."}
 	case "security":
-		info.description = "Security agent for dependencies, auth/session handling, secrets, and security-sensitive diffs"
-		info.architectureGuidance = []string{
+		info.Description = "Security agent for dependencies, auth/session handling, secrets, and security-sensitive diffs"
+		info.ArchitectureGuidance = []string{
 			"Inspect authentication, authorization, session, secret-handling, dependency, and CI security conventions before proposing changes.",
 			"Prefer small defensive fixes, safer defaults, and standard library or existing dependency patterns over broad rewrites.",
 			"Document residual risk and validation scope when a finding cannot be fully fixed in the current task.",
 		}
-		info.outputExpectations = []string{"Security-sensitive changes include tests or manual verification notes.", "Dependency or configuration findings identify the affected package, file, workflow, or setting.", "go test ./... and go vet ./... pass when code is changed."}
+		info.OutputExpectations = []string{"Security-sensitive changes include tests or manual verification notes.", "Dependency or configuration findings identify the affected package, file, workflow, or setting.", "go test ./... and go vet ./... pass when code is changed."}
 	case "release-manager":
-		info.description = "Release manager agent for changelogs, release notes, release checklists, and readiness validation"
-		info.architectureGuidance = []string{
+		info.Description = "Release manager agent for changelogs, release notes, release checklists, and readiness validation"
+		info.ArchitectureGuidance = []string{
 			"Inspect existing changelog, release note, versioning, and Helm chart conventions before editing release artifacts.",
 			"Keep version changes explicit and avoid publishing or tagging releases unless the task asks for it.",
 			"Summarize release readiness, known gaps, and deployment or rollback considerations.",
 		}
-		info.outputExpectations = []string{"CHANGELOG.md or release documentation is updated when release notes are requested.", "Version and chart changes are consistent when release packaging is in scope.", "Release checklist items are concrete and traceable to validation commands or manual checks."}
+		info.OutputExpectations = []string{"CHANGELOG.md or release documentation is updated when release notes are requested.", "Version and chart changes are consistent when release packaging is in scope.", "Release checklist items are concrete and traceable to validation commands or manual checks."}
 	case "dependency-updater":
-		info.description = "Dependency updater agent for Go modules, package locks, and GitHub Actions versions"
-		info.architectureGuidance = []string{
+		info.Description = "Dependency updater agent for Go modules, package locks, and GitHub Actions versions"
+		info.ArchitectureGuidance = []string{
 			"Inspect existing dependency managers, lockfiles, toolchain versions, and CI compatibility before updating versions.",
 			"Prefer narrow updates requested by the task; avoid broad upgrades unless the task calls for them.",
 			"Keep generated files such as go.sum or lockfiles consistent with the manifest that changed.",
 		}
-		info.outputExpectations = []string{"Manifests and lockfiles remain synchronized after updates.", "go mod tidy and go test ./... pass for Go dependency work.", "Compatibility or breaking-change notes are included for major or security-sensitive upgrades."}
+		info.OutputExpectations = []string{"Manifests and lockfiles remain synchronized after updates.", "go mod tidy and go test ./... pass for Go dependency work.", "Compatibility or breaking-change notes are included for major or security-sensitive upgrades."}
 	case "qa":
-		info.description = "QA agent for scenario tests, smoke checks, regression coverage, and manual verification notes"
-		info.architectureGuidance = []string{
+		info.Description = "QA agent for scenario tests, smoke checks, regression coverage, and manual verification notes"
+		info.ArchitectureGuidance = []string{
 			"Inspect existing test layout, fixtures, and documented verification workflows before adding new checks.",
 			"Prefer focused regression and smoke coverage that exercises user-visible behavior changed by the task.",
 			"Record manual verification steps when behavior cannot be fully automated.",
 		}
-		info.outputExpectations = []string{"New or updated tests fail without the intended behavior and pass with it.", "go test ./... passes when Go code or tests are in scope.", "Manual verification notes include concrete commands, URLs, or scenarios."}
+		info.OutputExpectations = []string{"New or updated tests fail without the intended behavior and pass with it.", "go test ./... passes when Go code or tests are in scope.", "Manual verification notes include concrete commands, URLs, or scenarios."}
 	}
 	return info
 }
@@ -658,7 +679,10 @@ func (o *Orchestrator) executeSubtask(ctx context.Context, subtask *Subtask, sha
 		Branch:      fmt.Sprintf("agentos/%s", o.runtimeTaskID(subtask.ID)),
 	}
 
-	prof := subtaskProfile(agt.Name())
+	prof, ok := o.agentProfiles[agt.Name()]
+	if !ok {
+		prof = subtaskProfile(agt.Name())
+	}
 	runSandbox := sandbox.NewLocalSandbox(o.sandbox.RootDir())
 	rt := runtime.NewRuntime(o.llm, &prof, runSandbox, o.cfg, agt)
 	if err := rt.Run(ctx, tk); err != nil {

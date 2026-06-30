@@ -42,6 +42,7 @@ import (
 	"github.com/kazyamaz200/agentos/internal/agent"
 	"github.com/kazyamaz200/agentos/internal/apphome"
 	"github.com/kazyamaz200/agentos/internal/embedding"
+	"github.com/kazyamaz200/agentos/internal/factory"
 	agentosgh "github.com/kazyamaz200/agentos/internal/github"
 	"github.com/kazyamaz200/agentos/internal/llm"
 	"github.com/kazyamaz200/agentos/internal/orchestrator"
@@ -61,6 +62,7 @@ var staticFS embed.FS
 var runIDPattern = regexp.MustCompile(`^run-[0-9a-f]{16}$`)
 var githubRepoPathPattern = regexp.MustCompile(`^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$`)
 var gitRefPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$`)
+var customAgentNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{1,62}$`)
 
 // Server serves the AgentOS web UI and API endpoints.
 type Server struct {
@@ -108,6 +110,7 @@ func NewServer(port int) *Server {
 	mux.HandleFunc("/auth/callback", s.handleAuthCallback)
 	mux.HandleFunc("/auth/logout", s.handleAuthLogout)
 	mux.HandleFunc("/api/agents", s.handleAgents)
+	mux.HandleFunc("/api/agents/repository", s.handleRepositoryAgents)
 	mux.HandleFunc("/api/settings/llm", s.handleLLMSettings)
 	mux.HandleFunc("/api/audit", s.handleAudit)
 	mux.HandleFunc("/api/runs", s.handleRuns)
@@ -161,6 +164,53 @@ func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	agents := s.agentReg.List()
 	_ = json.NewEncoder(w).Encode(agents) //nolint:errcheck // best-effort
+}
+
+type repositoryAgentsRequest struct {
+	Repo       string `json:"repo"`
+	BaseBranch string `json:"baseBranch"`
+}
+
+type repositoryAgentsResponse struct {
+	Agents []agent.Definition `json:"agents"`
+}
+
+func (s *Server) handleRepositoryAgents(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	user, ok := s.requireAuth(w, r)
+	if !ok {
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST required", http.StatusMethodNotAllowed)
+		return
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "read body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	var req repositoryAgentsRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		http.Error(w, "parse body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	req.Repo = strings.TrimSpace(req.Repo)
+	req.BaseBranch = defaultBaseBranch(req.BaseBranch)
+	if !s.requireAutomationPermission(w, r, user, "agents.repository.load", "repository", req.Repo, "") {
+		return
+	}
+	repoPath, err := resolveOrchestrateRepo(req.Repo, req.BaseBranch)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	defs, err := loadRepositoryAgentDefinitions(repoPath, s.agentReg)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(repositoryAgentsResponse{Agents: defs}) //nolint:errcheck // best-effort
 }
 
 // --- Settings ---
@@ -463,6 +513,7 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 
 type orchestrateRequest struct {
 	Agents         []string                  `json:"agents"`
+	CustomAgents   []agent.Definition        `json:"customAgents,omitempty"`
 	Repo           string                    `json:"repo"`
 	BaseBranch     string                    `json:"baseBranch"`
 	Task           string                    `json:"task"`
@@ -525,6 +576,7 @@ type orchestrationRecord struct {
 	BaseBranch     string                       `json:"baseBranch"`
 	Task           string                       `json:"task"`
 	Agents         []string                     `json:"agents"`
+	CustomAgents   []agent.Definition           `json:"customAgents,omitempty"`
 	Strategy       string                       `json:"strategy"`
 	LLMPreset      string                       `json:"llmPreset"`
 	OutputLanguage string                       `json:"outputLanguage,omitempty"`
@@ -740,13 +792,26 @@ func (s *Server) startOrchestration(w http.ResponseWriter, r *http.Request, user
 	applyArtifactConfig(req, artifactConfig)
 
 	agents := make(map[string]runtime.Agent)
+	customAgents, err := validateCustomAgentDefinitions(req.CustomAgents, s.agentReg)
+	if err != nil {
+		http.Error(w, "custom agents: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	customByName := make(map[string]agent.Definition, len(customAgents))
+	for _, def := range customAgents {
+		customByName[def.Metadata.Name] = def
+	}
 	for _, name := range req.Agents {
-		a, err := s.agentReg.Create(name, llmClient)
-		if err != nil {
-			http.Error(w, "lookup agent "+name+": "+err.Error(), http.StatusBadRequest)
-			return
+		if def, ok := customByName[name]; ok {
+			agents[name] = agent.NewBaseAgent(def.Metadata.Name, llmClient)
+		} else {
+			a, err := s.agentReg.Create(name, llmClient)
+			if err != nil {
+				http.Error(w, "lookup agent "+name+": "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			agents[name] = a
 		}
-		agents[name] = a
 	}
 
 	id := generateID()
@@ -766,6 +831,7 @@ func (s *Server) startOrchestration(w http.ResponseWriter, r *http.Request, user
 		BaseBranch:     req.BaseBranch,
 		Task:           req.Task,
 		Agents:         req.Agents,
+		CustomAgents:   selectedCustomAgentDefinitions(req.Agents, customByName),
 		Strategy:       req.Strategy,
 		LLMPreset:      presetID,
 		OutputLanguage: normalizeOutputLanguage(req.OutputLanguage),
@@ -796,6 +862,7 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 
 	cfg := &runtime.Config{Verbose: false}
 	orch := orchestrator.NewOrchestrator(llmClient, sandbox.NewLocalSandbox(record.RepoPath), agents, cfg)
+	orch.SetAgentMetadata(orchestrationAgentMetadata(record, agents, s.agentReg), orchestrationAgentProfiles(record, agents))
 	orch.SetBaseBranch(record.BaseBranch)
 	orch.SetRunID(record.ID)
 
@@ -2142,6 +2209,176 @@ func applyArtifactConfig(req *orchestrateRequest, cfg artifactConfig) {
 	}
 	if strings.TrimSpace(req.GitHub.PRTemplate) == "" && cfg.Templates.PullRequest.Body != "" {
 		req.GitHub.PRTemplate = "repository"
+	}
+}
+
+func loadRepositoryAgentDefinitions(repoPath string, registry *agent.Registry) ([]agent.Definition, error) {
+	dir := filepath.Join(repoPath, ".agentos", "agents")
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return []agent.Definition{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read .agentos/agents: %w", err)
+	}
+
+	var defs []agent.Definition
+	for _, entry := range entries {
+		if entry.IsDir() || (!strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml")) {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		def, err := agent.LoadDefinition(path)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", filepath.ToSlash(filepath.Join(".agentos", "agents", entry.Name())), err)
+		}
+		defs = append(defs, *def)
+	}
+
+	sort.Slice(defs, func(i, j int) bool {
+		return defs[i].Metadata.Name < defs[j].Metadata.Name
+	})
+	return validateCustomAgentDefinitions(defs, registry)
+}
+
+func validateCustomAgentDefinitions(defs []agent.Definition, registry *agent.Registry) ([]agent.Definition, error) {
+	seen := make(map[string]bool, len(defs))
+	validated := make([]agent.Definition, 0, len(defs))
+	for i := range defs {
+		def := defs[i]
+		if err := def.Validate(); err != nil {
+			return nil, err
+		}
+		name := strings.TrimSpace(def.Metadata.Name)
+		def.Metadata.Name = name
+		if !customAgentNamePattern.MatchString(name) {
+			return nil, fmt.Errorf("%s: metadata.name must match %s", name, customAgentNamePattern.String())
+		}
+		if registry != nil && registry.Has(name) {
+			return nil, fmt.Errorf("%s: custom agent cannot override a built-in agent", name)
+		}
+		if seen[name] {
+			return nil, fmt.Errorf("%s: duplicate custom agent name", name)
+		}
+		seen[name] = true
+		if err := validateCustomAgentTools(def); err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		if err := validateCustomAgentCommands(def); err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		validated = append(validated, def)
+	}
+	return validated, nil
+}
+
+func validateCustomAgentTools(def agent.Definition) error {
+	allowedTools := map[string]bool{
+		"read_file":  true,
+		"write_file": true,
+		"search":     true,
+		"shell":      true,
+		"git":        true,
+		"test":       true,
+	}
+	if len(def.Spec.Tools.Allow) == 0 {
+		return fmt.Errorf("spec.tools.allow is required for repository-defined agents")
+	}
+	hasShell := false
+	for _, tool := range def.Spec.Tools.Allow {
+		if !allowedTools[tool] {
+			return fmt.Errorf("unsupported tool %q", tool)
+		}
+		if tool == "shell" {
+			hasShell = true
+		}
+	}
+	if hasShell && len(def.Spec.Safety.DenyCommands) == 0 {
+		return fmt.Errorf("spec.safety.denyCommands is required when shell is allowed")
+	}
+	return nil
+}
+
+func validateCustomAgentCommands(def agent.Definition) error {
+	commands := []string{def.Spec.Commands.Test, def.Spec.Commands.Lint, def.Spec.Commands.Build}
+	blocked := []string{"rm -rf", "sudo", "curl ", "wget ", "ssh ", "scp ", "docker run --privileged"}
+	for _, command := range commands {
+		normalized := strings.ToLower(strings.TrimSpace(command))
+		if normalized == "" {
+			continue
+		}
+		for _, pattern := range blocked {
+			if strings.Contains(normalized, pattern) {
+				return fmt.Errorf("unsafe command %q contains blocked pattern %q", command, pattern)
+			}
+		}
+	}
+	return nil
+}
+
+func selectedCustomAgentDefinitions(agentNames []string, customByName map[string]agent.Definition) []agent.Definition {
+	var selected []agent.Definition
+	for _, name := range agentNames {
+		if def, ok := customByName[name]; ok {
+			selected = append(selected, def)
+		}
+	}
+	return selected
+}
+
+func orchestrationAgentProfiles(record *orchestrationRecord, agents map[string]runtime.Agent) map[string]profile.Profile {
+	profiles := make(map[string]profile.Profile, len(record.CustomAgents))
+	for _, def := range record.CustomAgents {
+		prof := factory.ProfileFromDefinition(&def)
+		profiles[def.Metadata.Name] = *prof
+	}
+	return profiles
+}
+
+func orchestrationAgentMetadata(record *orchestrationRecord, agents map[string]runtime.Agent, registry *agent.Registry) []orchestrator.AgentMetadata {
+	infoByName := make(map[string]agent.Info)
+	if registry != nil {
+		for _, info := range registry.List() {
+			infoByName[info.Name] = info
+		}
+	}
+	customByName := make(map[string]agent.Definition, len(record.CustomAgents))
+	for _, def := range record.CustomAgents {
+		customByName[def.Metadata.Name] = def
+	}
+
+	var metadata []orchestrator.AgentMetadata
+	for _, name := range record.Agents {
+		if def, ok := customByName[name]; ok {
+			metadata = append(metadata, customAgentMetadata(def))
+			continue
+		}
+		if info, ok := infoByName[name]; ok {
+			metadata = append(metadata, orchestrator.AgentMetadata{
+				Name:                 info.Name,
+				Description:          info.Description,
+				ArchitectureGuidance: info.ArchitectureGuidance,
+				OutputExpectations:   info.OutputExpectations,
+			})
+			continue
+		}
+		if agt, ok := agents[name]; ok {
+			metadata = append(metadata, orchestrator.AgentMetadata{Name: name, Description: agt.Name()})
+		}
+	}
+	return metadata
+}
+
+func customAgentMetadata(def agent.Definition) orchestrator.AgentMetadata {
+	role := strings.TrimSpace(def.Metadata.Labels["role"])
+	if role == "" {
+		role = "repository-defined custom agent"
+	}
+	return orchestrator.AgentMetadata{
+		Name:                 def.Metadata.Name,
+		Description:          role,
+		ArchitectureGuidance: def.Spec.Guidance.Architecture,
+		OutputExpectations:   def.Spec.Guidance.OutputExpectations,
 	}
 }
 

@@ -63,62 +63,62 @@ const CurrentSchemaVersion = "agentos.io/v1"
 //	    outputExpectations:
 //	      - Tests pass.
 type Definition struct {
-	APIVersion string             `yaml:"apiVersion"`
-	Kind       string             `yaml:"kind"`
-	Metadata   DefinitionMetadata `yaml:"metadata"`
-	Spec       DefinitionSpec     `yaml:"spec"`
+	APIVersion string             `yaml:"apiVersion" json:"apiVersion"`
+	Kind       string             `yaml:"kind" json:"kind"`
+	Metadata   DefinitionMetadata `yaml:"metadata" json:"metadata"`
+	Spec       DefinitionSpec     `yaml:"spec" json:"spec"`
 }
 
 // DefinitionMetadata holds identifying information about the agent.
 type DefinitionMetadata struct {
-	Name   string            `yaml:"name"`
-	Labels map[string]string `yaml:"labels,omitempty"`
+	Name   string            `yaml:"name" json:"name"`
+	Labels map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
 }
 
 // DefinitionSpec holds the full agent configuration.
 type DefinitionSpec struct {
-	LLM      LLMConfig      `yaml:"llm"`
-	Tools    ToolsConfig    `yaml:"tools"`
-	Safety   SafetyConfig   `yaml:"safety,omitempty"`
-	Commands CommandsConfig `yaml:"commands,omitempty"`
-	Limits   LimitsConfig   `yaml:"limits,omitempty"`
-	Guidance GuidanceConfig `yaml:"guidance,omitempty"`
+	LLM      LLMConfig      `yaml:"llm" json:"llm"`
+	Tools    ToolsConfig    `yaml:"tools" json:"tools"`
+	Safety   SafetyConfig   `yaml:"safety,omitempty" json:"safety,omitempty"`
+	Commands CommandsConfig `yaml:"commands,omitempty" json:"commands,omitempty"`
+	Limits   LimitsConfig   `yaml:"limits,omitempty" json:"limits,omitempty"`
+	Guidance GuidanceConfig `yaml:"guidance,omitempty" json:"guidance,omitempty"`
 }
 
 // LLMConfig configures the language model provider.
 type LLMConfig struct {
-	Model       string  `yaml:"model"`
-	Temperature float64 `yaml:"temperature,omitempty"`
-	MaxTokens   int     `yaml:"maxTokens,omitempty"`
+	Model       string  `yaml:"model" json:"model"`
+	Temperature float64 `yaml:"temperature,omitempty" json:"temperature,omitempty"`
+	MaxTokens   int     `yaml:"maxTokens,omitempty" json:"maxTokens,omitempty"`
 }
 
 // ToolsConfig specifies which tools are allowed for this agent.
 type ToolsConfig struct {
-	Allow []string `yaml:"allow,omitempty"`
+	Allow []string `yaml:"allow,omitempty" json:"allow,omitempty"`
 }
 
 // SafetyConfig specifies denied commands and other safety restrictions.
 type SafetyConfig struct {
-	DenyCommands []string `yaml:"denyCommands,omitempty"`
+	DenyCommands []string `yaml:"denyCommands,omitempty" json:"denyCommands,omitempty"`
 }
 
 // CommandsConfig specifies custom commands for the agent.
 type CommandsConfig struct {
-	Test  string `yaml:"test,omitempty"`
-	Lint  string `yaml:"lint,omitempty"`
-	Build string `yaml:"build,omitempty"`
+	Test  string `yaml:"test,omitempty" json:"test,omitempty"`
+	Lint  string `yaml:"lint,omitempty" json:"lint,omitempty"`
+	Build string `yaml:"build,omitempty" json:"build,omitempty"`
 }
 
 // LimitsConfig specifies resource limits for the agent.
 type LimitsConfig struct {
-	MaxRetries    int `yaml:"maxRetries,omitempty"`
-	MaxIterations int `yaml:"maxIterations,omitempty"`
+	MaxRetries    int `yaml:"maxRetries,omitempty" json:"maxRetries,omitempty"`
+	MaxIterations int `yaml:"maxIterations,omitempty" json:"maxIterations,omitempty"`
 }
 
 // GuidanceConfig documents convention-aware behavior expected from an agent.
 type GuidanceConfig struct {
-	Architecture       []string `yaml:"architecture,omitempty"`
-	OutputExpectations []string `yaml:"outputExpectations,omitempty"`
+	Architecture       []string `yaml:"architecture,omitempty" json:"architecture,omitempty"`
+	OutputExpectations []string `yaml:"outputExpectations,omitempty" json:"outputExpectations,omitempty"`
 }
 
 // LoadDefinition reads a YAML file and returns a validated Definition.

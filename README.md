@@ -209,6 +209,7 @@ pr_body.md        # Pull request body draft
 - [Upgrade to v1.1](docs/upgrade-v1.1.md) — GitHub automation, quality gates, and approval changes
 - [Profiles](docs/profiles.md) — Profile YAML schema reference
 - [Agent Definitions](docs/agent-definitions.md) — Versioned Agent YAML format (agentos.io/v1)
+- [Repository Agents](docs/repository-agents.md) — Custom `.agentos/agents/*.yaml` profiles for target repositories
 - [Safety](docs/safety.md) — Safety mechanisms and command policies
 - [Event Bus](docs/event-bus.md) — Structured events for observability
 - [Factory](docs/factory.md) — Creating agents from definitions

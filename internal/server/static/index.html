@@ -156,6 +156,8 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
           </div>
           <div class="form-group">
             <label>Agents</label>
+            <button type="button" class="btn btn-secondary" style="margin-bottom:8px" onclick="loadRepositoryAgents()">Load Repository Agents</button>
+            <p id="orchCustomAgentsStatus" class="muted" style="margin:0 0 8px 0"></p>
             <div id="orchAgents" class="agent-picker"></div>
           </div>
           <div class="form-group">
@@ -243,6 +245,8 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
 const BASE = '';
 let selectedOrchestrateId = '';
 let currentOrchestration = null;
+let builtInAgents = [];
+let repositoryCustomAgents = [];
 let orchPoll = null;
 let authSession = {authRequired:false,authenticated:true};
 let llmSettings = {defaultPreset:'default',presets:[]};
@@ -355,6 +359,10 @@ function escape(s) {
   return d.innerHTML;
 }
 
+function escapeAttr(s) {
+  return escape(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function statusSpan(s) {
   const value = String(s || 'pending');
   return '<span class="status status-' + escape(value.toLowerCase()) + '">' + escape(value) + '</span>';
@@ -377,13 +385,47 @@ function shortText(value, size) {
 
 async function loadOrchAgentCheckboxes() {
   try {
-    const agents = await api('/api/agents');
-    const target = document.getElementById('orchAgents');
-    target.innerHTML = agents.length === 0 ? '<p class="empty">No agents registered.</p>' : agents.map(a =>
-      '<label><input type="checkbox" value="' + escape(a.Name) + '"><span>' + escape(a.Name) + '</span></label>'
-    ).join('');
+    builtInAgents = await api('/api/agents');
+    renderOrchAgentCheckboxes();
   } catch(e) {
     document.getElementById('orchAgents').innerHTML = '<p class="error">Error: ' + escape(e.message) + '</p>';
+  }
+}
+
+function renderOrchAgentCheckboxes() {
+  const target = document.getElementById('orchAgents');
+  const selected = new Set(Array.from(document.querySelectorAll('#orchAgents input:checked')).map(c => c.value));
+  const builtIns = (builtInAgents || []).map(a => ({name: a.Name, role: a.Description, custom: false}));
+  const customs = (repositoryCustomAgents || []).map(d => ({
+    name: d.metadata && d.metadata.name,
+    role: d.metadata && d.metadata.labels && d.metadata.labels.role || 'repository custom agent',
+    custom: true
+  })).filter(a => a.name);
+  const agents = builtIns.concat(customs);
+  target.innerHTML = agents.length === 0 ? '<p class="empty">No agents registered.</p>' : agents.map(a =>
+    '<label title="' + escapeAttr(a.role || '') + '"><input type="checkbox" value="' + escapeAttr(a.name) + '"' + (selected.has(a.name) ? ' checked' : '') + '><span>' + escape(a.name) + (a.custom ? ' <span class="tag">custom</span>' : '') + '</span></label>'
+  ).join('');
+}
+
+async function loadRepositoryAgents() {
+  const status = document.getElementById('orchCustomAgentsStatus');
+  status.textContent = 'Loading repository agents...';
+  try {
+    const result = await api('/api/agents/repository', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        repo: document.getElementById('orchRepo').value.trim(),
+        baseBranch: document.getElementById('orchBaseBranch').value.trim() || 'main'
+      })
+    });
+    repositoryCustomAgents = result.agents || [];
+    renderOrchAgentCheckboxes();
+    status.textContent = repositoryCustomAgents.length === 0 ? 'No .agentos/agents/*.yaml definitions found.' : 'Loaded ' + repositoryCustomAgents.length + ' repository agent(s).';
+  } catch(e) {
+    repositoryCustomAgents = [];
+    renderOrchAgentCheckboxes();
+    status.textContent = 'Error: ' + e.message;
   }
 }
 
@@ -404,6 +446,7 @@ async function submitOrchestrate(e) {
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         agents: checked,
+        customAgents: repositoryCustomAgents,
         repo: document.getElementById('orchRepo').value.trim(),
         baseBranch: document.getElementById('orchBaseBranch').value.trim() || 'main',
         task: document.getElementById('orchTask').value,
