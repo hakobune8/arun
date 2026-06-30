@@ -44,6 +44,7 @@ func (t *TestTool) Run(ctx context.Context, input ToolInput) ToolOutput {
 	}
 
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	configureCommandCancel(cmd)
 	cmd.Dir = t.WorkDir
 
 	var stdout, stderr bytes.Buffer
