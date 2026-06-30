@@ -37,6 +37,10 @@ jobs:
         working-directory: web
         run: npm run build
 
+      - name: Install Playwright browser
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
       - name: Responsive smoke
         working-directory: web
         run: npm run smoke
