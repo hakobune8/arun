@@ -72,6 +72,32 @@ different repositories from sharing a mutable checkout. Private GitHub
 repositories require GitHub App installation credentials or `GITHUB_TOKEN` in
 the AgentOS deployment environment.
 
+## Task Recommendations
+
+The Web UI can run a recommend-only pass before starting an orchestration. The
+recommendation classifies the task and returns a preset, confidence, rationale,
+agent set, execution strategy, whether a PR is likely appropriate, and whether a
+human approval gate is recommended.
+
+The classifier is deterministic and uses the task text plus lightweight local
+repository file signals when the repository is `.`. Remote GitHub repositories
+are not cloned for recommendation; they are classified from the task text only.
+
+Common presets include:
+
+- `frontend`
+- `backend`
+- `ci-fix`
+- `ops`
+- `docs`
+- `security`
+- `dependency`
+- `reporting`
+- `bugfix`
+
+Users can apply a recommendation in the New Orchestrate form and still override
+agents, strategy, and artifact choices before starting the run.
+
 ## GitHub Artifacts
 
 New orchestrations can request GitHub artifacts from the Web UI:

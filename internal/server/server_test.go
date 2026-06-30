@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kazyamaz200/agentos/internal/agent"
 	"github.com/kazyamaz200/agentos/internal/orchestrator"
 )
 
@@ -1071,6 +1072,50 @@ func TestServer_LLMSettingsDoesNotExposeSecret(t *testing.T) {
 	}
 	if !strings.Contains(body, `"keyConfigured":true`) || !strings.Contains(body, `"model":"coder-test"`) {
 		t.Fatalf("LLM settings = %s, want configured coder-test preset", body)
+	}
+}
+
+func TestRecommendOrchestration_ClassifiesCommonTasks(t *testing.T) {
+	reg := agent.DefaultRegistry()
+	tests := []struct {
+		name   string
+		task   string
+		signal []string
+		want   string
+	}{
+		{"frontend", "Improve React responsive UI with Tailwind CSS", nil, "frontend"},
+		{"ops", "Fix Helm deployment for Kubernetes ingress", nil, "ops"},
+		{"reporting", "Investigate incident and write a report", nil, "reporting"},
+		{"ci", "GitHub Actions CI check failed on lint", nil, "ci-fix"},
+		{"backend", "Add API endpoint to Go server", nil, "backend"},
+		{"docs", "Update README documentation", nil, "docs"},
+		{"security", "Fix CVE vulnerability and authz permission issue", nil, "security"},
+		{"dependency", "Bump dependencies", []string{"dependency"}, "dependency"},
+		{"bugfix", "Fix regression causing panic", nil, "bugfix"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := recommendOrchestration(tt.task, tt.signal, reg)
+			if got.Preset != tt.want {
+				t.Fatalf("Preset = %q, want %q; recommendation=%+v", got.Preset, tt.want, got)
+			}
+			if len(got.Agents) == 0 || got.Rationale == "" || got.Confidence <= 0 {
+				t.Fatalf("incomplete recommendation: %+v", got)
+			}
+		})
+	}
+}
+
+func TestServer_OrchestrateRecommendEndpoint(t *testing.T) {
+	s := NewServer(0)
+	w := serveRequest(s, "POST", "/api/orchestrate/recommend", []byte(`{"repo":".","baseBranch":"main","task":"Fix GitHub Actions CI failure"}`))
+	assertStatus(t, w.Code, http.StatusOK)
+	var got orchestrationRecommendation
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Preset != "ci-fix" || len(got.Agents) == 0 || !got.CreatePullRequest {
+		t.Fatalf("recommendation = %+v", got)
 	}
 }
 

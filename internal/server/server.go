@@ -115,6 +115,7 @@ func NewServer(port int) *Server {
 	mux.HandleFunc("/api/search", s.handleSearch)
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/github/", s.handleGitHub)
+	mux.HandleFunc("/api/orchestrate/recommend", s.handleOrchestrateRecommend)
 	mux.HandleFunc("/api/orchestrate", s.handleOrchestrate)
 	mux.HandleFunc("/api/orchestrates", s.handleOrchestrates)
 	mux.HandleFunc("/api/orchestrates/", s.handleOrchestrateDetail)
@@ -481,6 +482,22 @@ type orchestrateGitHubRequest struct {
 	PRTemplate        string `json:"prTemplate,omitempty"`
 }
 
+type orchestrateRecommendRequest struct {
+	Repo       string `json:"repo"`
+	BaseBranch string `json:"baseBranch"`
+	Task       string `json:"task"`
+}
+
+type orchestrationRecommendation struct {
+	Preset            string   `json:"preset"`
+	Confidence        float64  `json:"confidence"`
+	Rationale         string   `json:"rationale"`
+	Agents            []string `json:"agents"`
+	Strategy          string   `json:"strategy"`
+	CreatePullRequest bool     `json:"createPullRequest"`
+	RequireApproval   bool     `json:"requireApproval"`
+}
+
 type orchestrationRecord struct {
 	ID             string                       `json:"id"`
 	Actor          string                       `json:"actor,omitempty"`
@@ -536,6 +553,42 @@ type orchestrationSubtaskState struct {
 	StartedAt   *time.Time                  `json:"startedAt,omitempty"`
 	FinishedAt  *time.Time                  `json:"finishedAt,omitempty"`
 	Result      *orchestrator.SubtaskResult `json:"result,omitempty"`
+}
+
+func (s *Server) handleOrchestrateRecommend(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	user, ok := s.requireAuth(w, r)
+	if !ok {
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST required", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "read body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	var req orchestrateRecommendRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		http.Error(w, "parse body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	req.Repo = strings.TrimSpace(req.Repo)
+	req.BaseBranch = defaultBaseBranch(req.BaseBranch)
+	req.Task = strings.TrimSpace(req.Task)
+	if req.Task == "" {
+		http.Error(w, "task is required", http.StatusBadRequest)
+		return
+	}
+	if !s.requireAutomationPermission(w, r, user, "orchestrate.recommend", "orchestration", req.Repo, "") {
+		return
+	}
+
+	recommendation := recommendOrchestration(req.Task, recommendRepoSignals(req.Repo), s.agentReg)
+	_ = json.NewEncoder(w).Encode(recommendation) //nolint:errcheck // best-effort response
 }
 
 func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
@@ -1440,6 +1493,147 @@ func applyArtifactConfig(req *orchestrateRequest, cfg artifactConfig) {
 	}
 	if strings.TrimSpace(req.GitHub.PRTemplate) == "" && cfg.Templates.PullRequest.Body != "" {
 		req.GitHub.PRTemplate = "repository"
+	}
+}
+
+func recommendRepoSignals(repo string) []string {
+	repo = strings.TrimSpace(repo)
+	if repo != "" && repo != "." {
+		return nil
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+	checks := map[string]string{
+		"package.json":        "frontend",
+		"vite.config.ts":      "frontend",
+		"vite.config.js":      "frontend",
+		"tailwind.config.js":  "frontend",
+		"go.mod":              "backend",
+		"Dockerfile":          "ops",
+		"docker-compose.yaml": "ops",
+		"charts":              "ops",
+		".github/workflows":   "ci",
+		"README.md":           "docs",
+		"SECURITY.md":         "security",
+		"go.sum":              "dependency",
+		"package-lock.json":   "dependency",
+		"pnpm-lock.yaml":      "dependency",
+		"yarn.lock":           "dependency",
+	}
+	seen := map[string]bool{}
+	for path, signal := range checks {
+		if _, err := os.Stat(filepath.Join(wd, path)); err == nil {
+			seen[signal] = true
+		}
+	}
+	signals := make([]string, 0, len(seen))
+	for signal := range seen {
+		signals = append(signals, signal)
+	}
+	sort.Strings(signals)
+	return signals
+}
+
+func recommendOrchestration(task string, repoSignals []string, registry *agent.Registry) orchestrationRecommendation {
+	text := strings.ToLower(task + " " + strings.Join(repoSignals, " "))
+	preset, confidence, rationale := classifyOrchestrationTask(text)
+	rec := orchestrationRecommendation{
+		Preset:            preset,
+		Confidence:        confidence,
+		Rationale:         rationale,
+		Agents:            recommendAgentsForPreset(preset, registry),
+		Strategy:          recommendStrategyForPreset(preset),
+		CreatePullRequest: recommendCreatePullRequest(preset),
+		RequireApproval:   recommendApprovalForPreset(preset),
+	}
+	if len(rec.Agents) == 0 && registry != nil {
+		for _, info := range registry.List() {
+			rec.Agents = append(rec.Agents, info.Name)
+			break
+		}
+	}
+	return rec
+}
+
+func classifyOrchestrationTask(text string) (preset string, confidence float64, rationale string) {
+	rules := []struct {
+		preset     string
+		confidence float64
+		rationale  string
+		keywords   []string
+	}{
+		{"security", 0.88, "Security-related terms were detected.", []string{"security", "vulnerability", "cve", "secret", "xss", "csrf", "sql injection", "permission", "authz"}},
+		{"ci-fix", 0.86, "CI or workflow failure terms were detected.", []string{"github actions", "continuous integration", "workflow", "check failed", "failing test", "lint", "build failure"}},
+		{"ops", 0.84, "Docker, Helm, Kubernetes, or deployment terms were detected.", []string{"docker", "helm", "kubernetes", "k8s", "deployment", "ingress", "container", "cluster", "ops"}},
+		{"frontend", 0.82, "Frontend UI terms or frontend repository files were detected.", []string{"frontend", "react", "tailwind", "css", "ui", "responsive", "browser", "vite"}},
+		{"docs", 0.80, "Documentation terms were detected.", []string{"docs", "documentation", "readme", "guide", "manual", "changelog"}},
+		{"dependency", 0.78, "Dependency update terms or lockfiles were detected.", []string{"dependency", "dependencies", "upgrade", "bump", "go.sum", "package-lock", "pnpm-lock", "yarn.lock"}},
+		{"reporting", 0.76, "Investigation or report-only terms were detected.", []string{"investigate", "analysis", "report", "summarize", "research", "audit"}},
+		{"backend", 0.74, "Backend service terms or Go repository files were detected.", []string{"backend", "api", "server", "handler", "endpoint", "database", "go.mod"}},
+		{"bugfix", 0.72, "Bug or regression terms were detected.", []string{"bug", "fix", "regression", "error", "panic", "crash", "broken"}},
+	}
+	for _, rule := range rules {
+		for _, keyword := range rule.keywords {
+			if strings.Contains(text, keyword) {
+				return rule.preset, rule.confidence, rule.rationale
+			}
+		}
+	}
+	return "general", 0.55, "No strong task-specific signal was detected; using the general implementation preset."
+}
+
+func recommendAgentsForPreset(preset string, registry *agent.Registry) []string {
+	candidates := map[string][]string{
+		"security":   {"go-backend", "reviewer"},
+		"ci-fix":     {"ci-fixer", "reviewer"},
+		"ops":        {"go-backend", "reviewer"},
+		"frontend":   {"go-backend", "reviewer"},
+		"docs":       {"docs", "reviewer"},
+		"dependency": {"go-backend", "ci-fixer", "reviewer"},
+		"reporting":  {"docs", "reviewer"},
+		"backend":    {"go-backend", "reviewer"},
+		"bugfix":     {"go-backend", "reviewer"},
+		"general":    {"go-backend", "reviewer"},
+	}
+	names := candidates[preset]
+	if len(names) == 0 {
+		names = candidates["general"]
+	}
+	agents := make([]string, 0, len(names))
+	for _, name := range names {
+		if registry == nil || registry.Has(name) {
+			agents = append(agents, name)
+		}
+	}
+	return agents
+}
+
+func recommendStrategyForPreset(preset string) string {
+	switch preset {
+	case "reporting", "docs":
+		return "sequential"
+	default:
+		return "sequential"
+	}
+}
+
+func recommendCreatePullRequest(preset string) bool {
+	switch preset {
+	case "reporting":
+		return false
+	default:
+		return true
+	}
+}
+
+func recommendApprovalForPreset(preset string) bool {
+	switch preset {
+	case "security", "ops", "dependency":
+		return true
+	default:
+		return false
 	}
 }
 
