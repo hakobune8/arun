@@ -280,7 +280,6 @@ publish a new immutable chart release.
 - [x] Repository-specific guideline management and retrieval
 - [x] Repository-scoped context discovery UX
 - [x] React and Tailwind CSS Web UI migration
-- [ ] Final v1.2.0 release documentation
 
 ### v1.1 — GitHub Automation & Run UX
 - [x] GitHub App installation tokens for repository write operations
