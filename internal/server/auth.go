@@ -127,7 +127,7 @@ func (s *Server) requireAutomationPermission(w http.ResponseWriter, r *http.Requ
 		actor = user.Login
 	}
 	if s.auth.userCanAutomate(user) {
-		_ = appendAuditEvent(auditEvent{ //nolint:errcheck // best-effort audit
+		_ = appendAuditEvent(&auditEvent{ //nolint:errcheck // best-effort audit
 			Actor:   actor,
 			Action:  action,
 			Target:  target,
@@ -137,7 +137,7 @@ func (s *Server) requireAutomationPermission(w http.ResponseWriter, r *http.Requ
 		})
 		return true
 	}
-	_ = appendAuditEvent(auditEvent{ //nolint:errcheck // best-effort audit
+	_ = appendAuditEvent(&auditEvent{ //nolint:errcheck // best-effort audit
 		Actor:   actor,
 		Action:  action,
 		Target:  target,

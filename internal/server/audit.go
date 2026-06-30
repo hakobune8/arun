@@ -51,7 +51,7 @@ func auditPath() string {
 	return filepath.Join(apphome.Dir(), "audit", "audit.jsonl")
 }
 
-func appendAuditEvent(event auditEvent) error {
+func appendAuditEvent(event *auditEvent) error {
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now().UTC()
 	}

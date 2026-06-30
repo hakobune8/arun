@@ -71,7 +71,7 @@ func serveRequest(s *Server, method, path string, body []byte) *httptest.Respons
 	return w
 }
 
-func serveRequestAs(s *Server, method, path string, body []byte, user authUser) *httptest.ResponseRecorder {
+func serveRequestAs(s *Server, method, path string, body []byte, user *authUser) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
 	var req *http.Request
 	if body != nil {
@@ -888,7 +888,7 @@ func TestAuditEventsPersistAndRedact(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("AGENTOS_HOME", home)
 
-	err := appendAuditEvent(auditEvent{
+	err := appendAuditEvent(&auditEvent{
 		Actor:   "alice",
 		Action:  "github.issue.create",
 		Target:  "owner/repo",
@@ -923,7 +923,7 @@ func TestServer_OrchestrateDeniedForNonAdminAudits(t *testing.T) {
 	s := NewServer(0)
 
 	body := []byte(`{"agents":["go-backend"],"repo":".","task":"test task"}`)
-	w := serveRequestAs(s, "POST", "/api/orchestrate", body, authUser{
+	w := serveRequestAs(s, "POST", "/api/orchestrate", body, &authUser{
 		Login:     "mallory",
 		ExpiresAt: time.Now().UTC().Add(time.Hour),
 	})
@@ -949,10 +949,10 @@ func TestServer_AuditEndpointReturnsEventsForAdmin(t *testing.T) {
 	t.Setenv("AGENTOS_ADMIN_USERS", "admin")
 	s := NewServer(0)
 
-	if err := appendAuditEvent(auditEvent{Actor: "admin", Action: "orchestrate.create", Target: "orchestration", Outcome: auditOutcomeAllowed}); err != nil {
+	if err := appendAuditEvent(&auditEvent{Actor: "admin", Action: "orchestrate.create", Target: "orchestration", Outcome: auditOutcomeAllowed}); err != nil {
 		t.Fatal(err)
 	}
-	w := serveRequestAs(s, "GET", "/api/audit", nil, authUser{
+	w := serveRequestAs(s, "GET", "/api/audit", nil, &authUser{
 		Login:     "admin",
 		ExpiresAt: time.Now().UTC().Add(time.Hour),
 	})

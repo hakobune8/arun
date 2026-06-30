@@ -1094,7 +1094,7 @@ func (s *Server) auditOrchestrationOutcome(record *orchestrationRecord, outcome 
 	if record == nil {
 		return
 	}
-	_ = appendAuditEvent(auditEvent{ //nolint:errcheck // best-effort audit
+	_ = appendAuditEvent(&auditEvent{ //nolint:errcheck // best-effort audit
 		Actor:   record.Actor,
 		Action:  "orchestrate.run",
 		Target:  "orchestration/" + record.ID,
@@ -1178,7 +1178,7 @@ func (s *Server) auditGitHubArtifact(record *orchestrationRecord, action string,
 	if record == nil || record.GitHub == nil {
 		return
 	}
-	_ = appendAuditEvent(auditEvent{ //nolint:errcheck // best-effort audit
+	_ = appendAuditEvent(&auditEvent{ //nolint:errcheck // best-effort audit
 		Actor:   record.Actor,
 		Action:  action,
 		Target:  record.GitHub.Repo,
