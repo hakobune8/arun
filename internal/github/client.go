@@ -16,6 +16,7 @@
 package github
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,33 +28,34 @@ import (
 
 // Client is a GitHub API client for interacting with issues, PRs, and checks.
 type Client struct {
-	BaseURL   string
-	Token     string
-	RepoOwner string
-	RepoName  string
-	http      *http.Client
+	BaseURL       string
+	Token         string
+	RepoOwner     string
+	RepoName      string
+	http          *http.Client
+	tokenProvider TokenProvider
 }
 
 // NewClient creates a new GitHub API client for the given repository.
 func NewClient(repoOwner, repoName string) *Client {
-	token := os.Getenv("GITHUB_TOKEN")
-	if token == "" {
-		token = os.Getenv("GH_TOKEN")
-	}
 	baseURL := os.Getenv("GITHUB_API_URL")
 	if baseURL == "" {
 		baseURL = "https://api.github.com"
 	}
 	baseURL = strings.TrimRight(baseURL, "/")
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	tokenProvider := tokenProviderFromEnv(baseURL, httpClient)
+	token, _ := tokenProvider.Token(context.Background()) //nolint:errcheck // best-effort compatibility field
 
 	return &Client{
-		BaseURL:   baseURL,
-		Token:     token,
-		RepoOwner: repoOwner,
-		RepoName:  repoName,
-		http: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		BaseURL:       baseURL,
+		Token:         token,
+		RepoOwner:     repoOwner,
+		RepoName:      repoName,
+		http:          httpClient,
+		tokenProvider: tokenProvider,
 	}
 }
 
@@ -65,8 +67,17 @@ func (c *Client) do(method, path string, body io.Reader) ([]byte, error) {
 	}
 
 	req.Header.Set("Accept", "application/vnd.github+json")
-	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
+	token := c.Token
+	if c.tokenProvider != nil {
+		next, err := c.tokenProvider.Token(req.Context())
+		if err != nil {
+			return nil, fmt.Errorf("get GitHub token: %w", err)
+		}
+		token = next
+		c.Token = next
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")

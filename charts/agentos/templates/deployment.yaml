@@ -88,6 +88,18 @@ spec:
                   name: {{ $secretName }}
                   key: GITHUB_TOKEN
                   optional: true
+            - name: GITHUB_APP_ID
+              value: "{{ .Values.env.GITHUB_APP_ID }}"
+            - name: GITHUB_APP_INSTALLATION_ID
+              value: "{{ .Values.env.GITHUB_APP_INSTALLATION_ID }}"
+            - name: GITHUB_APP_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: GITHUB_APP_PRIVATE_KEY
+                  optional: true
+            - name: GITHUB_APP_PRIVATE_KEY_FILE
+              value: "{{ .Values.env.GITHUB_APP_PRIVATE_KEY_FILE }}"
             - name: AGENTOS_AUTH_REQUIRED
               value: "{{ .Values.auth.required }}"
             - name: GITHUB_OAUTH_CLIENT_ID

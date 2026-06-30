@@ -118,19 +118,28 @@ MCP server commands inherit the AgentOS environment variables, including `LITELL
 
 | Variable | Default | Description |
 |---|---|---|
-| `GITHUB_TOKEN` | `""` | GitHub personal access token for issue/PR/checks operations |
+| `GITHUB_TOKEN` | `""` | GitHub personal access token fallback for issue/PR/checks operations |
+| `GITHUB_APP_ID` | `""` | GitHub App ID for installation-token authentication |
+| `GITHUB_APP_INSTALLATION_ID` | `""` | GitHub App installation ID used to create installation access tokens |
+| `GITHUB_APP_PRIVATE_KEY` | `""` | GitHub App private key PEM, usually provided from a Kubernetes Secret |
+| `GITHUB_APP_PRIVATE_KEY_FILE` | `""` | Path to a GitHub App private key PEM file |
 | `AGENTOS_AUTH_REQUIRED` | `false` | Require signed GitHub sessions for work APIs |
 | `GITHUB_OAUTH_CLIENT_ID` | `""` | GitHub OAuth App client ID |
 | `GITHUB_OAUTH_CLIENT_SECRET` | `""` | GitHub OAuth App client secret |
 | `GITHUB_OAUTH_CALLBACK_URL` | `""` | OAuth callback URL, for example `/auth/callback` on the public host |
 | `AGENTOS_SESSION_SECRET` | `""` | HMAC secret for signed Web UI session cookies |
 
-The token requires the following scopes:
+When `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, and either
+`GITHUB_APP_PRIVATE_KEY` or `GITHUB_APP_PRIVATE_KEY_FILE` are set, AgentOS uses
+a GitHub App installation token for API and HTTPS Git access. Otherwise it falls
+back to `GITHUB_TOKEN`/`GH_TOKEN`.
+
+The fallback personal access token requires the following scopes:
 - `repo` — for private repositories
 - `public_repo` — for public repositories only
 
 GitHub login uses OAuth `read:user` to identify the UI user. Repository cloning
-and GitHub API access still use the server-side `GITHUB_TOKEN` in v1.0; user
+and GitHub API access use server-side GitHub App or token credentials; user
 scoped repository credentials are a later auth-aware extension.
 
 ---
