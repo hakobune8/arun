@@ -164,6 +164,7 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
           <div class="form-group">
             <label>Agents</label>
             <button type="button" class="btn btn-secondary" style="margin-bottom:8px" onclick="loadRepositoryAgents()">Load Repository Agents</button>
+            <button type="button" class="btn btn-secondary" style="margin-bottom:8px" onclick="suggestAgentsFromRepository()">Suggest Agents</button>
             <p id="orchCustomAgentsStatus" class="muted" style="margin:0 0 8px 0"></p>
             <div id="orchAgents" class="agent-picker"></div>
           </div>
@@ -437,6 +438,28 @@ async function loadRepositoryAgents() {
     repositoryCustomAgents = [];
     renderOrchAgentCheckboxes();
     status.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function suggestAgentsFromRepository() {
+  const status = document.getElementById('orchCustomAgentsStatus');
+  const task = document.getElementById('orchTask').value.trim() || 'Recommend agents from repository context.';
+  status.textContent = 'Suggesting agents...';
+  try {
+    const rec = await api('/api/orchestrate/recommend', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        repo: document.getElementById('orchRepo').value.trim(),
+        baseBranch: document.getElementById('orchBaseBranch').value.trim() || 'main',
+        task: task
+      })
+    });
+    window.lastOrchRecommendation = rec;
+    applyRecommendation();
+    status.textContent = 'Suggested ' + (rec.agents || []).join(', ') + ' for ' + (rec.preset || 'general') + '.';
+  } catch(e) {
+    status.textContent = 'Suggestion failed: ' + e.message;
   }
 }
 
@@ -1035,6 +1058,9 @@ async function loadAgents() {
       '<p>' + escape(a.Description) + '</p>' +
       (a.Author ? '<p>Author: ' + escape(a.Author) + '</p>' : '') +
       '<div class="tags">' + (a.RequiredTools || []).map(t => '<span class="tag">' + escape(t) + '</span>').join('') + '</div>' +
+      renderAgentGuidance('Domains', a.Domains) +
+      renderAgentGuidance('Triggers', a.TriggerKeywords) +
+      renderAgentGuidance('Files', a.TriggerFiles) +
       renderAgentGuidance('Architecture', a.ArchitectureGuidance) +
       renderAgentGuidance('Outputs', a.OutputExpectations) +
       '</div>'

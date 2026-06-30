@@ -79,9 +79,12 @@ recommendation classifies the task and returns a preset, confidence, rationale,
 agent set, execution strategy, whether a PR is likely appropriate, and whether a
 human approval gate is recommended.
 
-The classifier is deterministic and uses the task text plus lightweight local
-repository file signals when the repository is `.`. Remote GitHub repositories
-are not cloned for recommendation; they are classified from the task text only.
+The classifier is deterministic and uses the task text plus lightweight
+repository file signals. For `.` it inspects the current checkout. For GitHub
+repositories it uses the same validated shallow-clone path as orchestration so
+file signals such as `package.json`, `Dockerfile`, `charts/`,
+`.github/workflows`, `SECURITY.md`, and lockfiles can influence routing before
+the run starts.
 
 Common presets include:
 
@@ -111,6 +114,16 @@ agents:
   updates.
 - `qa` for regression tests, smoke checks, scenario coverage, and manual
   verification notes.
+
+Planner prompts include structured capabilities for every selected agent:
+domains, task keywords, repository files, recommended dependency order,
+architecture guidance, and output expectations. This helps LLM planning choose
+specialists instead of assigning subtasks from name-only descriptions. If LLM
+planning fails, the fallback planner still routes common tasks by domain:
+frontend work goes through implementation, QA, docs, and review; Docker, Helm,
+and Kubernetes work goes through release/deployment, security, QA, docs, and
+review; security, documentation, backend, dependency, CI, and release tasks have
+similar deterministic dependency templates.
 
 ## Issue-Triggered Orchestration
 

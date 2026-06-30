@@ -30,6 +30,11 @@ func DefaultRegistry() *Registry {
 		Version:       "1.0.0",
 		Author:        "AgentOS",
 		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git", "test"},
+		Domains:       []string{"backend", "go", "api", "service", "frontend-fallback"},
+		TriggerKeywords: []string{
+			"go", "backend", "api", "server", "handler", "endpoint", "database", "service", "react", "frontend", "ui",
+		},
+		TriggerFiles: []string{"go.mod", "go.sum", "cmd/", "internal/", "pkg/", "api/", "package.json", "vite.config.ts", "vite.config.js"},
 		ArchitectureGuidance: []string{
 			"Inspect existing layout before editing and follow established package, cmd/, internal/, pkg/, api/, router, and middleware conventions when present.",
 			"Prefer idiomatic standard-library Go for small services; introduce frameworks or new top-level layout only when task complexity warrants it.",
@@ -50,6 +55,12 @@ func DefaultRegistry() *Registry {
 		Version:       "1.0.0",
 		Author:        "AgentOS",
 		RequiredTools: []string{"read_file", "git"},
+		Domains:       []string{"review", "quality", "release-readiness"},
+		TriggerKeywords: []string{
+			"review", "diff", "approval", "risk", "maintainability", "release readiness",
+		},
+		TriggerFiles:     []string{".github/", "go.mod", "package.json", "Dockerfile", "charts/", "k8s/", "deploy/"},
+		RecommendedAfter: []string{"go-backend", "ci-fixer", "docs", "security", "release-manager", "dependency-updater", "qa"},
 		ArchitectureGuidance: []string{
 			"Evaluate whether changes preserve existing repository conventions before judging style preferences.",
 			"Flag over-engineered layouts, unnecessary dependencies, and convention-breaking rewrites when a smaller change would satisfy the task.",
@@ -70,6 +81,12 @@ func DefaultRegistry() *Registry {
 		Version:       "1.0.0",
 		Author:        "AgentOS",
 		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git", "test"},
+		Domains:       []string{"ci", "github-actions", "validation"},
+		TriggerKeywords: []string{
+			"ci", "github actions", "workflow", "check failed", "lint", "build failure", "test failure",
+		},
+		TriggerFiles:     []string{".github/workflows/", ".github/workflows/*.yaml", ".github/workflows/*.yml"},
+		RecommendedAfter: []string{"go-backend", "dependency-updater"},
 		ArchitectureGuidance: []string{
 			"Inspect existing workflow names, jobs, matrices, and branch-protection expectations before replacing CI structure.",
 			"Prefer de facto GitHub Actions patterns such as actions/checkout, actions/setup-go, cache-aware Go setup, go test, and go vet.",
@@ -90,6 +107,12 @@ func DefaultRegistry() *Registry {
 		Version:       "1.0.0",
 		Author:        "AgentOS",
 		RequiredTools: []string{"read_file", "write_file", "search", "git"},
+		Domains:       []string{"documentation", "developer-experience", "release-notes"},
+		TriggerKeywords: []string{
+			"docs", "documentation", "readme", "guide", "manual", "quickstart", "changelog",
+		},
+		TriggerFiles:     []string{"README.md", "docs/", "CHANGELOG.md", ".agentos/config.yaml"},
+		RecommendedAfter: []string{"go-backend", "release-manager"},
 		ArchitectureGuidance: []string{
 			"Inspect README and docs structure before adding new sections or files.",
 			"Prefer practical OSS documentation structure: overview, quickstart, configuration, endpoints, testing, deployment, and troubleshooting.",
@@ -110,6 +133,12 @@ func DefaultRegistry() *Registry {
 		Version:       "1.0.0",
 		Author:        "AgentOS",
 		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git", "test"},
+		Domains:       []string{"security", "auth", "secrets", "dependencies"},
+		TriggerKeywords: []string{
+			"security", "vulnerability", "cve", "secret", "xss", "csrf", "sql injection", "permission", "authz", "codeql",
+		},
+		TriggerFiles:     []string{"SECURITY.md", ".github/workflows/codeql.yml", ".github/dependabot.yml", "go.sum", "package-lock.json"},
+		RecommendedAfter: []string{"go-backend", "dependency-updater"},
 		ArchitectureGuidance: []string{
 			"Inspect authentication, authorization, session, secret-handling, dependency, and CI security conventions before proposing changes.",
 			"Prefer small defensive fixes, safer defaults, and standard library or existing dependency patterns over broad rewrites.",
@@ -130,6 +159,12 @@ func DefaultRegistry() *Registry {
 		Version:       "1.0.0",
 		Author:        "AgentOS",
 		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git"},
+		Domains:       []string{"release", "deployment", "helm", "kubernetes", "docker"},
+		TriggerKeywords: []string{
+			"release", "changelog", "version", "rollback", "helm", "kubernetes", "k8s", "docker", "deployment", "ingress",
+		},
+		TriggerFiles:     []string{"CHANGELOG.md", "charts/", "Chart.yaml", "values.yaml", "Dockerfile", "k8s/", "deploy/", "deployment.yaml", "ingress.yaml"},
+		RecommendedAfter: []string{"go-backend", "ci-fixer", "qa", "security"},
 		ArchitectureGuidance: []string{
 			"Inspect existing changelog, release note, versioning, and Helm chart conventions before editing release artifacts.",
 			"Keep version changes explicit and avoid publishing or tagging releases unless the task asks for it.",
@@ -150,6 +185,12 @@ func DefaultRegistry() *Registry {
 		Version:       "1.0.0",
 		Author:        "AgentOS",
 		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git", "test"},
+		Domains:       []string{"dependencies", "go-modules", "package-locks", "github-actions"},
+		TriggerKeywords: []string{
+			"dependency", "dependencies", "upgrade", "bump", "go mod", "go.sum", "package-lock", "pnpm-lock", "yarn.lock",
+		},
+		TriggerFiles:     []string{"go.mod", "go.sum", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", ".github/dependabot.yml"},
+		RecommendedAfter: []string{"security"},
 		ArchitectureGuidance: []string{
 			"Inspect existing dependency managers, lockfiles, toolchain versions, and CI compatibility before updating versions.",
 			"Prefer narrow updates requested by the task; avoid broad upgrades unless the task calls for them.",
@@ -170,6 +211,12 @@ func DefaultRegistry() *Registry {
 		Version:       "1.0.0",
 		Author:        "AgentOS",
 		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git", "test"},
+		Domains:       []string{"qa", "tests", "smoke", "regression", "frontend-validation"},
+		TriggerKeywords: []string{
+			"qa", "quality assurance", "smoke", "scenario test", "regression", "manual verification", "browser", "responsive",
+		},
+		TriggerFiles:     []string{"*_test.go", "test/", "tests/", "package.json", "playwright.config.ts", "cypress.config.ts"},
+		RecommendedAfter: []string{"go-backend", "ci-fixer", "security", "release-manager", "dependency-updater"},
 		ArchitectureGuidance: []string{
 			"Inspect existing test layout, fixtures, and documented verification workflows before adding new checks.",
 			"Prefer focused regression and smoke coverage that exercises user-visible behavior changed by the task.",

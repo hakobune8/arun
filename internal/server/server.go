@@ -766,7 +766,7 @@ func (s *Server) handleOrchestrateRecommend(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	recommendation := recommendOrchestration(req.Task, recommendRepoSignals(req.Repo), s.agentReg)
+	recommendation := recommendOrchestration(req.Task, recommendRepoSignals(req.Repo, req.BaseBranch), s.agentReg)
 	_ = json.NewEncoder(w).Encode(recommendation) //nolint:errcheck // best-effort response
 }
 
@@ -2730,6 +2730,10 @@ func orchestrationAgentMetadata(record *orchestrationRecord, agents map[string]r
 			metadata = append(metadata, orchestrator.AgentMetadata{
 				Name:                 info.Name,
 				Description:          info.Description,
+				Domains:              info.Domains,
+				TriggerKeywords:      info.TriggerKeywords,
+				TriggerFiles:         info.TriggerFiles,
+				RecommendedAfter:     info.RecommendedAfter,
 				ArchitectureGuidance: info.ArchitectureGuidance,
 				OutputExpectations:   info.OutputExpectations,
 			})
@@ -2747,22 +2751,35 @@ func customAgentMetadata(def *agent.Definition) orchestrator.AgentMetadata {
 	if role == "" {
 		role = "repository-defined custom agent"
 	}
+	var triggers []string
+	if def.Metadata.Labels["role"] != "" {
+		triggers = append(triggers, def.Metadata.Labels["role"])
+	}
 	return orchestrator.AgentMetadata{
 		Name:                 def.Metadata.Name,
 		Description:          role,
+		Domains:              []string{"repository-custom"},
+		TriggerKeywords:      triggers,
 		ArchitectureGuidance: def.Spec.Guidance.Architecture,
 		OutputExpectations:   def.Spec.Guidance.OutputExpectations,
 	}
 }
 
-func recommendRepoSignals(repo string) []string {
+func recommendRepoSignals(repo, baseBranch string) []string {
 	repo = strings.TrimSpace(repo)
-	if repo != "" && repo != "." {
-		return nil
-	}
-	wd, err := os.Getwd()
-	if err != nil {
-		return nil
+	var repoPath string
+	if repo == "" || repo == "." {
+		wd, err := os.Getwd()
+		if err != nil {
+			return nil
+		}
+		repoPath = wd
+	} else {
+		resolved, err := resolveOrchestrateRepo(repo, defaultBaseBranch(baseBranch))
+		if err != nil {
+			return nil
+		}
+		repoPath = resolved
 	}
 	checks := map[string]string{
 		"package.json":        "frontend",
@@ -2783,7 +2800,7 @@ func recommendRepoSignals(repo string) []string {
 	}
 	seen := map[string]bool{}
 	for path, signal := range checks {
-		if _, err := os.Stat(filepath.Join(wd, path)); err == nil {
+		if _, err := os.Stat(filepath.Join(repoPath, path)); err == nil {
 			seen[signal] = true
 		}
 	}
@@ -2829,7 +2846,7 @@ func classifyOrchestrationTask(text string) (preset string, confidence float64, 
 		{"ci-fix", 0.86, "CI or workflow failure terms were detected.", []string{"github actions", "continuous integration", "workflow", "check failed", "failing test", "lint", "build failure"}},
 		{"qa", 0.85, "QA or verification terms were detected.", []string{"qa", "quality assurance", "smoke test", "scenario test", "regression test", "manual verification"}},
 		{"ops", 0.84, "Docker, Helm, Kubernetes, or deployment terms were detected.", []string{"docker", "helm", "kubernetes", "k8s", "deployment", "ingress", "container", "cluster", "ops"}},
-		{"frontend", 0.82, "Frontend UI terms or frontend repository files were detected.", []string{"frontend", "react", "tailwind", "css", "ui", "responsive", "browser", "vite"}},
+		{"frontend", 0.82, "Frontend UI terms or frontend repository files were detected.", []string{"frontend", "react", "tailwind", "css", "responsive", "browser", "vite"}},
 		{"docs", 0.80, "Documentation terms were detected.", []string{"docs", "documentation", "readme", "guide", "manual", "changelog"}},
 		{"dependency", 0.78, "Dependency update terms or lockfiles were detected.", []string{"dependency", "dependencies", "upgrade", "bump", "go.sum", "package-lock", "pnpm-lock", "yarn.lock"}},
 		{"reporting", 0.76, "Investigation or report-only terms were detected.", []string{"investigate", "analysis", "report", "summarize", "research", "audit"}},
@@ -2850,8 +2867,8 @@ func recommendAgentsForPreset(preset string, registry *agent.Registry) []string 
 	candidates := map[string][]string{
 		"security":   {"security", "reviewer"},
 		"ci-fix":     {"ci-fixer", "reviewer"},
-		"ops":        {"go-backend", "reviewer"},
-		"frontend":   {"go-backend", "reviewer"},
+		"ops":        {"devops", "docker", "helm", "kubernetes", "release-manager", "security", "qa", "reviewer"},
+		"frontend":   {"frontend-app", "frontend", "go-backend", "qa", "reviewer"},
 		"docs":       {"docs", "reviewer"},
 		"dependency": {"dependency-updater", "ci-fixer", "reviewer"},
 		"reporting":  {"docs", "reviewer"},

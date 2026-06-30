@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	agentpkg "github.com/kazyamaz200/agentos/internal/agent"
 	"github.com/kazyamaz200/agentos/internal/llm"
 	"github.com/kazyamaz200/agentos/internal/runtime"
 	"github.com/kazyamaz200/agentos/internal/sandbox"
@@ -101,6 +102,60 @@ func TestDefaultAgent_Empty(t *testing.T) {
 	if a := o.DefaultAgent(); a != nil {
 		t.Error("DefaultAgent should be nil when no agents registered")
 	}
+}
+
+func TestFallbackPlan_RoutesSpecializedDomains(t *testing.T) {
+	t.Parallel()
+
+	agents := map[string]runtime.Agent{}
+	for _, name := range []string{"go-backend", "docs", "ci-fixer", "security", "release-manager", "dependency-updater", "qa", "reviewer"} {
+		agents[name] = agentpkg.NewBaseAgent(name, llm.NewMockLLMClient(nil))
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(t.TempDir()),
+		agents,
+		&runtime.Config{},
+	)
+
+	tests := []struct {
+		name       string
+		task       string
+		wantAgents []string
+	}{
+		{"frontend", "Update React Tailwind responsive UI", []string{"go-backend", "qa", "docs", "reviewer"}},
+		{"docker", "Fix Dockerfile container deployment", []string{"release-manager", "security", "qa", "docs", "reviewer"}},
+		{"helm", "Fix Helm chart values for Kubernetes ingress", []string{"release-manager", "security", "qa", "docs", "reviewer"}},
+		{"backend", "Add Go API endpoint handler", []string{"go-backend", "docs", "ci-fixer", "reviewer"}},
+		{"docs", "Update README documentation guide", []string{"docs", "reviewer"}},
+		{"security", "Fix CVE authz permission issue", []string{"security", "qa", "docs", "reviewer"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := o.fallbackPlan(tt.task)
+			var got []string
+			for _, subtask := range plan.Subtasks {
+				got = append(got, subtask.AgentName)
+			}
+			for _, want := range tt.wantAgents {
+				if !containsAgent(got, want) {
+					t.Fatalf("agents = %+v, want %q", got, want)
+				}
+			}
+			if len(plan.Subtasks) > 0 && plan.Subtasks[len(plan.Subtasks)-1].AgentName != "reviewer" {
+				t.Fatalf("last agent = %q, want reviewer", plan.Subtasks[len(plan.Subtasks)-1].AgentName)
+			}
+		})
+	}
+}
+
+func containsAgent(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestExecute_EmptyPlan(t *testing.T) {

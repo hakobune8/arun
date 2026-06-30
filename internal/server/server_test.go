@@ -125,6 +125,15 @@ func assertArrayLen(t *testing.T, body []byte, want int) {
 	}
 }
 
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
 // --- Health ---
 
 func TestServer_HealthEndpoint(t *testing.T) {
@@ -1287,6 +1296,70 @@ func TestRecommendOrchestration_ClassifiesCommonTasks(t *testing.T) {
 				t.Fatalf("incomplete recommendation: %+v", got)
 			}
 		})
+	}
+}
+
+func TestRecommendOrchestration_RoutesFrontendAndOpsToSpecialists(t *testing.T) {
+	reg := agent.DefaultRegistry()
+	tests := []struct {
+		name       string
+		task       string
+		signals    []string
+		wantPreset string
+		wantAgents []string
+	}{
+		{"frontend", "Update responsive UI", []string{"frontend"}, "frontend", []string{"go-backend", "qa", "reviewer"}},
+		{"docker", "Update Dockerfile healthcheck", []string{"ops"}, "ops", []string{"release-manager", "security", "qa", "reviewer"}},
+		{"helm", "Fix Helm chart values", nil, "ops", []string{"release-manager", "security", "qa", "reviewer"}},
+		{"kubernetes", "Fix Kubernetes ingress deployment", nil, "ops", []string{"release-manager", "security", "qa", "reviewer"}},
+		{"backend", "Add Go API handler", []string{"backend"}, "backend", []string{"go-backend", "reviewer"}},
+		{"docs", "Update README guide", []string{"docs"}, "docs", []string{"docs", "reviewer"}},
+		{"security", "Fix CodeQL security finding", []string{"security"}, "security", []string{"security", "reviewer"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := recommendOrchestration(tt.task, tt.signals, reg)
+			if got.Preset != tt.wantPreset {
+				t.Fatalf("Preset = %q, want %q; recommendation=%+v", got.Preset, tt.wantPreset, got)
+			}
+			for _, want := range tt.wantAgents {
+				if !containsString(got.Agents, want) {
+					t.Fatalf("Agents = %+v, want %q", got.Agents, want)
+				}
+			}
+		})
+	}
+}
+
+func TestRecommendRepoSignals_DetectsFrontendAndOpsFiles(t *testing.T) {
+	repo := t.TempDir()
+	for _, path := range []string{"package.json", "Dockerfile", filepath.Join("charts", "Chart.yaml"), filepath.Join(".github", "workflows", "ci.yml")} {
+		full := filepath.Join(repo, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("test"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.Chdir(wd); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	if err := os.Chdir(repo); err != nil {
+		t.Fatal(err)
+	}
+
+	signals := recommendRepoSignals(".", "main")
+	for _, want := range []string{"ci", "frontend", "ops"} {
+		if !containsString(signals, want) {
+			t.Fatalf("signals = %+v, want %q", signals, want)
+		}
 	}
 }
 

@@ -59,6 +59,10 @@ type Orchestrator struct {
 type AgentMetadata struct {
 	Name                 string
 	Description          string
+	Domains              []string
+	TriggerKeywords      []string
+	TriggerFiles         []string
+	RecommendedAfter     []string
 	ArchitectureGuidance []string
 	OutputExpectations   []string
 }
@@ -205,8 +209,21 @@ Do not include markdown, explanations, or reasoning. The assistant message conte
 	}
 
 	agentsInfo := ""
-	for _, info := range o.agentDefs {
+	for i := range o.agentDefs {
+		info := &o.agentDefs[i]
 		agentsInfo += fmt.Sprintf("- %s: %s\n", info.Name, info.Description)
+		if len(info.Domains) > 0 {
+			agentsInfo += fmt.Sprintf("  Capabilities/domains: %s\n", strings.Join(info.Domains, ", "))
+		}
+		if len(info.TriggerKeywords) > 0 {
+			agentsInfo += fmt.Sprintf("  Route when task mentions: %s\n", strings.Join(info.TriggerKeywords, ", "))
+		}
+		if len(info.TriggerFiles) > 0 {
+			agentsInfo += fmt.Sprintf("  Route when repository contains: %s\n", strings.Join(info.TriggerFiles, ", "))
+		}
+		if len(info.RecommendedAfter) > 0 {
+			agentsInfo += fmt.Sprintf("  Usually runs after: %s\n", strings.Join(info.RecommendedAfter, ", "))
+		}
 		if len(info.ArchitectureGuidance) > 0 {
 			agentsInfo += "  Architecture/conventions:\n"
 			for _, item := range info.ArchitectureGuidance {
@@ -312,34 +329,88 @@ func appendContext(description, parentTask, extra string) string {
 
 func (o *Orchestrator) fallbackPlan(taskDesc string) *TaskPlan {
 	available := make(map[string]bool, len(o.agentDefs))
-	for _, info := range o.agentDefs {
+	for i := range o.agentDefs {
+		info := &o.agentDefs[i]
 		available[info.Name] = true
 	}
 
 	var subtasks []Subtask
+	step := 1
+	addedAgents := map[string]bool{}
+	idByAgent := map[string]string{}
 	add := func(id, agentName, description string, deps []string) {
-		if available[agentName] {
-			subtasks = append(subtasks, Subtask{
-				ID:          id,
-				AgentName:   agentName,
-				Description: description,
-				Deps:        deps,
-			})
-			applyDefaultQualityGate(&subtasks[len(subtasks)-1])
+		if !available[agentName] || addedAgents[agentName] {
+			return
 		}
+		subtasks = append(subtasks, Subtask{
+			ID:          id,
+			AgentName:   agentName,
+			Description: description,
+			Deps:        deps,
+		})
+		addedAgents[agentName] = true
+		idByAgent[agentName] = id
+		applyDefaultQualityGate(&subtasks[len(subtasks)-1])
+	}
+	addNext := func(agentName, description string, deps []string) {
+		add(fmt.Sprintf("step-%d", step), agentName, description, deps)
+		step++
+	}
+	hasAny := func(words ...string) bool {
+		text := strings.ToLower(taskDesc)
+		for _, word := range words {
+			if strings.Contains(text, word) {
+				return true
+			}
+		}
+		return false
+	}
+	depsFor := func(agents ...string) []string {
+		var deps []string
+		for _, agentName := range agents {
+			if id, ok := idByAgent[agentName]; ok {
+				deps = append(deps, id)
+			}
+		}
+		return deps
 	}
 
-	add("step-1", "go-backend", fmt.Sprintf("Implement the Go backend requested by the parent task. Inspect the existing repository layout first and preserve established cmd/, internal/, pkg/, api/, router, middleware, and package conventions. Prefer idiomatic standard-library Go for small services and avoid unnecessary layout churn. Create go.mod only if missing. Parent task:\n\n%s", taskDesc), nil)
-	add("step-2", "docs", fmt.Sprintf("Update README.md or docs/ for the requested changes. Inspect existing documentation style first. Include practical startup, configuration, endpoint, testing, deployment, and troubleshooting details where relevant. Parent task:\n\n%s", taskDesc), nil)
-	ciDeps := dependenciesForAvailable(available, "go-backend")
-	add("step-3", "ci-fixer", fmt.Sprintf("Add or fix Go tests and GitHub Actions workflow so go test ./... succeeds for the implementation requested by the parent task. Inspect existing workflow conventions first and prefer checkout/setup-go with cache-aware Go setup plus explicit go test and go vet steps. Parent task:\n\n%s", taskDesc), ciDeps)
-	add("step-4", "security", fmt.Sprintf("Review and fix security-sensitive aspects of the requested change. Inspect dependencies, auth/session handling, secrets, permissions, and security-relevant configuration. Add tests or manual verification notes where useful. Parent task:\n\n%s", taskDesc), dependenciesForAvailable(available, "go-backend"))
-	add("step-5", "qa", fmt.Sprintf("Add focused regression, scenario, or smoke coverage for the requested change. Preserve existing test conventions and document manual verification steps when automation is incomplete. Parent task:\n\n%s", taskDesc), dependenciesForAvailable(available, "go-backend"))
-	reviewerDeps := dependenciesForAvailable(available, "go-backend", "docs", "ci-fixer", "security", "qa")
-	add("step-6", "reviewer", fmt.Sprintf("Review the final diff for correctness, tests, security, maintainability, release readiness, and convention preservation. Flag over-engineered or convention-breaking changes with severity and file references. Parent task:\n\n%s", taskDesc), reviewerDeps)
+	switch {
+	case hasAny("frontend", "react", "tailwind", "css", "browser", "responsive", "vite"):
+		addNext("go-backend", fmt.Sprintf("Implement the frontend or UI change requested by the parent task using the repository's existing frontend conventions. Inspect package.json, Vite, React, Tailwind, routing, component, and styling structure first; keep controls responsive and accessible. Parent task:\n\n%s", taskDesc), nil)
+		addNext("qa", fmt.Sprintf("Add or run focused frontend validation for the requested UI change. Prefer existing npm scripts, browser smoke checks, responsive checks, and manual verification notes when automation is incomplete. Parent task:\n\n%s", taskDesc), depsFor("go-backend"))
+	case hasAny("docker", "helm", "kubernetes", "k8s", "ingress", "container", "cluster", "deployment", "chart"):
+		addNext("release-manager", fmt.Sprintf("Handle the deployment or ops-oriented change requested by the parent task. Inspect Dockerfile, compose files, Helm charts, Kubernetes manifests, ingress, deployment, values, and rollback conventions before editing. Parent task:\n\n%s", taskDesc), nil)
+		addNext("security", fmt.Sprintf("Review container, Helm, Kubernetes, secret, permission, and ingress security implications for the requested ops change. Add tests or manual verification notes where useful. Parent task:\n\n%s", taskDesc), depsFor("release-manager"))
+		addNext("qa", fmt.Sprintf("Add or document deployment smoke checks for the requested ops change, including concrete commands or cluster verification steps when automation is incomplete. Parent task:\n\n%s", taskDesc), depsFor("release-manager"))
+	case hasAny("security", "vulnerability", "cve", "secret", "xss", "csrf", "sql injection", "permission", "authz", "codeql"):
+		addNext("security", fmt.Sprintf("Review and fix the security-sensitive work requested by the parent task. Inspect dependencies, auth/session handling, secrets, permissions, and security-relevant configuration before changing code. Parent task:\n\n%s", taskDesc), nil)
+		addNext("qa", fmt.Sprintf("Add focused regression or manual verification for the security-sensitive change. Parent task:\n\n%s", taskDesc), depsFor("security"))
+	case hasAny("docs", "documentation", "readme", "guide", "manual"):
+		addNext("docs", fmt.Sprintf("Update README.md or docs/ for the requested documentation task. Inspect existing documentation style first and keep examples copy-pasteable. Parent task:\n\n%s", taskDesc), nil)
+	default:
+		addNext("go-backend", fmt.Sprintf("Implement the Go backend requested by the parent task. Inspect the existing repository layout first and preserve established cmd/, internal/, pkg/, api/, router, middleware, and package conventions. Prefer idiomatic standard-library Go for small services and avoid unnecessary layout churn. Create go.mod only if missing. Parent task:\n\n%s", taskDesc), nil)
+		addNext("docs", fmt.Sprintf("Update README.md or docs/ for the requested changes. Inspect existing documentation style first. Include practical startup, configuration, endpoint, testing, deployment, and troubleshooting details where relevant. Parent task:\n\n%s", taskDesc), nil)
+		addNext("ci-fixer", fmt.Sprintf("Add or fix Go tests and GitHub Actions workflow so go test ./... succeeds for the implementation requested by the parent task. Inspect existing workflow conventions first and prefer checkout/setup-go with cache-aware Go setup plus explicit go test and go vet steps. Parent task:\n\n%s", taskDesc), depsFor("go-backend"))
+	}
+
+	if hasAny("dependency", "dependencies", "upgrade", "bump", "go.sum", "package-lock", "pnpm-lock", "yarn.lock") {
+		addNext("dependency-updater", fmt.Sprintf("Update the dependencies requested by the parent task. Inspect manifests, lockfiles, toolchain versions, and CI compatibility first; keep manifests and lockfiles synchronized. Parent task:\n\n%s", taskDesc), depsFor("security"))
+	}
+	if hasAny("ci", "github actions", "workflow", "check failed", "lint", "build failure", "test failure") {
+		addNext("ci-fixer", fmt.Sprintf("Fix CI or workflow validation requested by the parent task. Preserve existing workflow intent and mirror CI commands locally where practical. Parent task:\n\n%s", taskDesc), depsFor("go-backend", "dependency-updater"))
+	}
+	if hasAny("release", "changelog", "version", "release notes", "rollback") {
+		addNext("release-manager", fmt.Sprintf("Prepare release artifacts requested by the parent task. Inspect changelog, versioning, Helm chart, deployment, and rollback conventions before editing release files. Parent task:\n\n%s", taskDesc), depsFor("go-backend", "ci-fixer", "qa"))
+	}
+	if !hasAny("docs", "documentation", "readme", "guide", "manual") {
+		addNext("docs", fmt.Sprintf("Update relevant documentation for the requested changes when user-visible behavior, commands, deployment, or configuration changed. Parent task:\n\n%s", taskDesc), depsFor("go-backend", "release-manager"))
+	}
+	addNext("reviewer", fmt.Sprintf("Review the final diff for correctness, tests, security, maintainability, release readiness, routing fit, and convention preservation. Flag over-engineered or convention-breaking changes with severity and file references. Parent task:\n\n%s", taskDesc), depsFor("go-backend", "docs", "ci-fixer", "security", "release-manager", "dependency-updater", "qa"))
 
 	if len(subtasks) == 0 {
-		for i, info := range o.agentDefs {
+		for i := range o.agentDefs {
+			info := &o.agentDefs[i]
 			subtasks = append(subtasks, Subtask{
 				ID:          fmt.Sprintf("step-%d", i+1),
 				AgentName:   info.Name,
@@ -357,6 +428,9 @@ func builtInAgentInfo(name, fallbackDescription string) AgentMetadata {
 	switch name {
 	case "go-backend":
 		info.Description = "Go backend coding agent that preserves existing architecture before adding idiomatic Go changes"
+		info.Domains = []string{"backend", "go", "api", "service", "frontend-fallback"}
+		info.TriggerKeywords = []string{"go", "backend", "api", "server", "handler", "endpoint", "database", "service", "react", "frontend", "ui"}
+		info.TriggerFiles = []string{"go.mod", "go.sum", "cmd/", "internal/", "pkg/", "api/", "package.json", "vite.config.ts", "vite.config.js"}
 		info.ArchitectureGuidance = []string{
 			"Inspect existing layout before editing and follow established package, cmd/, internal/, pkg/, api/, router, and middleware conventions when present.",
 			"Prefer idiomatic standard-library Go for small services; introduce frameworks or new top-level layout only when task complexity warrants it.",
@@ -365,6 +439,10 @@ func builtInAgentInfo(name, fallbackDescription string) AgentMetadata {
 		info.OutputExpectations = []string{"gofmt, go test ./..., and go vet ./... pass.", "Architecture choices are summarized when new structure is introduced."}
 	case "ci-fixer":
 		info.Description = "CI fix agent for conventional GitHub Actions and validation repairs"
+		info.Domains = []string{"ci", "github-actions", "validation"}
+		info.TriggerKeywords = []string{"ci", "github actions", "workflow", "check failed", "lint", "build failure", "test failure"}
+		info.TriggerFiles = []string{".github/workflows/"}
+		info.RecommendedAfter = []string{"go-backend", "dependency-updater"}
 		info.ArchitectureGuidance = []string{
 			"Inspect existing workflow names, jobs, matrices, and branch-protection expectations before replacing CI structure.",
 			"Prefer actions/checkout, actions/setup-go, cache-aware Go setup, go test ./..., and go vet ./...",
@@ -373,6 +451,10 @@ func builtInAgentInfo(name, fallbackDescription string) AgentMetadata {
 		info.OutputExpectations = []string{"Workflow YAML preserves existing job intent.", "Local validation mirrors the workflow where practical."}
 	case "docs":
 		info.Description = "Documentation agent that updates practical docs while matching existing repository style"
+		info.Domains = []string{"documentation", "developer-experience", "release-notes"}
+		info.TriggerKeywords = []string{"docs", "documentation", "readme", "guide", "manual", "quickstart", "changelog"}
+		info.TriggerFiles = []string{"README.md", "docs/", "CHANGELOG.md", ".agentos/config.yaml"}
+		info.RecommendedAfter = []string{"go-backend", "release-manager"}
 		info.ArchitectureGuidance = []string{
 			"Inspect README.md and docs/ structure before adding sections or files.",
 			"Prefer overview, quickstart, configuration, endpoints, testing, deployment, and troubleshooting sections where relevant.",
@@ -381,6 +463,10 @@ func builtInAgentInfo(name, fallbackDescription string) AgentMetadata {
 		info.OutputExpectations = []string{"Docs cover changed user-visible behavior.", "Commands and examples are runnable from the repository root."}
 	case "reviewer":
 		info.Description = "Code review agent for correctness, tests, security, maintainability, and release readiness"
+		info.Domains = []string{"review", "quality", "release-readiness"}
+		info.TriggerKeywords = []string{"review", "diff", "approval", "risk", "maintainability", "release readiness"}
+		info.TriggerFiles = []string{".github/", "go.mod", "package.json", "Dockerfile", "charts/", "k8s/", "deploy/"}
+		info.RecommendedAfter = []string{"go-backend", "ci-fixer", "docs", "security", "release-manager", "dependency-updater", "qa"}
 		info.ArchitectureGuidance = []string{
 			"Evaluate whether changes preserve existing repository conventions before judging style preferences.",
 			"Flag over-engineered layouts, unnecessary dependencies, and convention-breaking rewrites.",
@@ -389,6 +475,10 @@ func builtInAgentInfo(name, fallbackDescription string) AgentMetadata {
 		info.OutputExpectations = []string{"Findings include severity and file references where applicable.", "Review states validation and release-readiness risk."}
 	case "security":
 		info.Description = "Security agent for dependencies, auth/session handling, secrets, and security-sensitive diffs"
+		info.Domains = []string{"security", "auth", "secrets", "dependencies"}
+		info.TriggerKeywords = []string{"security", "vulnerability", "cve", "secret", "xss", "csrf", "sql injection", "permission", "authz", "codeql"}
+		info.TriggerFiles = []string{"SECURITY.md", ".github/workflows/codeql.yml", ".github/dependabot.yml", "go.sum", "package-lock.json"}
+		info.RecommendedAfter = []string{"go-backend", "dependency-updater"}
 		info.ArchitectureGuidance = []string{
 			"Inspect authentication, authorization, session, secret-handling, dependency, and CI security conventions before proposing changes.",
 			"Prefer small defensive fixes, safer defaults, and standard library or existing dependency patterns over broad rewrites.",
@@ -397,6 +487,10 @@ func builtInAgentInfo(name, fallbackDescription string) AgentMetadata {
 		info.OutputExpectations = []string{"Security-sensitive changes include tests or manual verification notes.", "Dependency or configuration findings identify the affected package, file, workflow, or setting.", "go test ./... and go vet ./... pass when code is changed."}
 	case "release-manager":
 		info.Description = "Release manager agent for changelogs, release notes, release checklists, and readiness validation"
+		info.Domains = []string{"release", "deployment", "helm", "kubernetes", "docker"}
+		info.TriggerKeywords = []string{"release", "changelog", "version", "rollback", "helm", "kubernetes", "k8s", "docker", "deployment", "ingress"}
+		info.TriggerFiles = []string{"CHANGELOG.md", "charts/", "Chart.yaml", "values.yaml", "Dockerfile", "k8s/", "deploy/", "deployment.yaml", "ingress.yaml"}
+		info.RecommendedAfter = []string{"go-backend", "ci-fixer", "qa", "security"}
 		info.ArchitectureGuidance = []string{
 			"Inspect existing changelog, release note, versioning, and Helm chart conventions before editing release artifacts.",
 			"Keep version changes explicit and avoid publishing or tagging releases unless the task asks for it.",
@@ -405,6 +499,10 @@ func builtInAgentInfo(name, fallbackDescription string) AgentMetadata {
 		info.OutputExpectations = []string{"CHANGELOG.md or release documentation is updated when release notes are requested.", "Version and chart changes are consistent when release packaging is in scope.", "Release checklist items are concrete and traceable to validation commands or manual checks."}
 	case "dependency-updater":
 		info.Description = "Dependency updater agent for Go modules, package locks, and GitHub Actions versions"
+		info.Domains = []string{"dependencies", "go-modules", "package-locks", "github-actions"}
+		info.TriggerKeywords = []string{"dependency", "dependencies", "upgrade", "bump", "go mod", "go.sum", "package-lock", "pnpm-lock", "yarn.lock"}
+		info.TriggerFiles = []string{"go.mod", "go.sum", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", ".github/dependabot.yml"}
+		info.RecommendedAfter = []string{"security"}
 		info.ArchitectureGuidance = []string{
 			"Inspect existing dependency managers, lockfiles, toolchain versions, and CI compatibility before updating versions.",
 			"Prefer narrow updates requested by the task; avoid broad upgrades unless the task calls for them.",
@@ -413,6 +511,10 @@ func builtInAgentInfo(name, fallbackDescription string) AgentMetadata {
 		info.OutputExpectations = []string{"Manifests and lockfiles remain synchronized after updates.", "go mod tidy and go test ./... pass for Go dependency work.", "Compatibility or breaking-change notes are included for major or security-sensitive upgrades."}
 	case "qa":
 		info.Description = "QA agent for scenario tests, smoke checks, regression coverage, and manual verification notes"
+		info.Domains = []string{"qa", "tests", "smoke", "regression", "frontend-validation"}
+		info.TriggerKeywords = []string{"qa", "quality assurance", "smoke", "scenario test", "regression", "manual verification", "browser", "responsive"}
+		info.TriggerFiles = []string{"*_test.go", "test/", "tests/", "package.json", "playwright.config.ts", "cypress.config.ts"}
+		info.RecommendedAfter = []string{"go-backend", "ci-fixer", "security", "release-manager", "dependency-updater"}
 		info.ArchitectureGuidance = []string{
 			"Inspect existing test layout, fixtures, and documented verification workflows before adding new checks.",
 			"Prefer focused regression and smoke coverage that exercises user-visible behavior changed by the task.",
@@ -421,24 +523,6 @@ func builtInAgentInfo(name, fallbackDescription string) AgentMetadata {
 		info.OutputExpectations = []string{"New or updated tests fail without the intended behavior and pass with it.", "go test ./... passes when Go code or tests are in scope.", "Manual verification notes include concrete commands, URLs, or scenarios."}
 	}
 	return info
-}
-
-func dependenciesForAvailable(available map[string]bool, agents ...string) []string {
-	ids := map[string]string{
-		"go-backend": "step-1",
-		"docs":       "step-2",
-		"ci-fixer":   "step-3",
-		"security":   "step-4",
-		"qa":         "step-5",
-		"reviewer":   "step-6",
-	}
-	var deps []string
-	for _, agentName := range agents {
-		if available[agentName] {
-			deps = append(deps, ids[agentName])
-		}
-	}
-	return deps
 }
 
 // Execute runs all subtasks in the plan according to the configured strategy.

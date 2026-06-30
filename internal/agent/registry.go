@@ -29,6 +29,10 @@ type Info struct {
 	Version              string
 	Author               string
 	RequiredTools        []string
+	Domains              []string
+	TriggerKeywords      []string
+	TriggerFiles         []string
+	RecommendedAfter     []string
 	ArchitectureGuidance []string
 	OutputExpectations   []string
 }

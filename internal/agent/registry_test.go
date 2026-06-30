@@ -32,6 +32,15 @@ func TestDefaultRegistryIncludesExpandedBuiltIns(t *testing.T) {
 		if len(infos[i].RequiredTools) == 0 {
 			t.Fatalf("%s missing required tools", infos[i].Name)
 		}
+		if len(infos[i].Domains) == 0 {
+			t.Fatalf("%s missing domains", infos[i].Name)
+		}
+		if len(infos[i].TriggerKeywords) == 0 {
+			t.Fatalf("%s missing trigger keywords", infos[i].Name)
+		}
+		if len(infos[i].TriggerFiles) == 0 {
+			t.Fatalf("%s missing trigger files", infos[i].Name)
+		}
 		if len(infos[i].ArchitectureGuidance) == 0 {
 			t.Fatalf("%s missing architecture guidance", infos[i].Name)
 		}
