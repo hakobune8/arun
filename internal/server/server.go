@@ -100,6 +100,7 @@ func NewServer(port int) *Server {
 	mux.HandleFunc("/auth/logout", s.handleAuthLogout)
 	mux.HandleFunc("/api/agents", s.handleAgents)
 	mux.HandleFunc("/api/settings/llm", s.handleLLMSettings)
+	mux.HandleFunc("/api/audit", s.handleAudit)
 	mux.HandleFunc("/api/runs", s.handleRuns)
 	mux.HandleFunc("/api/runs/", s.handleRunDetail)
 	mux.HandleFunc("/api/search", s.handleSearch)
@@ -156,6 +157,29 @@ func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleLLMSettings(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(s.llmSettings) //nolint:errcheck // best-effort
+}
+
+// --- Audit ---
+
+func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	user, ok := s.requireAuth(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireAutomationPermission(w, r, user, "audit.read", "audit", "", "") {
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "GET required", http.StatusMethodNotAllowed)
+		return
+	}
+	events, err := listAuditEvents(100)
+	if err != nil {
+		http.Error(w, "list audit: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(events) //nolint:errcheck // best-effort response
 }
 
 // --- Runs ---
@@ -447,6 +471,7 @@ type orchestrateGitHubRequest struct {
 
 type orchestrationRecord struct {
 	ID         string                       `json:"id"`
+	Actor      string                       `json:"actor,omitempty"`
 	Repo       string                       `json:"repo"`
 	RepoPath   string                       `json:"repoPath,omitempty"`
 	BaseBranch string                       `json:"baseBranch"`
@@ -492,7 +517,8 @@ type orchestrationSubtaskState struct {
 
 func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	if _, ok := s.requireAuth(w, r); !ok {
+	user, ok := s.requireAuth(w, r)
+	if !ok {
 		return
 	}
 
@@ -528,6 +554,9 @@ func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "agents and task are required", http.StatusBadRequest)
 		return
 	}
+	if !s.requireAutomationPermission(w, r, user, "orchestrate.create", "orchestration", req.Repo, "") {
+		return
+	}
 
 	llmClient, presetID, err := s.llmClientForPreset(req.LLMPreset)
 	if err != nil {
@@ -561,6 +590,7 @@ func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	record := &orchestrationRecord{
 		ID:         id,
+		Actor:      actorLogin(user),
 		Repo:       req.Repo,
 		RepoPath:   repoPath,
 		BaseBranch: req.BaseBranch,
@@ -608,6 +638,7 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 		if saveErr := saveOrchestrationRecord(record); saveErr != nil {
 			slog.Warn("save orchestration failed", "id", record.ID, "error", saveErr)
 		}
+		s.auditOrchestrationOutcome(record, auditOutcomeFailure, record.Error)
 		return
 	}
 	record.Plan = plan
@@ -641,6 +672,7 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 		if saveErr := saveOrchestrationRecord(record); saveErr != nil {
 			slog.Warn("save orchestration failed", "id", record.ID, "error", saveErr)
 		}
+		s.auditOrchestrationOutcome(record, auditOutcomeFailure, record.Error)
 		return
 	}
 
@@ -654,6 +686,7 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 	if err := saveOrchestrationRecord(record); err != nil {
 		slog.Warn("save orchestration failed", "id", record.ID, "error", err)
 	}
+	s.auditOrchestrationOutcome(record, auditOutcomeSuccess, "")
 	s.createPullRequestForOrchestration(record)
 }
 
@@ -1050,6 +1083,28 @@ func prepareOrchestrationGitHub(id string, req *orchestrateRequest) (*orchestrat
 	}, nil
 }
 
+func actorLogin(user *authUser) string {
+	if user == nil || user.Login == "" {
+		return "system"
+	}
+	return user.Login
+}
+
+func (s *Server) auditOrchestrationOutcome(record *orchestrationRecord, outcome auditOutcome, message string) {
+	if record == nil {
+		return
+	}
+	_ = appendAuditEvent(auditEvent{ //nolint:errcheck // best-effort audit
+		Actor:   record.Actor,
+		Action:  "orchestrate.run",
+		Target:  "orchestration/" + record.ID,
+		Repo:    record.Repo,
+		RunID:   record.ID,
+		Outcome: outcome,
+		Message: message,
+	})
+}
+
 func (s *Server) createTrackingIssue(record *orchestrationRecord) {
 	if record == nil || record.GitHub == nil || !record.GitHub.CreateIssue || record.GitHub.IssueURL != "" {
 		return
@@ -1059,6 +1114,7 @@ func (s *Server) createTrackingIssue(record *orchestrationRecord) {
 		record.GitHub.Error = "create issue: invalid GitHub repository"
 		record.UpdatedAt = time.Now().UTC()
 		_ = saveOrchestrationRecord(record)
+		s.auditGitHubArtifact(record, "github.issue.create", auditOutcomeFailure, record.GitHub.Error)
 		return
 	}
 	client := agentosgh.NewClient(owner, name)
@@ -1073,6 +1129,7 @@ func (s *Server) createTrackingIssue(record *orchestrationRecord) {
 		record.GitHub.Error = "create issue: " + err.Error()
 		record.UpdatedAt = time.Now().UTC()
 		_ = saveOrchestrationRecord(record)
+		s.auditGitHubArtifact(record, "github.issue.create", auditOutcomeFailure, record.GitHub.Error)
 		return
 	}
 	record.GitHub.IssueNumber = issue.Number
@@ -1080,6 +1137,7 @@ func (s *Server) createTrackingIssue(record *orchestrationRecord) {
 	record.GitHub.Error = ""
 	record.UpdatedAt = time.Now().UTC()
 	_ = saveOrchestrationRecord(record)
+	s.auditGitHubArtifact(record, "github.issue.create", auditOutcomeSuccess, issue.HTMLURL)
 }
 
 func (s *Server) createPullRequestForOrchestration(record *orchestrationRecord) {
@@ -1091,6 +1149,7 @@ func (s *Server) createPullRequestForOrchestration(record *orchestrationRecord) 
 		record.GitHub.Error = "create pull request: invalid GitHub repository"
 		record.UpdatedAt = time.Now().UTC()
 		_ = saveOrchestrationRecord(record)
+		s.auditGitHubArtifact(record, "github.pull_request.create", auditOutcomeFailure, record.GitHub.Error)
 		return
 	}
 	client := agentosgh.NewClient(owner, name)
@@ -1104,6 +1163,7 @@ func (s *Server) createPullRequestForOrchestration(record *orchestrationRecord) 
 		record.GitHub.Error = "create pull request: " + err.Error()
 		record.UpdatedAt = time.Now().UTC()
 		_ = saveOrchestrationRecord(record)
+		s.auditGitHubArtifact(record, "github.pull_request.create", auditOutcomeFailure, record.GitHub.Error)
 		return
 	}
 	record.GitHub.PullRequestNumber = pr.Number
@@ -1111,6 +1171,22 @@ func (s *Server) createPullRequestForOrchestration(record *orchestrationRecord) 
 	record.GitHub.Error = ""
 	record.UpdatedAt = time.Now().UTC()
 	_ = saveOrchestrationRecord(record)
+	s.auditGitHubArtifact(record, "github.pull_request.create", auditOutcomeSuccess, pr.HTMLURL)
+}
+
+func (s *Server) auditGitHubArtifact(record *orchestrationRecord, action string, outcome auditOutcome, message string) {
+	if record == nil || record.GitHub == nil {
+		return
+	}
+	_ = appendAuditEvent(auditEvent{ //nolint:errcheck // best-effort audit
+		Actor:   record.Actor,
+		Action:  action,
+		Target:  record.GitHub.Repo,
+		Repo:    record.GitHub.Repo,
+		RunID:   record.ID,
+		Outcome: outcome,
+		Message: message,
+	})
 }
 
 func orchestrationIssueBody(record *orchestrationRecord) string {

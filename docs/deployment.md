@@ -56,6 +56,7 @@ See [values.yaml](../charts/agentos/values.yaml) for all available options.
 | `image.tag` | `1.0.0` | Container image tag |
 | `env.AGENTOS_MODEL_CODER` | `coder` | LLM model for coding tasks |
 | `env.AGENTOS_HOME` | `/home/agentos/.agentos` | State directory for run artifacts and local vector indexes |
+| `env.AGENTOS_ADMIN_USERS` | `""` | Optional comma-separated GitHub logins allowed to run sensitive automation and view audit history |
 | `env.AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT` | `10m` | Maximum runtime for one orchestration subtask |
 | `env.QDRANT_URL` | `""` | Qdrant vector DB URL (optional) |
 | `env.GITHUB_TOKEN` | `""` | GitHub API token fallback (optional) |

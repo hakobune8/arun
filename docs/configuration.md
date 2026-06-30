@@ -124,6 +124,7 @@ MCP server commands inherit the AgentOS environment variables, including `LITELL
 | `GITHUB_APP_PRIVATE_KEY` | `""` | GitHub App private key PEM, usually provided from a Kubernetes Secret |
 | `GITHUB_APP_PRIVATE_KEY_FILE` | `""` | Path to a GitHub App private key PEM file |
 | `AGENTOS_AUTH_REQUIRED` | `false` | Require signed GitHub sessions for work APIs |
+| `AGENTOS_ADMIN_USERS` | `""` | Optional comma-separated GitHub logins allowed to run sensitive automation and view audit history |
 | `GITHUB_OAUTH_CLIENT_ID` | `""` | GitHub OAuth App client ID |
 | `GITHUB_OAUTH_CLIENT_SECRET` | `""` | GitHub OAuth App client secret |
 | `GITHUB_OAUTH_CALLBACK_URL` | `""` | OAuth callback URL, for example `/auth/callback` on the public host |

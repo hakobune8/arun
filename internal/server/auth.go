@@ -38,6 +38,7 @@ type authConfig struct {
 	AuthorizeURL  string
 	TokenURL      string
 	UserURL       string
+	AdminUsers    map[string]bool
 }
 
 type authUser struct {
@@ -79,6 +80,7 @@ func loadAuthConfig() authConfig {
 		AuthorizeURL:  envOrDefault("GITHUB_OAUTH_AUTHORIZE_URL", "https://github.com/login/oauth/authorize"),
 		TokenURL:      envOrDefault("GITHUB_OAUTH_TOKEN_URL", "https://github.com/login/oauth/access_token"),
 		UserURL:       envOrDefault("GITHUB_OAUTH_USER_URL", "https://api.github.com/user"),
+		AdminUsers:    parseAdminUsers(os.Getenv("AGENTOS_ADMIN_USERS")),
 	}
 	cfg.Required = strings.EqualFold(os.Getenv("AGENTOS_AUTH_REQUIRED"), "true") || (cfg.ClientID != "" && cfg.ClientSecret != "")
 	if cfg.SessionSecret == "" {
@@ -93,6 +95,60 @@ func (c *authConfig) enabled() bool {
 
 func (c *authConfig) oauthConfigured() bool {
 	return c.ClientID != "" && c.ClientSecret != "" && c.RedirectURL != "" && c.SessionSecret != ""
+}
+
+func parseAdminUsers(raw string) map[string]bool {
+	users := map[string]bool{}
+	for _, item := range strings.Split(raw, ",") {
+		login := strings.ToLower(strings.TrimSpace(item))
+		if login != "" {
+			users[login] = true
+		}
+	}
+	return users
+}
+
+func (c *authConfig) userCanAutomate(user *authUser) bool {
+	if !c.enabled() {
+		return true
+	}
+	if user == nil || user.Login == "" {
+		return false
+	}
+	if len(c.AdminUsers) == 0 {
+		return true
+	}
+	return c.AdminUsers[strings.ToLower(user.Login)]
+}
+
+func (s *Server) requireAutomationPermission(w http.ResponseWriter, r *http.Request, user *authUser, action, target, repo, runID string) bool {
+	actor := "anonymous"
+	if user != nil && user.Login != "" {
+		actor = user.Login
+	}
+	if s.auth.userCanAutomate(user) {
+		_ = appendAuditEvent(auditEvent{ //nolint:errcheck // best-effort audit
+			Actor:   actor,
+			Action:  action,
+			Target:  target,
+			Repo:    repo,
+			RunID:   runID,
+			Outcome: auditOutcomeAllowed,
+		})
+		return true
+	}
+	_ = appendAuditEvent(auditEvent{ //nolint:errcheck // best-effort audit
+		Actor:   actor,
+		Action:  action,
+		Target:  target,
+		Repo:    repo,
+		RunID:   runID,
+		Outcome: auditOutcomeDenied,
+		Message: "permission denied",
+	})
+	w.Header().Set("Content-Type", "application/json")
+	http.Error(w, "permission denied", http.StatusForbidden)
+	return false
 }
 
 func (s *Server) handleAuthSession(w http.ResponseWriter, r *http.Request) {

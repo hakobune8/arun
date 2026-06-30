@@ -36,8 +36,8 @@ a{color:#58a6ff;text-decoration:none;cursor:pointer}
 a:hover{text-decoration:underline}
 pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12px;max-height:360px}
 .status{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;line-height:1.4;white-space:nowrap;background:#30363d;color:#c9d1d9;border:1px solid #484f58}
-.status-completed,.status-success,.status-open,.status-pass{background:#23863620;color:#3fb950;border-color:#238636}
-.status-failed,.status-failure{background:#da363320;color:#f85149;border-color:#da3633}
+.status-completed,.status-success,.status-open,.status-pass,.status-allowed{background:#23863620;color:#3fb950;border-color:#238636}
+.status-failed,.status-failure,.status-denied{background:#da363320;color:#f85149;border-color:#da3633}
 .status-pending,.status-planning,.status-running,.status-queued{background:#d2992220;color:#d29922;border-color:#d29922}
 .btn{padding:8px 16px;background:#238636;border:0;border-radius:6px;color:#fff;cursor:pointer;font-size:13px;min-height:36px;white-space:nowrap}
 .btn:hover{background:#2ea043}
@@ -92,6 +92,7 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
   <div class="nav">
     <a class="active" onclick="showPage('orchestrates')" data-page="orchestrates">Orchestrates</a>
     <a onclick="showPage('agents')" data-page="agents">Agents</a>
+    <a onclick="showPage('audit')" data-page="audit">Audit</a>
   </div>
   <div id="authArea" class="auth-area"></div>
 </div>
@@ -189,6 +190,19 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
       <div id="agentsList"></div>
     </div>
   </div>
+
+  <div id="page-audit" class="page">
+    <div class="card">
+      <div class="detail-header">
+        <div>
+          <h2>Audit</h2>
+          <p class="muted">Recent automation actions and authorization decisions.</p>
+        </div>
+        <button class="btn btn-secondary" onclick="loadAudit()">Refresh</button>
+      </div>
+      <table style="margin-top:12px"><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Outcome</th><th>Target</th><th>Run</th><th>Message</th></tr></thead><tbody id="auditBody"></tbody></table>
+    </div>
+  </div>
   </div>
 </div>
 
@@ -213,6 +227,7 @@ function showPage(name) {
     loadOrchestrates();
   }
   if (name === 'agents') loadAgents();
+  if (name === 'audit') loadAudit();
 }
 
 function showOrchPanel(name) {
@@ -602,6 +617,28 @@ async function doSearch() {
     ).join('');
   } catch(e) {
     div.innerHTML = '<p class="error">Error: ' + escape(e.message) + '</p>';
+  }
+}
+
+async function loadAudit() {
+  const body = document.getElementById('auditBody');
+  if (!body) return;
+  body.innerHTML = '<tr><td colspan="7" class="empty">Loading...</td></tr>';
+  try {
+    const events = await api('/api/audit');
+    body.innerHTML = events.length === 0
+      ? '<tr><td colspan="7" class="empty">No audit events yet.</td></tr>'
+      : events.map(e =>
+        '<tr><td>' + escape(new Date(e.timestamp).toLocaleString()) + '</td>' +
+        '<td>' + escape(e.actor || '-') + '</td>' +
+        '<td>' + escape(e.action || '-') + '</td>' +
+        '<td>' + statusSpan(e.outcome || '-') + '</td>' +
+        '<td>' + escape(shortText(e.target || e.repo || '-', 48)) + '</td>' +
+        '<td>' + escape(e.runId || '-') + '</td>' +
+        '<td>' + escape(shortText(e.message || '', 80)) + '</td></tr>'
+      ).join('');
+  } catch(e) {
+    body.innerHTML = '<tr><td colspan="7" class="error">Error: ' + escape(e.message) + '</td></tr>';
   }
 }
 

@@ -70,6 +70,8 @@ env:
   AGENTOS_PORT: "8080"
   # State directory for run artifacts and local vector indexes
   AGENTOS_HOME: "/home/agentos/.agentos"
+  # Comma-separated GitHub logins allowed to run sensitive automation when set
+  AGENTOS_ADMIN_USERS: ""
   # Maximum runtime for a single orchestration subtask
   AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT: "10m"
   # GitHub token (optional, for PR operations)

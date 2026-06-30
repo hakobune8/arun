@@ -71,6 +71,24 @@ func serveRequest(s *Server, method, path string, body []byte) *httptest.Respons
 	return w
 }
 
+func serveRequestAs(s *Server, method, path string, body []byte, user authUser) *httptest.ResponseRecorder {
+	w := httptest.NewRecorder()
+	var req *http.Request
+	if body != nil {
+		req = httptest.NewRequest(method, path, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+	} else {
+		req = httptest.NewRequest(method, path, http.NoBody)
+	}
+	session, err := json.Marshal(user)
+	if err != nil {
+		panic(err)
+	}
+	req.AddCookie(signedCookie(sessionCookieName, string(session), time.Hour, s.auth.SessionSecret))
+	s.server.Handler.ServeHTTP(w, req)
+	return w
+}
+
 func assertStatus(t *testing.T, got, want int) {
 	t.Helper()
 	if got != want {
@@ -843,10 +861,108 @@ func TestServer_AuthRequiredProtectsWorkAPIs(t *testing.T) {
 		"/api/search?q=test",
 		"/api/github/issues?repo=owner/repo",
 		"/api/orchestrates",
+		"/api/audit",
 	}
 	for _, path := range protected {
 		w := serveRequest(s, "GET", path, nil)
 		assertStatus(t, w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestAuthConfig_UserCanAutomate(t *testing.T) {
+	t.Parallel()
+
+	cfg := authConfig{Required: true, AdminUsers: parseAdminUsers("alice, Bob")}
+	if !cfg.userCanAutomate(&authUser{Login: "alice"}) {
+		t.Fatal("alice should be allowed")
+	}
+	if !cfg.userCanAutomate(&authUser{Login: "bob"}) {
+		t.Fatal("bob should be allowed case-insensitively")
+	}
+	if cfg.userCanAutomate(&authUser{Login: "mallory"}) {
+		t.Fatal("mallory should be denied")
+	}
+}
+
+func TestAuditEventsPersistAndRedact(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("AGENTOS_HOME", home)
+
+	err := appendAuditEvent(auditEvent{
+		Actor:   "alice",
+		Action:  "github.issue.create",
+		Target:  "owner/repo",
+		Outcome: auditOutcomeFailure,
+		Message: "Authorization: Bearer ghp_123456789012345678901234567890123456",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	events, err := listAuditEvents(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events = %d, want 1", len(events))
+	}
+	if strings.Contains(events[0].Message, "ghp_123456789012345678901234567890123456") {
+		t.Fatalf("audit event leaked token: %+v", events[0])
+	}
+	if !strings.Contains(events[0].Message, "[REDACTED]") {
+		t.Fatalf("audit event was not redacted: %+v", events[0])
+	}
+}
+
+func TestServer_OrchestrateDeniedForNonAdminAudits(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("AGENTOS_HOME", home)
+	t.Setenv("AGENTOS_AUTH_REQUIRED", "true")
+	t.Setenv("AGENTOS_SESSION_SECRET", "test-secret")
+	t.Setenv("AGENTOS_ADMIN_USERS", "admin")
+	s := NewServer(0)
+
+	body := []byte(`{"agents":["go-backend"],"repo":".","task":"test task"}`)
+	w := serveRequestAs(s, "POST", "/api/orchestrate", body, authUser{
+		Login:     "mallory",
+		ExpiresAt: time.Now().UTC().Add(time.Hour),
+	})
+	assertStatus(t, w.Code, http.StatusForbidden)
+
+	events, err := listAuditEvents(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events = %d, want 1", len(events))
+	}
+	if events[0].Actor != "mallory" || events[0].Action != "orchestrate.create" || events[0].Outcome != auditOutcomeDenied {
+		t.Fatalf("unexpected audit event: %+v", events[0])
+	}
+}
+
+func TestServer_AuditEndpointReturnsEventsForAdmin(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("AGENTOS_HOME", home)
+	t.Setenv("AGENTOS_AUTH_REQUIRED", "true")
+	t.Setenv("AGENTOS_SESSION_SECRET", "test-secret")
+	t.Setenv("AGENTOS_ADMIN_USERS", "admin")
+	s := NewServer(0)
+
+	if err := appendAuditEvent(auditEvent{Actor: "admin", Action: "orchestrate.create", Target: "orchestration", Outcome: auditOutcomeAllowed}); err != nil {
+		t.Fatal(err)
+	}
+	w := serveRequestAs(s, "GET", "/api/audit", nil, authUser{
+		Login:     "admin",
+		ExpiresAt: time.Now().UTC().Add(time.Hour),
+	})
+	assertStatus(t, w.Code, http.StatusOK)
+	var events []auditEvent
+	if err := json.Unmarshal(w.Body.Bytes(), &events); err != nil {
+		t.Fatal(err)
+	}
+	if len(events) < 1 {
+		t.Fatal("expected audit events")
 	}
 }
 
