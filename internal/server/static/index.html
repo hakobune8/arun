@@ -6,9 +6,10 @@
 <title>AgentOS</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0d1117;color:#c9d1d9;line-height:1.6;min-width:320px}
+html{width:100%;overflow-x:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0d1117;color:#c9d1d9;line-height:1.6;min-width:320px;width:100%;overflow-x:hidden}
 .header{background:#161b22;border-bottom:1px solid #30363d;padding:12px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:10}
-.brand{display:flex;align-items:baseline;gap:10px;flex:0 0 auto}
+.brand{display:flex;align-items:baseline;gap:10px;flex:0 0 auto;min-width:0}
 .brand h1{font-size:18px;color:#f0f6fc;cursor:pointer;white-space:nowrap}
 .brand span{color:#8b949e;font-size:12px}
 .nav,.tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:thin}
@@ -16,10 +17,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .nav a,.tabs button{padding:7px 12px;color:#8b949e;text-decoration:none;font-size:13px;border-radius:6px;cursor:pointer;white-space:nowrap;background:transparent;border:0}
 .nav a:hover,.tabs button:hover{color:#c9d1d9;background:#1c2128;text-decoration:none}
 .nav a.active,.tabs button.active{color:#f0f6fc;background:#1c2128}
-.container{max-width:1240px;margin:0 auto;padding:24px;width:100%}
+.container{max-width:1240px;margin:0 auto;padding:24px;width:100%;min-width:0}
 .page,.orch-panel,.detail-panel{display:none}
 .page.active,.orch-panel.active,.detail-panel.active{display:block}
-.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;margin-bottom:16px;overflow:hidden}
+.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;margin-bottom:16px;overflow:hidden;min-width:0}
 .card h2{font-size:16px;margin-bottom:12px;color:#f0f6fc}
 .card h3{font-size:14px;margin:14px 0 8px;color:#f0f6fc}
 .muted{color:#8b949e;font-size:13px}
@@ -27,18 +28,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .stat{text-align:center;padding:16px}
 .stat-value{font-size:28px;font-weight:600;color:#58a6ff}
 .stat-label{font-size:11px;color:#8b949e;margin-top:4px}
-table{width:100%;border-collapse:collapse;display:block;overflow-x:auto;white-space:nowrap}
+table{width:100%;border-collapse:collapse;display:block;overflow-x:auto;white-space:normal;-webkit-overflow-scrolling:touch}
 thead,tbody{display:table;width:100%;min-width:680px}
 th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #30363d;font-size:13px;vertical-align:top}
 th{color:#8b949e;font-weight:500}
+td{overflow-wrap:anywhere;word-break:break-word}
+th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){min-width:92px}
+th:nth-child(3),td:nth-child(3){min-width:120px}
+td:first-child,td:nth-child(2),td:nth-child(3){white-space:nowrap;word-break:normal}
 tr:hover{background:#1c2128}
 a{color:#58a6ff;text-decoration:none;cursor:pointer}
 a:hover{text-decoration:underline}
-pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12px;max-height:360px}
+pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12px;max-height:360px;white-space:pre-wrap;word-break:break-word}
 .status{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;line-height:1.4;white-space:nowrap;background:#30363d;color:#c9d1d9;border:1px solid #484f58}
 .status-completed,.status-success,.status-open,.status-pass,.status-allowed{background:#23863620;color:#3fb950;border-color:#238636}
 .status-failed,.status-failure,.status-denied{background:#da363320;color:#f85149;border-color:#da3633}
 .status-pending,.status-planning,.status-running,.status-queued{background:#d2992220;color:#d29922;border-color:#d29922}
+.status-canceled{background:#8957e520;color:#a371f7;border-color:#8957e5}
 .btn{padding:8px 16px;background:#238636;border:0;border-radius:6px;color:#fff;cursor:pointer;font-size:13px;min-height:36px;white-space:nowrap}
 .btn:hover{background:#2ea043}
 .btn:disabled{opacity:.55;cursor:not-allowed}
@@ -48,7 +54,7 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
 .btn-danger:hover{background:#f85149}
 .form-group{margin-bottom:12px}
 .form-group label{display:block;font-size:12px;color:#8b949e;margin-bottom:4px}
-.form-group input,.form-group textarea,.form-group select,.search-row input,.search-row select{width:100%;padding:8px 10px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px;min-height:36px}
+.form-group input,.form-group textarea,.form-group select,.search-row input,.search-row select,.github-row input,.github-row select{width:100%;min-width:0;padding:8px 10px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px;min-height:36px}
 .form-group textarea{min-height:120px;resize:vertical}
 .search-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(140px,180px) auto;gap:8px;align-items:center;margin-bottom:12px}
 .github-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(150px,190px) minmax(120px,160px) auto;gap:8px;align-items:center;margin-bottom:12px}
@@ -64,14 +70,17 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
 .checkbox-row label{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:#c9d1d9}
 .checkbox-row input{width:16px;height:16px;accent-color:#238636}
 .inline-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-.detail-header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.detail-header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;min-width:0}
+.detail-header>div{min-width:0}
 .detail-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-.repo-pill{background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:4px 8px;font-size:12px;color:#8b949e}
+.repo-pill{background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:4px 8px;font-size:12px;color:#8b949e;overflow-wrap:anywhere;max-width:100%}
+.actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .auth-area{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:13px;color:#8b949e}
 .auth-area img{width:24px;height:24px;border-radius:50%}
 .auth-card{max-width:520px;margin:48px auto}
 .empty{color:#8b949e;font-size:13px;padding:12px 0}
 .error{color:#f85149;font-size:13px}
+.tag,a,p,span{overflow-wrap:anywhere}
 @media (max-width:720px){
   .header{align-items:flex-start;flex-direction:column;padding:12px 16px;gap:10px}
   .nav{width:100%;margin-left:0}
@@ -82,6 +91,16 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
   .search-row,.github-row{grid-template-columns:1fr}
   .inline-grid{grid-template-columns:1fr}
   .btn{width:100%}
+}
+@media (max-width:480px){
+  .container{padding:12px}
+  .card{padding:14px;margin-bottom:12px}
+  .brand{width:100%;justify-content:space-between}
+  .tabs{gap:4px}
+  .tabs button{padding:8px 10px}
+  thead,tbody{min-width:560px}
+  .actions{width:100%}
+  .detail-meta{gap:6px}
 }
 </style>
 </head>
@@ -454,7 +473,7 @@ function startOrchestrationPoll() {
   if (orchPoll) clearInterval(orchPoll);
   orchPoll = setInterval(() => {
     if (!currentOrchestration) return;
-    if (['completed','failed'].includes(currentOrchestration.status)) {
+    if (['completed','failed','canceled'].includes(currentOrchestration.status)) {
       clearInterval(orchPoll);
       orchPoll = null;
       return;
