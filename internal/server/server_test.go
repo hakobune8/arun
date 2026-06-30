@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/kazyamaz200/agentos/internal/agent"
+	agentosgh "github.com/kazyamaz200/agentos/internal/github"
 	"github.com/kazyamaz200/agentos/internal/guideline"
 	"github.com/kazyamaz200/agentos/internal/memory"
 	"github.com/kazyamaz200/agentos/internal/orchestrator"
@@ -718,6 +719,31 @@ func TestServer_GitHub_ChecksReturnCheckRuns(t *testing.T) {
 	}
 	if runs[0]["name"] != "build" || runs[0]["id"].(float64) != 1 {
 		t.Fatalf("unexpected check run: %+v", runs[0])
+	}
+}
+
+func TestServer_GitHub_Repositories(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/installation/repositories" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"repositories":[{"id":1,"name":"repo","full_name":"owner/repo","private":true,"html_url":"https://github.com/owner/repo","default_branch":"main"}]}`))
+	}))
+	defer api.Close()
+	t.Setenv("GITHUB_API_URL", api.URL)
+
+	s := NewServer(0)
+	w := serveRequest(s, "GET", "/api/github/repositories", nil)
+	assertStatus(t, w.Code, http.StatusOK)
+
+	var repos []agentosgh.RepositorySummary
+	if err := json.Unmarshal(w.Body.Bytes(), &repos); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(repos) != 1 || repos[0].FullName != "owner/repo" || repos[0].DefaultBranch != "main" {
+		t.Fatalf("unexpected repositories: %+v", repos)
 	}
 }
 

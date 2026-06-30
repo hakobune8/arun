@@ -523,6 +523,21 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireAuth(w, r); !ok {
 		return
 	}
+	path := r.URL.Path[len("/api/github/"):]
+	if path == "repositories" {
+		client := agentosgh.NewClient("", "")
+		repos, err := client.ListRepositories()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if repos == nil {
+			repos = []agentosgh.RepositorySummary{}
+		}
+		_ = json.NewEncoder(w).Encode(repos) //nolint:errcheck // best-effort response
+		return
+	}
+
 	repo := r.URL.Query().Get("repo")
 	if repo == "" {
 		http.Error(w, "repo query param required", http.StatusBadRequest)
@@ -535,7 +550,6 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 	}
 	client := agentosgh.NewClient(parts[0], parts[1])
 
-	path := r.URL.Path[len("/api/github/"):]
 	switch path {
 	case "issues":
 		state := r.URL.Query().Get("state")

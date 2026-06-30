@@ -45,6 +45,16 @@ type AgentInfo = {
   OutputExpectations?: string[]
 }
 
+type RepositorySummary = {
+  id?: number
+  name?: string
+  full_name?: string
+  private?: boolean
+  html_url?: string
+  default_branch?: string
+  updated_at?: string
+}
+
 type Orchestration = {
   id: string
   repo?: string
@@ -219,6 +229,7 @@ function App() {
   const [detailTab, setDetailTab] = useState<DetailTab>('overview')
   const [agents, setAgents] = useState<AgentInfo[]>([])
   const [customAgents, setCustomAgents] = useState<Json[]>([])
+  const [repositories, setRepositories] = useState<RepositorySummary[]>([])
   const [templates, setTemplates] = useState<Json[]>([])
   const [llm, setLLM] = useState<Json>({ defaultPreset: '', presets: [] })
   const [records, setRecords] = useState<Orchestration[]>([])
@@ -239,7 +250,7 @@ function App() {
 
   useEffect(() => {
     if (!canUseApp) return
-    void Promise.all([loadAgents(), loadLLM(), loadRecords()])
+    void Promise.all([loadAgents(), loadRepositories(), loadLLM(), loadRecords()])
   }, [canUseApp])
 
   useEffect(() => {
@@ -254,6 +265,15 @@ function App() {
   async function loadAgents() {
     const data = await api<AgentInfo[]>('/api/agents')
     setAgents(data)
+  }
+
+  async function loadRepositories() {
+    try {
+      const data = await api<RepositorySummary[]>('/api/github/repositories')
+      setRepositories(data)
+    } catch {
+      setRepositories([])
+    }
   }
 
   async function loadLLM() {
@@ -383,6 +403,8 @@ function App() {
             setSelectedAgents={setSelectedAgents}
             customAgents={customAgents}
             setCustomAgents={setCustomAgents}
+            repositories={repositories}
+            loadRepositories={() => void loadRepositories()}
             templates={templates}
             loadTemplates={() => void loadTemplates()}
             llm={llm}
@@ -482,6 +504,8 @@ function OrchestratesPage(props: {
   setSelectedAgents: Dispatch<SetStateAction<Set<string>>>
   customAgents: Json[]
   setCustomAgents: (agents: Json[]) => void
+  repositories: RepositorySummary[]
+  loadRepositories: () => void
   templates: Json[]
   loadTemplates: () => void
   llm: Json
@@ -560,18 +584,62 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
     props.setSelectedAgents(new Set(selectedTemplate.agents ?? []))
   }
 
+  function selectRepository(repo: string) {
+    const selected = props.repositories.find((r) => r.full_name === repo)
+    update({ repo, baseBranch: selected?.default_branch || form.baseBranch || 'main' })
+  }
+
+  const repositoryOptions = [
+    ...props.repositories,
+    ...(form.repo && !props.repositories.some((repo) => repo.full_name === form.repo) ? [{ full_name: form.repo, default_branch: form.baseBranch }] : []),
+  ]
+
   return (
     <form className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]" onSubmit={props.submit}>
       <div className="grid min-w-0 gap-4">
         <Panel>
-          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink"><Cloud className="size-4 text-cyan-os" /> Repository</div>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-ink"><Cloud className="size-4 text-cyan-os" /> Repository</div>
+            <IconButton type="button" tone="secondary" icon={<RefreshCw className="size-4" />} onClick={props.loadRepositories}>Refresh</IconButton>
+          </div>
           <div className="grid gap-3 sm:grid-cols-[1fr_11rem]">
             <Field label="Repository">
-              <input className={inputClass} required value={form.repo} onChange={(e) => update({ repo: e.target.value })} placeholder="https://github.com/owner/repo.git" />
+              <select className={inputClass} required value={form.repo} onChange={(e) => selectRepository(e.target.value)}>
+                <option value="">{repositoryOptions.length ? 'Select repository' : 'No GitHub repositories available'}</option>
+                {repositoryOptions.map((repo) => <option key={repo.full_name} value={repo.full_name}>{repo.full_name}{repo.private ? ' private' : ''}</option>)}
+              </select>
             </Field>
             <Field label="Base Branch">
               <input className={inputClass} value={form.baseBranch} onChange={(e) => update({ baseBranch: e.target.value })} placeholder="main" />
             </Field>
+          </div>
+        </Panel>
+
+        <Panel>
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink"><TerminalSquare className="size-4 text-cyan-os" /> Task</div>
+          <div className="grid gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Scenario Template">
+                <select className={inputClass} value={form.scenarioTemplate} onChange={(e) => update({ scenarioTemplate: e.target.value })} onFocus={props.loadTemplates}>
+                  <option value="">No template</option>
+                  {props.templates.map((t) => <option key={t.id} value={t.id}>{t.name}{t.source === 'repository' ? ' (repository)' : ''}</option>)}
+                </select>
+              </Field>
+              <Field label="Strategy">
+                <select className={inputClass} value={form.strategy} onChange={(e) => update({ strategy: e.target.value })}>
+                  <option value="sequential">Sequential</option>
+                  <option value="parallel">Parallel</option>
+                </select>
+              </Field>
+            </div>
+            {selectedTemplate ? (
+              <div className="rounded-os border border-line bg-void p-3">
+                <div className="mb-2 flex flex-wrap gap-2">{(selectedTemplate.agents ?? []).map((a: string) => <Tag key={a}>{a}</Tag>)}</div>
+                <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs text-soft">{selectedTemplate.taskTemplate}</pre>
+                <IconButton type="button" className="mt-3" tone="secondary" icon={<Check className="size-4" />} onClick={applyTemplate}>Apply</IconButton>
+              </div>
+            ) : null}
+            <textarea className={textareaClass} required value={form.task} onChange={(e) => update({ task: e.target.value })} placeholder="Describe the repository work." />
           </div>
         </Panel>
 
@@ -605,34 +673,6 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
                 </span>
               </label>
             ))}
-          </div>
-        </Panel>
-
-        <Panel>
-          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink"><TerminalSquare className="size-4 text-cyan-os" /> Task</div>
-          <div className="grid gap-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Scenario Template">
-                <select className={inputClass} value={form.scenarioTemplate} onChange={(e) => update({ scenarioTemplate: e.target.value })} onFocus={props.loadTemplates}>
-                  <option value="">No template</option>
-                  {props.templates.map((t) => <option key={t.id} value={t.id}>{t.name}{t.source === 'repository' ? ' (repository)' : ''}</option>)}
-                </select>
-              </Field>
-              <Field label="Strategy">
-                <select className={inputClass} value={form.strategy} onChange={(e) => update({ strategy: e.target.value })}>
-                  <option value="sequential">Sequential</option>
-                  <option value="parallel">Parallel</option>
-                </select>
-              </Field>
-            </div>
-            {selectedTemplate ? (
-              <div className="rounded-os border border-line bg-void p-3">
-                <div className="mb-2 flex flex-wrap gap-2">{(selectedTemplate.agents ?? []).map((a: string) => <Tag key={a}>{a}</Tag>)}</div>
-                <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs text-soft">{selectedTemplate.taskTemplate}</pre>
-                <IconButton type="button" className="mt-3" tone="secondary" icon={<Check className="size-4" />} onClick={applyTemplate}>Apply</IconButton>
-              </div>
-            ) : null}
-            <textarea className={textareaClass} required value={form.task} onChange={(e) => update({ task: e.target.value })} placeholder="Describe the repository work." />
           </div>
         </Panel>
 
