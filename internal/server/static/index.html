@@ -538,10 +538,20 @@ function renderRuns(r) {
   const rows = runItems.map(s => {
     const result = s.result || byID[s.id] || {};
     const status = s.status || (result.subtask_id ? (result.success ? 'pass' : 'failed') : 'pending');
+    const gate = renderQualityGate(result.quality_gate);
     return '<tr><td>' + escape(s.id) + '</td><td>' + statusSpan(status) + '</td><td>' + escape(s.agent_type || '-') + '</td><td>' + escape(s.description || '-') + '</td></tr>' +
-      (result.output || result.error || result.diff ? '<tr><td colspan="4"><pre>' + escape((result.error || '') + (result.output ? '\n' + result.output : '') + (result.diff ? '\n' + result.diff : '')).slice(0, 5000) + '</pre></td></tr>' : '');
+      (result.output || result.error || result.diff || gate ? '<tr><td colspan="4">' + gate + '<pre>' + escape((result.error || '') + (result.output ? '\n' + result.output : '') + (result.diff ? '\n' + result.diff : '')).slice(0, 5000) + '</pre></td></tr>' : '');
   }).join('');
   return runForm + '<div class="card"><h2>Runs</h2><table><thead><tr><th>ID</th><th>Status</th><th>Agent</th><th>Description</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function renderQualityGate(gate) {
+  if (!gate) return '';
+  const rows = (gate.checks || []).map(c =>
+    '<tr><td>' + statusSpan(c.passed ? 'pass' : 'failed') + '</td><td>' + escape(c.type || '-') + '</td><td>' + escape(c.target || '-') + '</td><td>' + escape(c.message || '') + '</td></tr>'
+  ).join('');
+  return '<div style="margin-bottom:10px"><div class="detail-meta"><span class="repo-pill">Quality gate</span>' + statusSpan(gate.passed ? 'pass' : 'failed') + '</div>' +
+    (rows ? '<table style="margin-top:8px"><thead><tr><th>Status</th><th>Type</th><th>Target</th><th>Message</th></tr></thead><tbody>' + rows + '</tbody></table>' : '') + '</div>';
 }
 
 function renderScopedRunForm(r) {

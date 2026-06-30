@@ -28,7 +28,7 @@ import (
 	"github.com/kazyamaz200/agentos/internal/sandbox"
 )
 
-func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask Subtask, runSandbox sandbox.Sandbox, runtimeErr error) (SubtaskResult, bool) {
+func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask *Subtask, runSandbox sandbox.Sandbox, runtimeErr error) (SubtaskResult, bool) {
 	if !isCanonicalGoServiceTask(subtask.Description) {
 		return SubtaskResult{}, false
 	}
@@ -53,32 +53,32 @@ func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask Subtas
 	}
 }
 
-func (o *Orchestrator) recoverNoOpBuiltInSubtask(ctx context.Context, subtask Subtask, runSandbox sandbox.Sandbox) (SubtaskResult, bool) {
+func (o *Orchestrator) recoverNoOpBuiltInSubtask(ctx context.Context, subtask *Subtask, runSandbox sandbox.Sandbox) (SubtaskResult, bool) {
 	if !isCanonicalGoServiceTask(subtask.Description) {
 		return SubtaskResult{}, false
 	}
+	applyDefaultQualityGate(subtask)
+	status := validateQualityGate(ctx, runSandbox.RootDir(), subtask.QualityGate)
+	if status.Passed {
+		return SubtaskResult{}, false
+	}
+	return o.recoverNoOpBuiltInSubtaskWithStatus(ctx, subtask, runSandbox, status)
+}
+
+func (o *Orchestrator) recoverNoOpBuiltInSubtaskWithStatus(ctx context.Context, subtask *Subtask, runSandbox sandbox.Sandbox, status QualityGateStatus) (SubtaskResult, bool) {
 	recoveryCtx, cancel := fallbackRecoveryContext()
 	defer cancel()
 
 	switch subtask.AgentName {
 	case "go-backend":
-		if fileExists(filepath.Join(runSandbox.RootDir(), "go.mod")) && fileExists(filepath.Join(runSandbox.RootDir(), "main.go")) {
-			return SubtaskResult{}, false
-		}
 		out, err := recoverGoBackend(recoveryCtx, runSandbox.RootDir(), subtask.Description)
-		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New("runtime completed without required Go service files"), err), err == nil
+		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 	case "ci-fixer":
-		if ciCoversScenario(runSandbox.RootDir()) {
-			return SubtaskResult{}, false
-		}
 		out, err := recoverGoCI(recoveryCtx, runSandbox.RootDir())
-		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New("runtime completed without required CI test coverage"), err), err == nil
+		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 	case "docs":
-		if readmeCoversScenario(runSandbox.RootDir()) {
-			return SubtaskResult{}, false
-		}
 		out, err := recoverDocs(runSandbox.RootDir(), subtask.Description)
-		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New("runtime completed without required README content"), err), err == nil
+		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 	default:
 		return SubtaskResult{}, false
 	}
@@ -88,7 +88,7 @@ func fallbackRecoveryContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 90*time.Second)
 }
 
-func (o *Orchestrator) recoveredSubtaskResult(subtask Subtask, runSandbox sandbox.Sandbox, output string, runtimeErr, fallbackErr error) SubtaskResult {
+func (o *Orchestrator) recoveredSubtaskResult(subtask *Subtask, runSandbox sandbox.Sandbox, output string, runtimeErr, fallbackErr error) SubtaskResult {
 	if fallbackErr != nil {
 		return SubtaskResult{}
 	}
@@ -99,11 +99,13 @@ func (o *Orchestrator) recoveredSubtaskResult(subtask Subtask, runSandbox sandbo
 	if diff != "" {
 		_ = runSandbox.SaveFile("diff.patch", []byte(diff)) //nolint:errcheck // best-effort artifact
 	}
+	status := validateQualityGate(context.Background(), runSandbox.RootDir(), subtask.QualityGate)
 	return SubtaskResult{
-		SubtaskID: subtask.ID,
-		Success:   true,
-		Output:    output,
-		Diff:      diff,
+		SubtaskID:   subtask.ID,
+		Success:     true,
+		Output:      output,
+		Diff:        diff,
+		QualityGate: &status,
 	}
 }
 
