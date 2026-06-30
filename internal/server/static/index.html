@@ -58,6 +58,10 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
 .agent-picker{display:flex;flex-wrap:wrap;gap:8px;padding:8px;background:#0d1117;border:1px solid #30363d;border-radius:6px;min-height:42px}
 .agent-picker label{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:#161b22;border:1px solid #30363d;border-radius:6px;font-size:13px;cursor:pointer;white-space:nowrap}
 .agent-picker input{width:16px;height:16px;accent-color:#238636;margin:0}
+.checkbox-row{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+.checkbox-row label{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:#c9d1d9}
+.checkbox-row input{width:16px;height:16px;accent-color:#238636}
+.inline-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .detail-header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
 .detail-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .repo-pill{background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:4px 8px;font-size:12px;color:#8b949e}
@@ -74,6 +78,7 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
   .card{padding:16px}
   .grid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
   .search-row,.github-row{grid-template-columns:1fr}
+  .inline-grid{grid-template-columns:1fr}
   .btn{width:100%}
 }
 </style>
@@ -146,6 +151,19 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
           <div class="form-group">
             <label>Task Description</label>
             <textarea id="orchTask" placeholder="Describe what the agents should accomplish..." required></textarea>
+          </div>
+          <div class="form-group">
+            <label>GitHub Artifacts</label>
+            <div class="checkbox-row">
+              <label><input type="checkbox" id="orchCreateIssue">Create tracking Issue</label>
+              <label><input type="checkbox" id="orchCreatePR">Create Pull Request</label>
+            </div>
+            <div class="inline-grid">
+              <input type="text" id="orchBranchName" placeholder="agentos/run-id">
+              <input type="text" id="orchPRBase" placeholder="PR base branch">
+              <input type="text" id="orchIssueTitle" placeholder="Issue title">
+              <input type="text" id="orchPRTitle" placeholder="PR title">
+            </div>
           </div>
           <button type="submit" class="btn">Start Orchestration</button>
           <span id="orchStatus" class="muted" style="margin-left:12px"></span>
@@ -342,7 +360,15 @@ async function submitOrchestrate(e) {
         baseBranch: document.getElementById('orchBaseBranch').value.trim() || 'main',
         task: document.getElementById('orchTask').value,
         strategy: document.getElementById('orchStrategy').value,
-        llmPreset: document.getElementById('orchLLMPreset').value
+        llmPreset: document.getElementById('orchLLMPreset').value,
+        github: {
+          createIssue: document.getElementById('orchCreateIssue').checked,
+          createPullRequest: document.getElementById('orchCreatePR').checked,
+          branchName: document.getElementById('orchBranchName').value.trim(),
+          prBase: document.getElementById('orchPRBase').value.trim(),
+          issueTitle: document.getElementById('orchIssueTitle').value.trim(),
+          prTitle: document.getElementById('orchPRTitle').value.trim()
+        }
       })
     });
     status.textContent = 'Started: ' + result.id;
@@ -427,6 +453,7 @@ function renderOrchestrationDetail() {
     '<div class="detail-meta"><span class="repo-pill">' + escape(r.repo || '-') + '</span><span class="repo-pill">' + escape(r.baseBranch || '-') + '</span><span class="repo-pill">' + escape(r.strategy || '-') + '</span><span class="repo-pill">' + escape(r.llmPreset || '-') + '</span></div></div>' +
     '<button class="btn btn-secondary" onclick="refreshCurrentOrchestration()">Refresh</button></div>' +
     '<p class="muted" style="margin-top:12px">' + escape(r.task || '') + '</p>' +
+    renderGitHubArtifacts(r.github) +
     (r.error ? '<p class="error" style="margin-top:10px">' + escape(r.error) + '</p>' : '') +
     '</div>' +
     '<div class="card"><div class="tabs">' +
@@ -439,6 +466,16 @@ function renderOrchestrationDetail() {
     detailPanel('runs', renderRuns(r)) +
     detailPanel('search', renderSearch()) +
     detailPanel('github', renderGitHub(r));
+}
+
+function renderGitHubArtifacts(github) {
+  if (!github) return '';
+  const items = [];
+  if (github.branchName) items.push('<span class="repo-pill">branch ' + escape(github.branchName) + '</span>');
+  if (github.issueUrl) items.push('<a class="repo-pill" href="' + escape(github.issueUrl) + '" target="_blank" rel="noopener noreferrer">Issue #' + escape(github.issueNumber || '') + '</a>');
+  if (github.pullRequestUrl) items.push('<a class="repo-pill" href="' + escape(github.pullRequestUrl) + '" target="_blank" rel="noopener noreferrer">PR #' + escape(github.pullRequestNumber || '') + '</a>');
+  if (github.error) items.push('<span class="repo-pill status-failed">' + escape(github.error) + '</span>');
+  return items.length ? '<div class="detail-meta" style="margin-top:10px">' + items.join('') + '</div>' : '';
 }
 
 function detailTabButton(name, label) {

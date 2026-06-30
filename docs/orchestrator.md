@@ -69,4 +69,21 @@ environments:
 AgentOS clones each request into an isolated workspace under
 `AGENTOS_HOME/workspaces/orchestrate`. This keeps concurrent runs against
 different repositories from sharing a mutable checkout. Private GitHub
-repositories require `GITHUB_TOKEN` in the AgentOS deployment environment.
+repositories require GitHub App installation credentials or `GITHUB_TOKEN` in
+the AgentOS deployment environment.
+
+## GitHub Artifacts
+
+New orchestrations can request GitHub artifacts from the Web UI:
+
+- `Create tracking Issue` creates an issue at the start of the orchestration.
+- `Create Pull Request` creates a PR after the orchestration completes.
+- `Branch name` defaults to `agentos/<run-id>`.
+- `PR base branch` defaults to `main`.
+- Issue and PR titles default to the task description.
+
+The orchestration record stores the target branch, Issue URL, PR URL, and any
+GitHub API error so the Web UI can show the automation outcome alongside the
+run status. PR creation expects the selected head branch to exist in the remote
+repository; branch push automation is tracked separately in the GitHub
+automation roadmap.

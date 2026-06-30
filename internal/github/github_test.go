@@ -337,6 +337,53 @@ func TestClient_CreatePR_Error(t *testing.T) {
 	}
 }
 
+func TestClient_CreateIssue(t *testing.T) {
+	t.Parallel()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != "/repos/owner/repo/issues" {
+			t.Errorf("path = %s, want /repos/owner/repo/issues", r.URL.Path)
+		}
+		var req CreateIssueRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if req.Title != "Track orchestration" || req.Body != "body" || len(req.Labels) != 1 || req.Labels[0] != "agentos" {
+			t.Fatalf("request = %+v", req)
+		}
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck // test helper
+			"number":   7,
+			"title":    req.Title,
+			"body":     req.Body,
+			"html_url": "https://github.com/owner/repo/issues/7",
+			"state":    "open",
+		})
+	}))
+	defer ts.Close()
+
+	c := &Client{
+		BaseURL:   ts.URL,
+		Token:     "test-token",
+		RepoOwner: "owner",
+		RepoName:  "repo",
+		http:      ts.Client(),
+	}
+	issue, err := c.CreateIssue(CreateIssueRequest{
+		Title:  "Track orchestration",
+		Body:   "body",
+		Labels: []string{"agentos"},
+	})
+	if err != nil {
+		t.Fatalf("CreateIssue() error = %v", err)
+	}
+	if issue.Number != 7 || issue.HTMLURL != "https://github.com/owner/repo/issues/7" {
+		t.Fatalf("issue = %+v", issue)
+	}
+}
+
 func TestClient_ListPRs(t *testing.T) {
 	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
