@@ -16,6 +16,25 @@ package github
 
 import "fmt"
 
+// CreateIssueRequest contains the parameters for creating an issue.
+type CreateIssueRequest struct {
+	Title  string   `json:"title"`
+	Body   string   `json:"body,omitempty"`
+	Labels []string `json:"labels,omitempty"`
+}
+
+// CreateIssue creates a new GitHub issue.
+func (c *Client) CreateIssue(req CreateIssueRequest) (*Issue, error) {
+	path := fmt.Sprintf("/%s/issues", c.RepoPath())
+
+	var issue Issue
+	if err := c.doJSON("POST", path, req, &issue); err != nil {
+		return nil, fmt.Errorf("create issue: %w", err)
+	}
+
+	return &issue, nil
+}
+
 // ListIssues lists GitHub issues, optionally filtered by state.
 func (c *Client) ListIssues(state string) ([]Issue, error) {
 	if state == "" {

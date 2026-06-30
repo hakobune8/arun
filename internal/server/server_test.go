@@ -578,6 +578,82 @@ func TestOrchestrationRecordStore_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestPrepareOrchestrationGitHub_Defaults(t *testing.T) {
+	req := orchestrateRequest{
+		Repo:       "https://github.com/owner/repo.git",
+		BaseBranch: "main",
+		Task:       "Implement feature",
+		GitHub: &orchestrateGitHubRequest{
+			CreateIssue:       true,
+			CreatePullRequest: true,
+		},
+	}
+	got, err := prepareOrchestrationGitHub("run-0123456789abcdef", &req)
+	if err != nil {
+		t.Fatalf("prepareOrchestrationGitHub() error = %v", err)
+	}
+	if got.Repo != "owner/repo" {
+		t.Fatalf("Repo = %q, want owner/repo", got.Repo)
+	}
+	if got.BranchName != "agentos/run-0123456789abcdef" {
+		t.Fatalf("BranchName = %q", got.BranchName)
+	}
+	if got.IssueTitle != "Implement feature" || got.PRTitle != "Implement feature" {
+		t.Fatalf("titles = %q/%q", got.IssueTitle, got.PRTitle)
+	}
+	if got.PRBase != "main" || !got.CreateIssue || !got.CreatePullRequest {
+		t.Fatalf("github state = %+v", got)
+	}
+}
+
+func TestPrepareOrchestrationGitHub_RejectsNonGitHubRepo(t *testing.T) {
+	req := orchestrateRequest{
+		Repo: "https://example.com/owner/repo.git",
+		Task: "test",
+		GitHub: &orchestrateGitHubRequest{
+			CreateIssue: true,
+		},
+	}
+	_, err := prepareOrchestrationGitHub("run-0123456789abcdef", &req)
+	if err == nil {
+		t.Fatal("prepareOrchestrationGitHub() error = nil, want error")
+	}
+}
+
+func TestOrchestrationRecordStore_PreservesGitHubArtifacts(t *testing.T) {
+	t.Setenv("AGENTOS_HOME", shortTestDir(t))
+	now := time.Now().UTC().Truncate(time.Second)
+	record := &orchestrationRecord{
+		ID:         "run-0123456789abcdef",
+		Repo:       "owner/repo",
+		BaseBranch: "main",
+		Task:       "test",
+		Agents:     []string{"go-backend"},
+		Strategy:   "parallel",
+		Status:     "completed",
+		GitHub: &orchestrationGitHubState{
+			Repo:              "owner/repo",
+			BranchName:        "agentos/run-0123456789abcdef",
+			IssueURL:          "https://github.com/owner/repo/issues/1",
+			IssueNumber:       1,
+			PullRequestURL:    "https://github.com/owner/repo/pull/2",
+			PullRequestNumber: 2,
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := saveOrchestrationRecord(record); err != nil {
+		t.Fatalf("saveOrchestrationRecord() error = %v", err)
+	}
+	got, err := readOrchestrationRecord(record.ID)
+	if err != nil {
+		t.Fatalf("readOrchestrationRecord() error = %v", err)
+	}
+	if got.GitHub == nil || got.GitHub.IssueNumber != 1 || got.GitHub.PullRequestNumber != 2 {
+		t.Fatalf("GitHub = %+v", got.GitHub)
+	}
+}
+
 func TestReadOrchestrationRecord_RejectsInvalidID(t *testing.T) {
 	t.Setenv("AGENTOS_HOME", shortTestDir(t))
 	invalid := []string{"", ".", "../run-0123456789abcdef", "run-test", "run-0123456789abcdeg"}

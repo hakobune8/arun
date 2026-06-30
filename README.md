@@ -196,6 +196,7 @@ pr_body.md        # Pull request body draft
 
 - [Quick Start](docs/quickstart.md) — Get up and running in 5 minutes
 - [Deployment](docs/deployment.md) — Kubernetes deployment via Helm
+- [Pre-merge Verification](docs/pre-merge-verification.md) — PR image checks with registry and BuildKit
 - [Architecture](docs/architecture.md) — System architecture overview
 - [Configuration](docs/configuration.md) — LiteLLM, Qdrant, Docker, MCP, templates
 - [Upgrade to v1.0](docs/upgrade-v1.md) — Migration notes for v0.x users

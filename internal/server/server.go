@@ -427,12 +427,22 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 // --- Orchestrate ---
 
 type orchestrateRequest struct {
-	Agents     []string `json:"agents"`
-	Repo       string   `json:"repo"`
-	BaseBranch string   `json:"baseBranch"`
-	Task       string   `json:"task"`
-	Strategy   string   `json:"strategy"`
-	LLMPreset  string   `json:"llmPreset"`
+	Agents     []string                  `json:"agents"`
+	Repo       string                    `json:"repo"`
+	BaseBranch string                    `json:"baseBranch"`
+	Task       string                    `json:"task"`
+	Strategy   string                    `json:"strategy"`
+	LLMPreset  string                    `json:"llmPreset"`
+	GitHub     *orchestrateGitHubRequest `json:"github,omitempty"`
+}
+
+type orchestrateGitHubRequest struct {
+	CreateIssue       bool   `json:"createIssue"`
+	CreatePullRequest bool   `json:"createPullRequest"`
+	BranchName        string `json:"branchName"`
+	PRBase            string `json:"prBase"`
+	IssueTitle        string `json:"issueTitle"`
+	PRTitle           string `json:"prTitle"`
 }
 
 type orchestrationRecord struct {
@@ -450,8 +460,24 @@ type orchestrationRecord struct {
 	Subtasks   []orchestrationSubtaskState  `json:"subtasks,omitempty"`
 	Results    []orchestrator.SubtaskResult `json:"results,omitempty"`
 	Summary    string                       `json:"summary,omitempty"`
+	GitHub     *orchestrationGitHubState    `json:"github,omitempty"`
 	CreatedAt  time.Time                    `json:"createdAt"`
 	UpdatedAt  time.Time                    `json:"updatedAt"`
+}
+
+type orchestrationGitHubState struct {
+	Repo              string `json:"repo"`
+	BranchName        string `json:"branchName,omitempty"`
+	IssueTitle        string `json:"issueTitle,omitempty"`
+	IssueURL          string `json:"issueUrl,omitempty"`
+	IssueNumber       int    `json:"issueNumber,omitempty"`
+	PRTitle           string `json:"prTitle,omitempty"`
+	PRBase            string `json:"prBase,omitempty"`
+	PullRequestURL    string `json:"pullRequestUrl,omitempty"`
+	PullRequestNumber int    `json:"pullRequestNumber,omitempty"`
+	Error             string `json:"error,omitempty"`
+	CreateIssue       bool   `json:"createIssue,omitempty"`
+	CreatePullRequest bool   `json:"createPullRequest,omitempty"`
 }
 
 type orchestrationSubtaskState struct {
@@ -525,9 +551,16 @@ func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 		agents[name] = a
 	}
 
+	id := generateID()
+	githubState, err := prepareOrchestrationGitHub(id, &req)
+	if err != nil {
+		http.Error(w, "github: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	now := time.Now().UTC()
 	record := &orchestrationRecord{
-		ID:         generateID(),
+		ID:         id,
 		Repo:       req.Repo,
 		RepoPath:   repoPath,
 		BaseBranch: req.BaseBranch,
@@ -536,6 +569,7 @@ func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 		Strategy:   req.Strategy,
 		LLMPreset:  presetID,
 		Status:     "planning",
+		GitHub:     githubState,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
@@ -561,6 +595,8 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 	if record.Strategy == "parallel" {
 		orch.SetStrategy(orchestrator.StrategyParallel)
 	}
+
+	s.createTrackingIssue(record)
 
 	planCtx, cancelPlan := context.WithTimeout(context.Background(), orchestratePlanTimeout())
 	defer cancelPlan()
@@ -618,6 +654,7 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 	if err := saveOrchestrationRecord(record); err != nil {
 		slog.Warn("save orchestration failed", "id", record.ID, "error", err)
 	}
+	s.createPullRequestForOrchestration(record)
 }
 
 func (s *Server) handleOrchestrates(w http.ResponseWriter, r *http.Request) {
@@ -969,6 +1006,163 @@ func safeRepoSlug(repo string) string {
 		return slug[len(slug)-24:]
 	}
 	return slug
+}
+
+func prepareOrchestrationGitHub(id string, req *orchestrateRequest) (*orchestrationGitHubState, error) {
+	if req == nil || req.GitHub == nil || (!req.GitHub.CreateIssue && !req.GitHub.CreatePullRequest) {
+		return nil, nil
+	}
+	_, _, full, ok := githubRepoForAPI(req.Repo)
+	if !ok {
+		return nil, fmt.Errorf("repository must be a GitHub HTTPS URL or owner/repo when GitHub artifacts are enabled")
+	}
+
+	branch := strings.TrimSpace(req.GitHub.BranchName)
+	if branch == "" {
+		branch = "agentos/" + id
+	}
+	if err := validateGitRef(branch); err != nil {
+		return nil, err
+	}
+
+	prBase := defaultBaseBranch(req.GitHub.PRBase)
+	if err := validateGitRef(prBase); err != nil {
+		return nil, err
+	}
+
+	issueTitle := strings.TrimSpace(req.GitHub.IssueTitle)
+	if issueTitle == "" {
+		issueTitle = strings.TrimSpace(req.Task)
+	}
+	prTitle := strings.TrimSpace(req.GitHub.PRTitle)
+	if prTitle == "" {
+		prTitle = strings.TrimSpace(req.Task)
+	}
+
+	return &orchestrationGitHubState{
+		Repo:              full,
+		BranchName:        branch,
+		IssueTitle:        issueTitle,
+		PRTitle:           prTitle,
+		PRBase:            prBase,
+		CreateIssue:       req.GitHub.CreateIssue,
+		CreatePullRequest: req.GitHub.CreatePullRequest,
+	}, nil
+}
+
+func (s *Server) createTrackingIssue(record *orchestrationRecord) {
+	if record == nil || record.GitHub == nil || !record.GitHub.CreateIssue || record.GitHub.IssueURL != "" {
+		return
+	}
+	owner, name, _, ok := githubRepoForAPI(record.GitHub.Repo)
+	if !ok {
+		record.GitHub.Error = "create issue: invalid GitHub repository"
+		record.UpdatedAt = time.Now().UTC()
+		_ = saveOrchestrationRecord(record)
+		return
+	}
+	client := agentosgh.NewClient(owner, name)
+	issue, err := client.CreateIssue(agentosgh.CreateIssueRequest{
+		Title: record.GitHub.IssueTitle,
+		Body:  orchestrationIssueBody(record),
+		Labels: []string{
+			"agentos",
+		},
+	})
+	if err != nil {
+		record.GitHub.Error = "create issue: " + err.Error()
+		record.UpdatedAt = time.Now().UTC()
+		_ = saveOrchestrationRecord(record)
+		return
+	}
+	record.GitHub.IssueNumber = issue.Number
+	record.GitHub.IssueURL = issue.HTMLURL
+	record.GitHub.Error = ""
+	record.UpdatedAt = time.Now().UTC()
+	_ = saveOrchestrationRecord(record)
+}
+
+func (s *Server) createPullRequestForOrchestration(record *orchestrationRecord) {
+	if record == nil || record.GitHub == nil || !record.GitHub.CreatePullRequest || record.GitHub.PullRequestURL != "" {
+		return
+	}
+	owner, name, _, ok := githubRepoForAPI(record.GitHub.Repo)
+	if !ok {
+		record.GitHub.Error = "create pull request: invalid GitHub repository"
+		record.UpdatedAt = time.Now().UTC()
+		_ = saveOrchestrationRecord(record)
+		return
+	}
+	client := agentosgh.NewClient(owner, name)
+	pr, err := client.CreatePR(agentosgh.CreatePRRequest{
+		Title: record.GitHub.PRTitle,
+		Body:  orchestrationPRBody(record),
+		Head:  record.GitHub.BranchName,
+		Base:  record.GitHub.PRBase,
+	})
+	if err != nil {
+		record.GitHub.Error = "create pull request: " + err.Error()
+		record.UpdatedAt = time.Now().UTC()
+		_ = saveOrchestrationRecord(record)
+		return
+	}
+	record.GitHub.PullRequestNumber = pr.Number
+	record.GitHub.PullRequestURL = pr.HTMLURL
+	record.GitHub.Error = ""
+	record.UpdatedAt = time.Now().UTC()
+	_ = saveOrchestrationRecord(record)
+}
+
+func orchestrationIssueBody(record *orchestrationRecord) string {
+	var b strings.Builder
+	b.WriteString("Created by AgentOS Orchestrate.\n\n")
+	b.WriteString(fmt.Sprintf("- Run: `%s`\n", record.ID))
+	b.WriteString(fmt.Sprintf("- Repository: `%s`\n", record.GitHub.Repo))
+	b.WriteString(fmt.Sprintf("- Base branch: `%s`\n", record.BaseBranch))
+	b.WriteString(fmt.Sprintf("- Target branch: `%s`\n", record.GitHub.BranchName))
+	b.WriteString(fmt.Sprintf("- Strategy: `%s`\n", record.Strategy))
+	b.WriteString(fmt.Sprintf("- Agents: `%s`\n\n", strings.Join(record.Agents, ", ")))
+	b.WriteString("## Task\n\n")
+	b.WriteString(record.Task)
+	b.WriteString("\n")
+	return safety.NewRedactor().RedactString(b.String())
+}
+
+func orchestrationPRBody(record *orchestrationRecord) string {
+	var b strings.Builder
+	b.WriteString("Created by AgentOS Orchestrate.\n\n")
+	if record.GitHub.IssueURL != "" {
+		b.WriteString(fmt.Sprintf("Tracking issue: %s\n\n", record.GitHub.IssueURL))
+	}
+	b.WriteString(fmt.Sprintf("- Run: `%s`\n", record.ID))
+	b.WriteString(fmt.Sprintf("- Base branch: `%s`\n", record.GitHub.PRBase))
+	b.WriteString(fmt.Sprintf("- Agents: `%s`\n\n", strings.Join(record.Agents, ", ")))
+	if record.Summary != "" {
+		b.WriteString("## Summary\n\n")
+		b.WriteString(record.Summary)
+		b.WriteString("\n")
+	}
+	return safety.NewRedactor().RedactString(b.String())
+}
+
+func githubRepoForAPI(repo string) (owner, name, full string, ok bool) {
+	repo = strings.TrimSpace(repo)
+	if repo == "" {
+		return "", "", "", false
+	}
+	if strings.HasPrefix(repo, "https://") {
+		u, err := url.Parse(repo)
+		if err != nil || !strings.EqualFold(u.Host, "github.com") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+			return "", "", "", false
+		}
+		repo = strings.Trim(strings.TrimSuffix(u.EscapedPath(), ".git"), "/")
+	}
+	repo = strings.TrimSuffix(repo, ".git")
+	if !githubRepoPathPattern.MatchString(repo) {
+		return "", "", "", false
+	}
+	parts := strings.SplitN(repo, "/", 2)
+	return parts[0], parts[1], repo, true
 }
 
 // --- Store ---
