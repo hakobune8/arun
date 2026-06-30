@@ -192,7 +192,9 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
             <label>Task Description</label>
             <textarea id="orchTask" placeholder="Describe what the agents should accomplish..." required></textarea>
             <button type="button" class="btn btn-secondary" style="margin-top:8px" onclick="recommendOrchestration()">Recommend</button>
+            <button type="button" class="btn btn-secondary" style="margin-top:8px" onclick="loadOrchMemoryPreview()">Load Memory</button>
             <div id="orchRecommendation"></div>
+            <div id="orchMemoryPreview"></div>
           </div>
           <div class="form-group">
             <label>GitHub Artifacts</label>
@@ -296,6 +298,7 @@ function showOrchPanel(name) {
 async function api(path, opts) {
   const res = await fetch(BASE + path, opts);
   if (!res.ok) throw new Error(await res.text());
+  if (res.status === 204) return null;
   return res.json();
 }
 
@@ -624,6 +627,25 @@ async function recommendOrchestration() {
   }
 }
 
+async function loadOrchMemoryPreview() {
+  const div = document.getElementById('orchMemoryPreview');
+  const repo = document.getElementById('orchRepo').value.trim();
+  const branch = document.getElementById('orchBaseBranch').value.trim() || 'main';
+  const q = document.getElementById('orchTask').value.trim();
+  if (!repo || !q) {
+    div.innerHTML = '<p class="error" style="margin-top:8px">Enter repository and task first.</p>';
+    return;
+  }
+  div.innerHTML = '<p class="empty">Loading repository memory...</p>';
+  try {
+    const url = '/api/repository-memory?repo=' + encodeURIComponent(repo) + '&baseBranch=' + encodeURIComponent(branch) + '&status=approved&q=' + encodeURIComponent(q);
+    const entries = await api(url);
+    div.innerHTML = '<div class="agent-card" style="margin-top:10px"><strong>Repository Memory</strong>' + renderMemoryEntries(entries, false) + '</div>';
+  } catch(e) {
+    div.innerHTML = '<p class="error" style="margin-top:8px">Memory load failed: ' + escape(e.message) + '</p>';
+  }
+}
+
 function renderRecommendation(rec) {
   const confidence = Math.round((rec.confidence || 0) * 100);
   const agents = (rec.agents || []).map(a => '<span class="tag">' + escape(a) + '</span>').join('');
@@ -750,11 +772,13 @@ function renderOrchestrationDetail() {
     '<div class="card"><div class="tabs">' +
     detailTabButton('dashboard', 'Dashboard') +
     detailTabButton('runs', 'Runs') +
+    detailTabButton('memory', 'Memory') +
     detailTabButton('search', 'Search') +
     detailTabButton('github', 'GitHub') +
     '</div></div>' +
     detailPanel('dashboard', renderDashboard(r)) +
     detailPanel('runs', renderRuns(r)) +
+    detailPanel('memory', renderMemory(r)) +
     detailPanel('search', renderSearch()) +
     detailPanel('github', renderGitHub(r));
 }
@@ -841,6 +865,76 @@ function renderRuns(r) {
       (result.output || result.error || result.diff || gate ? '<tr><td colspan="4">' + gate + '<pre>' + escape((result.error || '') + (result.output ? '\n' + result.output : '') + (result.diff ? '\n' + result.diff : '')).slice(0, 5000) + '</pre></td></tr>' : '');
   }).join('');
   return runForm + '<div class="card"><h2>Runs</h2><table><thead><tr><th>ID</th><th>Status</th><th>Agent</th><th>Description</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function renderMemory(r) {
+  const used = r.memoryUsed || [];
+  const proposals = r.memoryProposals || [];
+  return '<div class="card"><h2>Repository Memory</h2>' +
+    '<p class="muted">Approved memory used during planning and pending updates proposed by this orchestration.</p>' +
+    '<h3>Used</h3>' + renderMemoryEntries(used, false) +
+    '<h3>Proposed</h3>' + renderMemoryEntries(proposals, true) +
+    '<div style="margin-top:12px"><button class="btn btn-secondary" onclick="loadRepositoryMemoryList()">Refresh Repository Memory</button></div>' +
+    '<div id="repositoryMemoryList" style="margin-top:12px"></div></div>';
+}
+
+function renderMemoryEntries(entries, actions) {
+  if (!entries || entries.length === 0) return '<p class="empty">No repository memory entries.</p>';
+  window.repositoryMemoryCache = window.repositoryMemoryCache || {};
+  entries.forEach(m => { window.repositoryMemoryCache[m.id] = m; });
+  return entries.map(m => '<div style="padding:10px 0;border-bottom:1px solid #30363d">' +
+    '<div class="detail-meta"><span class="tag">' + escape(m.type || 'note') + '</span><span class="tag">' + escape(m.status || '-') + '</span>' +
+    (m.pinned ? '<span class="tag">pinned</span>' : '') + (m.runId ? '<span class="tag">' + escape(m.runId) + '</span>' : '') + '</div>' +
+    '<p style="margin:8px 0">' + escape(m.content || '') + '</p>' +
+    (actions ? '<div class="actions">' + (m.status === 'pending' ? '<button class="btn" onclick="approveRepositoryMemory(\'' + escapeAttr(m.id) + '\')">Approve</button>' : '') +
+      '<button class="btn btn-secondary" onclick="editRepositoryMemory(\'' + escapeAttr(m.id) + '\')">Edit</button>' +
+      '<button class="btn btn-secondary" onclick="toggleRepositoryMemoryPin(\'' + escapeAttr(m.id) + '\',' + (m.pinned ? 'false' : 'true') + ')">' + (m.pinned ? 'Unpin' : 'Pin') + '</button>' +
+      '<button class="btn btn-danger" onclick="deleteRepositoryMemory(\'' + escapeAttr(m.id) + '\')">Delete</button></div>' : '') +
+    '</div>').join('');
+}
+
+async function loadRepositoryMemoryList() {
+  if (!currentOrchestration) return;
+  const div = document.getElementById('repositoryMemoryList');
+  div.innerHTML = '<p class="empty">Loading...</p>';
+  try {
+    const url = '/api/repository-memory?repo=' + encodeURIComponent(currentOrchestration.repo || '.') + '&baseBranch=' + encodeURIComponent(currentOrchestration.baseBranch || 'main');
+    const entries = await api(url);
+    div.innerHTML = '<h3>All Repository Memory</h3>' + renderMemoryEntries(entries, true);
+  } catch(e) {
+    div.innerHTML = '<p class="error">Error: ' + escape(e.message) + '</p>';
+  }
+}
+
+async function approveRepositoryMemory(id) {
+  await api('/api/repository-memory/' + encodeURIComponent(id) + '/approve', { method: 'POST' });
+  await refreshCurrentOrchestration();
+}
+
+async function toggleRepositoryMemoryPin(id, pinned) {
+  await api('/api/repository-memory/' + encodeURIComponent(id), {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ pinned: pinned })
+  });
+  await refreshCurrentOrchestration();
+}
+
+async function editRepositoryMemory(id) {
+  const current = (window.repositoryMemoryCache && window.repositoryMemoryCache[id]) || {};
+  const content = window.prompt('Memory content', current.content || '');
+  if (content === null) return;
+  await api('/api/repository-memory/' + encodeURIComponent(id), {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ content: content, type: current.type || 'note', status: current.status || 'approved', pinned: !!current.pinned })
+  });
+  await refreshCurrentOrchestration();
+}
+
+async function deleteRepositoryMemory(id) {
+  await api('/api/repository-memory/' + encodeURIComponent(id), { method: 'DELETE' });
+  await refreshCurrentOrchestration();
 }
 
 function renderQualityGate(gate) {

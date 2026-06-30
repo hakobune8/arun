@@ -45,6 +45,7 @@ import (
 	"github.com/kazyamaz200/agentos/internal/factory"
 	agentosgh "github.com/kazyamaz200/agentos/internal/github"
 	"github.com/kazyamaz200/agentos/internal/llm"
+	"github.com/kazyamaz200/agentos/internal/memory"
 	"github.com/kazyamaz200/agentos/internal/orchestrator"
 	"github.com/kazyamaz200/agentos/internal/profile"
 	"github.com/kazyamaz200/agentos/internal/runtime"
@@ -117,6 +118,8 @@ func NewServer(port int) *Server {
 	mux.HandleFunc("/api/runs", s.handleRuns)
 	mux.HandleFunc("/api/runs/", s.handleRunDetail)
 	mux.HandleFunc("/api/search", s.handleSearch)
+	mux.HandleFunc("/api/repository-memory", s.handleRepositoryMemory)
+	mux.HandleFunc("/api/repository-memory/", s.handleRepositoryMemoryItem)
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/github/", s.handleGitHub)
 	mux.HandleFunc("/api/orchestrate/templates", s.handleOrchestrateTemplates)
@@ -649,28 +652,30 @@ type orchestrationRecommendation struct {
 }
 
 type orchestrationRecord struct {
-	ID             string                       `json:"id"`
-	Actor          string                       `json:"actor,omitempty"`
-	Repo           string                       `json:"repo"`
-	RepoPath       string                       `json:"repoPath,omitempty"`
-	BaseBranch     string                       `json:"baseBranch"`
-	Task           string                       `json:"task"`
-	Agents         []string                     `json:"agents"`
-	CustomAgents   []agent.Definition           `json:"customAgents,omitempty"`
-	Scenario       *scenarioTemplateSelection   `json:"scenarioTemplate,omitempty"`
-	Strategy       string                       `json:"strategy"`
-	LLMPreset      string                       `json:"llmPreset"`
-	OutputLanguage string                       `json:"outputLanguage,omitempty"`
-	Status         string                       `json:"status"`
-	Error          string                       `json:"error,omitempty"`
-	Plan           *orchestrator.TaskPlan       `json:"plan,omitempty"`
-	Subtasks       []orchestrationSubtaskState  `json:"subtasks,omitempty"`
-	Results        []orchestrator.SubtaskResult `json:"results,omitempty"`
-	Events         []orchestrationEvent         `json:"events,omitempty"`
-	Summary        string                       `json:"summary,omitempty"`
-	GitHub         *orchestrationGitHubState    `json:"github,omitempty"`
-	CreatedAt      time.Time                    `json:"createdAt"`
-	UpdatedAt      time.Time                    `json:"updatedAt"`
+	ID              string                       `json:"id"`
+	Actor           string                       `json:"actor,omitempty"`
+	Repo            string                       `json:"repo"`
+	RepoPath        string                       `json:"repoPath,omitempty"`
+	BaseBranch      string                       `json:"baseBranch"`
+	Task            string                       `json:"task"`
+	Agents          []string                     `json:"agents"`
+	CustomAgents    []agent.Definition           `json:"customAgents,omitempty"`
+	Scenario        *scenarioTemplateSelection   `json:"scenarioTemplate,omitempty"`
+	Strategy        string                       `json:"strategy"`
+	LLMPreset       string                       `json:"llmPreset"`
+	OutputLanguage  string                       `json:"outputLanguage,omitempty"`
+	Status          string                       `json:"status"`
+	Error           string                       `json:"error,omitempty"`
+	Plan            *orchestrator.TaskPlan       `json:"plan,omitempty"`
+	Subtasks        []orchestrationSubtaskState  `json:"subtasks,omitempty"`
+	Results         []orchestrator.SubtaskResult `json:"results,omitempty"`
+	Events          []orchestrationEvent         `json:"events,omitempty"`
+	Summary         string                       `json:"summary,omitempty"`
+	MemoryUsed      []memory.RepositoryEntry     `json:"memoryUsed,omitempty"`
+	MemoryProposals []memory.RepositoryEntry     `json:"memoryProposals,omitempty"`
+	GitHub          *orchestrationGitHubState    `json:"github,omitempty"`
+	CreatedAt       time.Time                    `json:"createdAt"`
+	UpdatedAt       time.Time                    `json:"updatedAt"`
 }
 
 type orchestrationEvent struct {
@@ -957,10 +962,14 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 	s.createTrackingIssue(record)
 	s.postSourceIssueStartComment(record)
 	appendOrchestrationEvent(record, "planning.started", "", "Planning started")
+	record.MemoryUsed = repositoryMemoryForPlanning(runCtx, record)
+	if len(record.MemoryUsed) > 0 {
+		appendOrchestrationEvent(record, "memory.loaded", "", fmt.Sprintf("Loaded %d repository memory entries", len(record.MemoryUsed)))
+	}
 
 	planCtx, cancelPlan := context.WithTimeout(runCtx, orchestratePlanTimeout())
 	defer cancelPlan()
-	plan, err := orch.Plan(planCtx, record.Task)
+	plan, err := orch.Plan(planCtx, taskWithRepositoryMemory(record.Task, record.MemoryUsed))
 	if err != nil {
 		if errors.Is(planCtx.Err(), context.Canceled) || errors.Is(runCtx.Err(), context.Canceled) {
 			s.stopCanceledOrchestration(record, "Orchestration canceled during planning")
@@ -1039,6 +1048,10 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 	}
 	record.Results = results
 	record.Summary = summary
+	record.MemoryProposals = proposeRepositoryMemory(context.Background(), record, results)
+	if len(record.MemoryProposals) > 0 {
+		appendOrchestrationEvent(record, "memory.proposed", "", fmt.Sprintf("Proposed %d repository memory updates", len(record.MemoryProposals)))
+	}
 	record.Status = "completed"
 	if record.GitHub != nil && record.GitHub.ClosePolicy == "after_human_approval" && record.GitHub.ApprovalStatus == "pending" {
 		record.Status = "pending_approval"

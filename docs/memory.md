@@ -44,3 +44,23 @@ cfg := memory.Config{
 }
 store, _ := memory.New(ctx, cfg, vs, embedder)
 ```
+
+## Repository Memory
+
+Repository memory stores durable context for a specific repository and branch.
+Orchestrate loads approved entries before planning and records them on the run
+as `memoryUsed`. Completed orchestrations propose pending entries as
+`memoryProposals`; users can approve, edit, pin, or delete them from the Web UI
+before they affect future runs.
+
+Repository memory entries include:
+
+- `repo` and `branch` scope
+- `type`, such as `architecture`, `validation`, `workflow`, or `pitfall`
+- `content`
+- `source` and `runId` provenance
+- `status`: `pending`, `approved`, or `archived`
+- optional `pinned` flag
+
+Approved memories are appended to the planning prompt under "Repository memory
+to apply". Pending memories are stored but ignored by planning until approved.

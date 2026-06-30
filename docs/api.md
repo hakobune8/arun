@@ -100,6 +100,40 @@ Search across memory, guidelines, and past PRs.
 
 ---
 
+### Repository Memory
+
+```
+GET /api/repository-memory?repo={repo}&baseBranch={branch}&q={query}&status={status}&type={type}
+POST /api/repository-memory
+PUT /api/repository-memory/{id}
+DELETE /api/repository-memory/{id}
+POST /api/repository-memory/{id}/approve
+```
+
+Repository memory is scoped by repository and branch. Approved entries are used
+as Orchestrate planning context; pending entries are proposed by completed runs
+and require approval before reuse.
+
+Create or update body:
+
+```json
+{
+  "repo": "owner/repo",
+  "baseBranch": "main",
+  "type": "validation",
+  "content": "Run go test ./... before opening a PR.",
+  "status": "pending",
+  "pinned": true
+}
+```
+
+Orchestration detail responses include:
+
+- `memoryUsed`: approved entries included during planning.
+- `memoryProposals`: pending entries proposed from the completed run.
+
+---
+
 ## Authentication
 
 Authentication is optional. Local development can run without login. Production

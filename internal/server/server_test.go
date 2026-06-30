@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/kazyamaz200/agentos/internal/agent"
+	"github.com/kazyamaz200/agentos/internal/memory"
 	"github.com/kazyamaz200/agentos/internal/orchestrator"
 )
 
@@ -195,6 +196,116 @@ func TestServer_SearchEndpoint_WithQuery(t *testing.T) {
 	w := serveRequest(s, "GET", "/api/search?q=test", nil)
 	assertStatus(t, w.Code, http.StatusOK)
 	assertArrayLen(t, w.Body.Bytes(), 0)
+}
+
+func TestServer_RepositoryMemoryLifecycle(t *testing.T) {
+	t.Setenv("AGENTOS_HOME", t.TempDir())
+	s := NewServer(0)
+
+	createBody := []byte(`{"repo":"owner/repo","baseBranch":"main","type":"validation","content":"Run go test ./...","status":"pending"}`)
+	w := serveRequest(s, "POST", "/api/repository-memory", createBody)
+	assertStatus(t, w.Code, http.StatusOK)
+	var created memory.RepositoryEntry
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Status != memory.RepositoryMemoryPending {
+		t.Fatalf("Status = %q, want pending", created.Status)
+	}
+
+	w = serveRequest(s, "GET", "/api/repository-memory?repo=owner/repo&baseBranch=main&status=pending", nil)
+	assertStatus(t, w.Code, http.StatusOK)
+	var listed []memory.RepositoryEntry
+	if err := json.Unmarshal(w.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].ID != created.ID {
+		t.Fatalf("listed = %+v, want created memory", listed)
+	}
+
+	w = serveRequest(s, "POST", "/api/repository-memory/"+created.ID+"/approve", nil)
+	assertStatus(t, w.Code, http.StatusOK)
+	var approved memory.RepositoryEntry
+	if err := json.Unmarshal(w.Body.Bytes(), &approved); err != nil {
+		t.Fatal(err)
+	}
+	if approved.Status != memory.RepositoryMemoryApproved {
+		t.Fatalf("Status = %q, want approved", approved.Status)
+	}
+
+	w = serveRequest(s, "PUT", "/api/repository-memory/"+created.ID, []byte(`{"pinned":true}`))
+	assertStatus(t, w.Code, http.StatusOK)
+	var updated memory.RepositoryEntry
+	if err := json.Unmarshal(w.Body.Bytes(), &updated); err != nil {
+		t.Fatal(err)
+	}
+	if !updated.Pinned {
+		t.Fatalf("Pinned = false, want true")
+	}
+
+	w = serveRequest(s, "DELETE", "/api/repository-memory/"+created.ID, nil)
+	assertStatus(t, w.Code, http.StatusNoContent)
+}
+
+func TestRepositoryMemory_PlanningContextAndProposals(t *testing.T) {
+	t.Setenv("AGENTOS_HOME", t.TempDir())
+	store, err := repositoryMemoryStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	entry := &memory.RepositoryEntry{
+		Repo:    "owner/repo",
+		Branch:  "main",
+		Type:    "architecture",
+		Content: "Use internal/server for Web UI API handlers.",
+		Status:  memory.RepositoryMemoryApproved,
+	}
+	if err := store.Save(ctx, entry); err != nil {
+		t.Fatal(err)
+	}
+	record := &orchestrationRecord{
+		ID:         "run-0123456789abcdef",
+		Repo:       "owner/repo",
+		BaseBranch: "main",
+		Task:       "Use internal/server for Web UI API handlers",
+		Agents:     []string{"go-backend", "reviewer"},
+		Plan: &orchestrator.TaskPlan{Subtasks: []orchestrator.Subtask{{
+			ID:          "step-1",
+			AgentName:   "go-backend",
+			Description: "implement",
+			QualityGate: &orchestrator.QualityGate{ValidationCommands: []string{"go test ./..."}},
+		}}},
+	}
+
+	used := repositoryMemoryForPlanning(ctx, record)
+	if len(used) != 1 || !strings.Contains(taskWithRepositoryMemory(record.Task, used), "Use internal/server") {
+		t.Fatalf("used memory = %+v", used)
+	}
+
+	proposals := proposeRepositoryMemory(ctx, record, []orchestrator.SubtaskResult{{
+		SubtaskID: "step-1",
+		Success:   true,
+		QualityGate: &orchestrator.QualityGateStatus{Checks: []orchestrator.QualityGateCheckResult{{
+			Type:   "command",
+			Target: "go test ./...",
+			Passed: true,
+		}}},
+	}})
+	if len(proposals) == 0 {
+		t.Fatal("expected memory proposals")
+	}
+	reloaded, err := repositoryMemoryStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending, err := reloaded.List(ctx, &memory.RepositoryQuery{Repo: "owner/repo", Branch: "main", Status: memory.RepositoryMemoryPending})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) == 0 {
+		t.Fatal("expected pending proposals in store")
+	}
 }
 
 // --- Runs ---
