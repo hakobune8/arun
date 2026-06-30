@@ -104,7 +104,8 @@ func runAgentList() error {
 	}
 
 	fmt.Println("Registered agents:")
-	for _, info := range agents {
+	for i := range agents {
+		info := &agents[i]
 		fmt.Printf("  %s v%s\n", info.Name, info.Version)
 		fmt.Printf("    %s\n", info.Description)
 		if len(info.RequiredTools) > 0 {

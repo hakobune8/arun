@@ -2198,8 +2198,9 @@ func recommendOrchestration(task string, repoSignals []string, registry *agent.R
 		RequireApproval:   recommendApprovalForPreset(preset),
 	}
 	if len(rec.Agents) == 0 && registry != nil {
-		for _, info := range registry.List() {
-			rec.Agents = append(rec.Agents, info.Name)
+		infos := registry.List()
+		for i := range infos {
+			rec.Agents = append(rec.Agents, infos[i].Name)
 			break
 		}
 	}

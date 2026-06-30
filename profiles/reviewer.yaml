@@ -30,3 +30,13 @@ limits:
 
 output:
   mode: "summary"
+
+guidance:
+  architecture:
+    - "Evaluate whether changes preserve existing repository conventions before judging style preferences."
+    - "Flag over-engineered layouts, unnecessary dependencies, and convention-breaking rewrites when a smaller change would satisfy the task."
+    - "Review correctness, tests, security-sensitive behavior, maintainability, and release readiness."
+  output_expectations:
+    - "Findings are structured by severity and include file references where applicable."
+    - "Review states whether validation and test coverage are sufficient for release."
+    - "Approval is withheld for correctness, security, or convention-breaking regressions."

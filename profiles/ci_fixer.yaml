@@ -34,3 +34,13 @@ limits:
 
 output:
   mode: "patch"
+
+guidance:
+  architecture:
+    - "Inspect existing workflow names, jobs, matrices, and branch-protection expectations before replacing CI structure."
+    - "Prefer de facto GitHub Actions patterns: actions/checkout, actions/setup-go, cache-aware Go setup, go test, and go vet."
+    - "Keep lint, test, and optional security steps explicit and compatible with the repository's Go version and module layout."
+  output_expectations:
+    - "CI changes are minimal and preserve existing job intent."
+    - "Local validation commands mirror the workflow where practical."
+    - "Workflow YAML remains pull_request compatible and branch-protection friendly."

@@ -55,16 +55,17 @@ type Orchestrator struct {
 }
 
 type agentInfo struct {
-	name        string
-	description string
+	name                 string
+	description          string
+	architectureGuidance []string
+	outputExpectations   []string
 }
 
 // NewOrchestrator creates a new Orchestrator with the given llm client, sandbox, and agents.
 func NewOrchestrator(llmClient llm.LLMClient, sb sandbox.Sandbox, agents map[string]runtime.Agent, cfg *runtime.Config) *Orchestrator {
 	var infos []agentInfo
 	for name, a := range agents {
-		infos = append(infos, agentInfo{name: name, description: a.Name()})
-		_ = a
+		infos = append(infos, builtInAgentInfo(name, a.Name()))
 	}
 	return &Orchestrator{
 		llm:        llmClient,
@@ -185,6 +186,18 @@ Do not include markdown, explanations, or reasoning. The assistant message conte
 	agentsInfo := ""
 	for _, info := range o.agentDefs {
 		agentsInfo += fmt.Sprintf("- %s: %s\n", info.name, info.description)
+		if len(info.architectureGuidance) > 0 {
+			agentsInfo += "  Architecture/conventions:\n"
+			for _, item := range info.architectureGuidance {
+				agentsInfo += fmt.Sprintf("  - %s\n", item)
+			}
+		}
+		if len(info.outputExpectations) > 0 {
+			agentsInfo += "  Output expectations:\n"
+			for _, item := range info.outputExpectations {
+				agentsInfo += fmt.Sprintf("  - %s\n", item)
+			}
+		}
 	}
 
 	userMsg := llm.Message{
@@ -235,16 +248,16 @@ func enrichSubtasks(plan *TaskPlan, parentTask string) {
 		switch plan.Subtasks[i].AgentName {
 		case "go-backend":
 			plan.Subtasks[i].Description = appendContext(plan.Subtasks[i].Description, parentTask,
-				"Concrete go-backend requirements: preserve the exact parent task requirements; create go.mod if missing; create or update main.go; use net/http; implement /healthz with Content-Type application/json and exact body {\"status\":\"ok\"}; implement /; ensure go test ./... and go vet ./... can run.")
+				"Concrete go-backend requirements: inspect the existing repository layout before choosing files; preserve the exact parent task requirements; follow existing cmd/, internal/, pkg/, api/, router, middleware, and package conventions when present; use idiomatic standard-library Go for small services; create go.mod only if missing; create or update main.go when the repository has no clearer entrypoint; ensure go test ./... and go vet ./... can run.")
 		case "ci-fixer":
 			plan.Subtasks[i].Description = appendContext(plan.Subtasks[i].Description, parentTask,
-				"Concrete ci-fixer requirements: add Go tests for the implemented HTTP handlers; add a GitHub Actions workflow that runs go test ./...; keep validation passing.")
+				"Concrete ci-fixer requirements: inspect existing GitHub Actions workflows before replacing them; preserve current job intent; prefer actions/checkout, actions/setup-go, cache-aware Go setup, go test ./..., and go vet ./...; keep validation passing.")
 		case "docs":
 			plan.Subtasks[i].Description = appendContext(plan.Subtasks[i].Description, parentTask,
-				"Concrete docs requirements: update README.md with startup instructions, endpoint descriptions, and test instructions.")
+				"Concrete docs requirements: inspect README.md and docs/ before adding content; preserve existing style; cover overview, quickstart or startup instructions, configuration, endpoints, testing, deployment, and troubleshooting where relevant.")
 		case "reviewer":
 			plan.Subtasks[i].Description = appendContext(plan.Subtasks[i].Description, parentTask,
-				"Concrete reviewer requirements: review the final diff against the parent task and summarize release-blocking findings.")
+				"Concrete reviewer requirements: review the final diff against the parent task; flag correctness, test coverage, security, maintainability, release-readiness, over-engineering, and convention-breaking findings with severity and file references.")
 		default:
 			plan.Subtasks[i].Description = appendContext(plan.Subtasks[i].Description, parentTask, "")
 		}
@@ -283,12 +296,12 @@ func (o *Orchestrator) fallbackPlan(taskDesc string) *TaskPlan {
 		}
 	}
 
-	add("step-1", "go-backend", fmt.Sprintf("Implement the Go backend requested by the parent task. Create or update go.mod and main.go as needed. Use net/http. Implement /healthz returning JSON {\"status\":\"ok\"} and implement /. Parent task:\n\n%s", taskDesc), nil)
-	add("step-2", "docs", fmt.Sprintf("Update README.md for the requested changes. Include startup instructions, endpoint descriptions, and test instructions. Parent task:\n\n%s", taskDesc), nil)
+	add("step-1", "go-backend", fmt.Sprintf("Implement the Go backend requested by the parent task. Inspect the existing repository layout first and preserve established cmd/, internal/, pkg/, api/, router, middleware, and package conventions. Prefer idiomatic standard-library Go for small services and avoid unnecessary layout churn. Create go.mod only if missing. Parent task:\n\n%s", taskDesc), nil)
+	add("step-2", "docs", fmt.Sprintf("Update README.md or docs/ for the requested changes. Inspect existing documentation style first. Include practical startup, configuration, endpoint, testing, deployment, and troubleshooting details where relevant. Parent task:\n\n%s", taskDesc), nil)
 	ciDeps := dependenciesForAvailable(available, "go-backend")
-	add("step-3", "ci-fixer", fmt.Sprintf("Add or fix Go tests and GitHub Actions workflow so go test ./... succeeds for the implementation requested by the parent task. Parent task:\n\n%s", taskDesc), ciDeps)
+	add("step-3", "ci-fixer", fmt.Sprintf("Add or fix Go tests and GitHub Actions workflow so go test ./... succeeds for the implementation requested by the parent task. Inspect existing workflow conventions first and prefer checkout/setup-go with cache-aware Go setup plus explicit go test and go vet steps. Parent task:\n\n%s", taskDesc), ciDeps)
 	reviewerDeps := dependenciesForAvailable(available, "go-backend", "docs", "ci-fixer")
-	add("step-4", "reviewer", fmt.Sprintf("Review the final diff for correctness, release readiness, and scenario-test coverage. Summarize release-blocking findings. Parent task:\n\n%s", taskDesc), reviewerDeps)
+	add("step-4", "reviewer", fmt.Sprintf("Review the final diff for correctness, tests, security, maintainability, release readiness, and convention preservation. Flag over-engineered or convention-breaking changes with severity and file references. Parent task:\n\n%s", taskDesc), reviewerDeps)
 
 	if len(subtasks) == 0 {
 		for i, info := range o.agentDefs {
@@ -302,6 +315,45 @@ func (o *Orchestrator) fallbackPlan(taskDesc string) *TaskPlan {
 	}
 
 	return &TaskPlan{Description: taskDesc, Subtasks: subtasks}
+}
+
+func builtInAgentInfo(name, fallbackDescription string) agentInfo {
+	info := agentInfo{name: name, description: fallbackDescription}
+	switch name {
+	case "go-backend":
+		info.description = "Go backend coding agent that preserves existing architecture before adding idiomatic Go changes"
+		info.architectureGuidance = []string{
+			"Inspect existing layout before editing and follow established package, cmd/, internal/, pkg/, api/, router, and middleware conventions when present.",
+			"Prefer idiomatic standard-library Go for small services; introduce frameworks or new top-level layout only when task complexity warrants it.",
+			"Separate handlers, configuration, and tests when the repository already uses that structure; avoid over-engineering small repositories.",
+		}
+		info.outputExpectations = []string{"gofmt, go test ./..., and go vet ./... pass.", "Architecture choices are summarized when new structure is introduced."}
+	case "ci-fixer":
+		info.description = "CI fix agent for conventional GitHub Actions and validation repairs"
+		info.architectureGuidance = []string{
+			"Inspect existing workflow names, jobs, matrices, and branch-protection expectations before replacing CI structure.",
+			"Prefer actions/checkout, actions/setup-go, cache-aware Go setup, go test ./..., and go vet ./...",
+			"Keep lint, test, and optional security steps explicit and compatible with the repository's existing Go version and module layout.",
+		}
+		info.outputExpectations = []string{"Workflow YAML preserves existing job intent.", "Local validation mirrors the workflow where practical."}
+	case "docs":
+		info.description = "Documentation agent that updates practical docs while matching existing repository style"
+		info.architectureGuidance = []string{
+			"Inspect README.md and docs/ structure before adding sections or files.",
+			"Prefer overview, quickstart, configuration, endpoints, testing, deployment, and troubleshooting sections where relevant.",
+			"Preserve existing tone, headings, examples, and link conventions.",
+		}
+		info.outputExpectations = []string{"Docs cover changed user-visible behavior.", "Commands and examples are runnable from the repository root."}
+	case "reviewer":
+		info.description = "Code review agent for correctness, tests, security, maintainability, and release readiness"
+		info.architectureGuidance = []string{
+			"Evaluate whether changes preserve existing repository conventions before judging style preferences.",
+			"Flag over-engineered layouts, unnecessary dependencies, and convention-breaking rewrites.",
+			"Review tests, security-sensitive behavior, maintainability, and release readiness with severity and file references.",
+		}
+		info.outputExpectations = []string{"Findings include severity and file references where applicable.", "Review states validation and release-readiness risk."}
+	}
+	return info
 }
 
 func dependenciesForAvailable(available map[string]bool, agents ...string) []string {

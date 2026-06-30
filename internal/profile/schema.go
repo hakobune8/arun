@@ -50,6 +50,13 @@ type OutputConfig struct {
 	Mode string `yaml:"mode"`
 }
 
+// GuidanceConfig captures convention-aware instructions that are passed to
+// agents and surfaced in documentation.
+type GuidanceConfig struct {
+	Architecture       []string `yaml:"architecture"`
+	OutputExpectations []string `yaml:"output_expectations"`
+}
+
 // Profile defines the complete configuration for an agent, including its
 // role, LLM settings, tool permissions, commands, limits, and output mode.
 type Profile struct {
@@ -60,6 +67,7 @@ type Profile struct {
 	Commands CommandsConfig `yaml:"commands"`
 	Limits   LimitsConfig   `yaml:"limits"`
 	Output   OutputConfig   `yaml:"output"`
+	Guidance GuidanceConfig `yaml:"guidance"`
 }
 
 // DefaultProfile returns a Profile with sensible defaults (coder model, 8

@@ -156,8 +156,42 @@ func TestPlan_EmptyLLMContentUsesFallbackPlan(t *testing.T) {
 	if !strings.Contains(plan.Subtasks[0].Description, parentTask) || !strings.Contains(plan.Subtasks[0].Description, "go.mod") {
 		t.Fatalf("go-backend fallback description = %q, want parent task and concrete Go files", plan.Subtasks[0].Description)
 	}
+	if !strings.Contains(plan.Subtasks[0].Description, "preserve established") || !strings.Contains(plan.Subtasks[0].Description, "internal/") {
+		t.Fatalf("go-backend fallback description = %q, want convention-aware architecture guidance", plan.Subtasks[0].Description)
+	}
 	if plan.Subtasks[0].QualityGate.empty() {
 		t.Fatalf("go-backend fallback subtask missing quality gate: %+v", plan.Subtasks[0])
+	}
+}
+
+func TestPlan_IncludesAgentConventionGuidanceInPlannerPrompt(t *testing.T) {
+	t.Parallel()
+
+	mock := llm.NewMockLLMClient([]llm.ChatResponse{{
+		Choices: []llm.Choice{{Message: llm.Message{
+			Role:    llm.RoleAssistant,
+			Content: `{"description":"test","subtasks":[{"id":"step-1","description":"implement server","agent_type":"go-backend","dependencies":[]}]}`,
+		}}},
+	}})
+	o := NewOrchestrator(
+		mock,
+		sandbox.NewLocalSandbox(t.TempDir()),
+		map[string]runtime.Agent{"go-backend": &recordingAgent{name: "go-backend"}},
+		&runtime.Config{},
+	)
+
+	_, err := o.Plan(context.Background(), "add endpoint")
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+	if len(mock.Requests) != 1 {
+		t.Fatalf("got %d LLM requests, want 1", len(mock.Requests))
+	}
+	userPrompt := mock.Requests[0].Messages[1].Content
+	for _, want := range []string{"Architecture/conventions", "cmd/", "internal/", "Output expectations", "go vet ./..."} {
+		if !strings.Contains(userPrompt, want) {
+			t.Fatalf("planner prompt missing %q:\n%s", want, userPrompt)
+		}
 	}
 }
 
@@ -188,6 +222,11 @@ func TestPlan_EnrichesGeneratedSubtasksWithParentRequirements(t *testing.T) {
 	for _, want := range []string{"go.mod", "main.go", `{"status":"ok"}`, parentTask} {
 		if !strings.Contains(description, want) {
 			t.Fatalf("enriched description missing %q: %s", want, description)
+		}
+	}
+	for _, want := range []string{"existing repository layout", "cmd/", "internal/"} {
+		if !strings.Contains(description, want) {
+			t.Fatalf("enriched description missing architecture guidance %q: %s", want, description)
 		}
 	}
 	if plan.Subtasks[0].QualityGate == nil || len(plan.Subtasks[0].QualityGate.RequiredFiles) == 0 {

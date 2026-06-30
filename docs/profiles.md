@@ -39,6 +39,12 @@ limits:
 
 output:
   mode: "patch"              # Output mode: patch, summary, pr
+
+guidance:
+  architecture:              # Convention-aware behavior for planning/execution
+    - "Preserve existing repository layout"
+  output_expectations:       # Useful-work and validation expectations
+    - "Tests pass"
 ```
 
 ## Built-in Profiles
@@ -46,3 +52,8 @@ output:
 - `profiles/go_backend.yaml` — Go backend coding agent
 - `profiles/reviewer.yaml` — Code review agent
 - `profiles/ci_fixer.yaml` — CI configuration fix agent
+- `profiles/docs.yaml` — Documentation agent
+
+Built-in profiles include convention-aware guidance. Agents should inspect the
+target repository first, preserve clear local structure, and only introduce new
+frameworks, dependencies, or top-level layouts when the task requires them.

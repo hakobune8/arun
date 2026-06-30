@@ -37,6 +37,11 @@ spec:
   limits:
     maxRetries: 3
     maxIterations: 8
+  guidance:
+    architecture:
+      - Preserve existing repository layout before introducing new structure.
+    outputExpectations:
+      - Tests and lint pass.
 ```
 
 ## Fields
@@ -51,6 +56,19 @@ spec:
 | `spec.safety.denyCommands` | No | Denied shell commands |
 | `spec.commands` | No | Custom test/lint/build commands |
 | `spec.limits` | No | Max retries and iterations |
+| `spec.guidance.architecture` | No | Convention-aware architecture guidance for this agent |
+| `spec.guidance.outputExpectations` | No | Concrete outputs or validation that indicate useful work was done |
+
+## Convention Guidance
+
+Built-in agent definitions include guidance that keeps generated work aligned
+with common repository conventions while preserving local structure first.
+For example, `go-backend` prefers idiomatic standard-library Go for small
+services and adopts existing `cmd/`, `internal/`, `pkg/`, `api/`, router, or
+middleware layouts when they already exist. `ci-fixer` prefers conventional
+GitHub Actions patterns such as `actions/checkout`, `actions/setup-go`, Go
+caching, `go test`, and `go vet`. `docs` follows existing README and `docs/`
+style, and `reviewer` flags over-engineered or convention-breaking changes.
 
 ## Loading
 
@@ -64,3 +82,4 @@ See `definitions/` directory:
 - `go-backend.yaml`
 - `reviewer.yaml`
 - `ci-fixer.yaml`
+- `docs.yaml`

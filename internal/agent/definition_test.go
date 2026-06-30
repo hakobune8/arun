@@ -79,6 +79,12 @@ spec:
   limits:
     maxRetries: 3
     maxIterations: 8
+  guidance:
+    architecture:
+      - Preserve existing layout
+      - Prefer standard library
+    outputExpectations:
+      - Tests pass
 `
 	path := writeTestDef(t, yaml)
 	def, err := LoadDefinition(path)
@@ -97,6 +103,12 @@ spec:
 	}
 	if def.Spec.Limits.MaxRetries != 3 {
 		t.Errorf("MaxRetries = %d, want 3", def.Spec.Limits.MaxRetries)
+	}
+	if len(def.Spec.Guidance.Architecture) != 2 {
+		t.Errorf("got %d architecture guidance items, want 2", len(def.Spec.Guidance.Architecture))
+	}
+	if len(def.Spec.Guidance.OutputExpectations) != 1 {
+		t.Errorf("got %d output expectations, want 1", len(def.Spec.Guidance.OutputExpectations))
 	}
 }
 

@@ -33,3 +33,12 @@ spec:
   limits:
     maxRetries: 3
     maxIterations: 8
+  guidance:
+    architecture:
+      - Inspect the existing layout before editing and preserve established package, cmd/, internal/, pkg/, api/, router, middleware, and test conventions.
+      - Prefer idiomatic standard-library Go for small services; add frameworks, dependencies, or new top-level layout only when task complexity warrants it.
+      - Separate handlers, configuration, and tests when the repository already uses that structure; avoid over-engineering small repositories.
+    outputExpectations:
+      - Changed Go source and tests are formatted with gofmt.
+      - go test ./..., go vet ./..., and configured build commands pass.
+      - Architecture choices are summarized when new structure is introduced.

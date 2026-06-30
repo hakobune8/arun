@@ -110,6 +110,7 @@ func (c *LiteLLMClient) Config() Config {
 // MockLLMClient is a test double that returns pre-configured responses in sequence.
 type MockLLMClient struct {
 	Responses []ChatResponse
+	Requests  []ChatRequest
 	Index     int
 }
 
@@ -120,6 +121,7 @@ func NewMockLLMClient(responses []ChatResponse) *MockLLMClient {
 
 // Chat returns the next pre-configured mock response in the sequence.
 func (m *MockLLMClient) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
+	m.Requests = append(m.Requests, req)
 	if m.Index >= len(m.Responses) {
 		return nil, fmt.Errorf("no more mock responses")
 	}

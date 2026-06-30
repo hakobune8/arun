@@ -1,0 +1,29 @@
+apiVersion: agentos.io/v1
+kind: Agent
+metadata:
+  name: docs
+  labels:
+    role: docs
+spec:
+  llm:
+    model: coder
+    temperature: 0.2
+    maxTokens: 8192
+  tools:
+    allow:
+      - read_file
+      - write_file
+      - search
+      - git
+  limits:
+    maxRetries: 1
+    maxIterations: 4
+  guidance:
+    architecture:
+      - Inspect README.md and docs/ structure before adding new sections or files.
+      - Prefer practical OSS documentation structure: overview, quickstart, configuration, endpoints, testing, deployment, and troubleshooting.
+      - Preserve existing tone, headings, examples, and link conventions.
+    outputExpectations:
+      - Documentation covers user-visible behavior changed by the task.
+      - Commands and examples are copy-pasteable from the repository root.
+      - Links point to existing files or newly added docs.

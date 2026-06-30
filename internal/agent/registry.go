@@ -24,11 +24,13 @@ import (
 
 // Info describes an agent plugin's metadata.
 type Info struct {
-	Name          string
-	Description   string
-	Version       string
-	Author        string
-	RequiredTools []string
+	Name                 string
+	Description          string
+	Version              string
+	Author               string
+	RequiredTools        []string
+	ArchitectureGuidance []string
+	OutputExpectations   []string
 }
 
 // Factory creates a new runtime.Agent instance given an LLM client.
@@ -87,8 +89,8 @@ func (r *Registry) Create(name string, llmClient llm.LLMClient) (runtime.Agent, 
 // List returns metadata for all registered agents, sorted by name.
 func (r *Registry) List() []Info {
 	result := make([]Info, 0, len(r.infos))
-	for _, info := range r.infos {
-		result = append(result, info)
+	for name := range r.infos {
+		result = append(result, r.infos[name])
 	}
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Name < result[j].Name

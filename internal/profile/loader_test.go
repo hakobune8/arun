@@ -49,6 +49,11 @@ limits:
   max_runtime_minutes: 60
 output:
   mode: diff
+guidance:
+  architecture:
+    - "Preserve existing layout"
+  output_expectations:
+    - "Tests pass"
 `)
 	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
@@ -105,6 +110,12 @@ output:
 	}
 	if prof.Output.Mode != "diff" {
 		t.Errorf("Output.Mode = %q, want %q", prof.Output.Mode, "diff")
+	}
+	if len(prof.Guidance.Architecture) != 1 {
+		t.Errorf("got %d architecture guidance items, want 1", len(prof.Guidance.Architecture))
+	}
+	if len(prof.Guidance.OutputExpectations) != 1 {
+		t.Errorf("got %d output expectations, want 1", len(prof.Guidance.OutputExpectations))
 	}
 }
 

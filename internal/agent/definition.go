@@ -57,6 +57,11 @@ const CurrentSchemaVersion = "agentos.io/v1"
 //	    lint: go vet ./...
 //	  limits:
 //	    maxRetries: 3
+//	  guidance:
+//	    architecture:
+//	      - Preserve existing repository layout.
+//	    outputExpectations:
+//	      - Tests pass.
 type Definition struct {
 	APIVersion string             `yaml:"apiVersion"`
 	Kind       string             `yaml:"kind"`
@@ -77,6 +82,7 @@ type DefinitionSpec struct {
 	Safety   SafetyConfig   `yaml:"safety,omitempty"`
 	Commands CommandsConfig `yaml:"commands,omitempty"`
 	Limits   LimitsConfig   `yaml:"limits,omitempty"`
+	Guidance GuidanceConfig `yaml:"guidance,omitempty"`
 }
 
 // LLMConfig configures the language model provider.
@@ -107,6 +113,12 @@ type CommandsConfig struct {
 type LimitsConfig struct {
 	MaxRetries    int `yaml:"maxRetries,omitempty"`
 	MaxIterations int `yaml:"maxIterations,omitempty"`
+}
+
+// GuidanceConfig documents convention-aware behavior expected from an agent.
+type GuidanceConfig struct {
+	Architecture       []string `yaml:"architecture,omitempty"`
+	OutputExpectations []string `yaml:"outputExpectations,omitempty"`
 }
 
 // LoadDefinition reads a YAML file and returns a validated Definition.

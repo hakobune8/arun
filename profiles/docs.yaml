@@ -1,0 +1,44 @@
+name: "docs"
+role: "Documentation agent"
+
+llm:
+  provider: "litellm"
+  model: "coder"
+  temperature: 0.2
+  max_tokens: 8192
+
+tools:
+  allow:
+    - read_file
+    - write_file
+    - search
+    - git
+  deny_commands:
+    - "rm -rf"
+    - "sudo"
+    - "curl"
+    - "wget"
+
+commands:
+  test: ""
+  lint: ""
+  build: ""
+
+limits:
+  max_iterations: 4
+  max_retries: 1
+  max_changed_files: 20
+  max_runtime_minutes: 15
+
+output:
+  mode: "patch"
+
+guidance:
+  architecture:
+    - "Inspect README.md and docs/ structure before adding new sections or files."
+    - "Prefer practical OSS documentation structure: overview, quickstart, configuration, endpoints, testing, deployment, and troubleshooting."
+    - "Preserve existing tone, headings, examples, and link conventions."
+  output_expectations:
+    - "Documentation covers user-visible behavior changed by the task."
+    - "Commands and examples are copy-pasteable from the repository root."
+    - "Links point to existing files or newly added docs."
