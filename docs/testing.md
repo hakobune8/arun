@@ -37,7 +37,7 @@ of the AgentOS Web UI at `https://agentos.nakanoshima.hakobune8.com`.
 2. View the list of registered agents
 
 ### Expected Results
-- [ ] Shows 8 built-in agents: go-backend, reviewer, ci-fixer, docs, security, release-manager, dependency-updater, qa
+- [ ] Shows 9 built-in agents: go-backend, frontend, reviewer, ci-fixer, docs, security, release-manager, dependency-updater, qa
 - [ ] Each agent card shows: name, version, description, author, required tools
 - [ ] Tool tags are displayed as small badges
 

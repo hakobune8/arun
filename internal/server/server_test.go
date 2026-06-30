@@ -151,7 +151,7 @@ func TestServer_AgentsEndpoint_ReturnsList(t *testing.T) {
 	s := NewServer(0)
 	w := serveRequest(s, "GET", "/api/agents", nil)
 	assertStatus(t, w.Code, http.StatusOK)
-	assertArrayLen(t, w.Body.Bytes(), 8)
+	assertArrayLen(t, w.Body.Bytes(), 9)
 }
 
 func TestServer_AgentsEndpoint_GoBackendExists(t *testing.T) {
@@ -1308,7 +1308,7 @@ func TestRecommendOrchestration_RoutesFrontendAndOpsToSpecialists(t *testing.T) 
 		wantPreset string
 		wantAgents []string
 	}{
-		{"frontend", "Update responsive UI", []string{"frontend"}, "frontend", []string{"go-backend", "qa", "reviewer"}},
+		{"frontend", "Update responsive UI", []string{"frontend"}, "frontend", []string{"frontend", "qa", "reviewer"}},
 		{"docker", "Update Dockerfile healthcheck", []string{"ops"}, "ops", []string{"release-manager", "security", "qa", "reviewer"}},
 		{"helm", "Fix Helm chart values", nil, "ops", []string{"release-manager", "security", "qa", "reviewer"}},
 		{"kubernetes", "Fix Kubernetes ingress deployment", nil, "ops", []string{"release-manager", "security", "qa", "reviewer"}},
@@ -1333,7 +1333,7 @@ func TestRecommendOrchestration_RoutesFrontendAndOpsToSpecialists(t *testing.T) 
 
 func TestRecommendRepoSignals_DetectsFrontendAndOpsFiles(t *testing.T) {
 	repo := t.TempDir()
-	for _, path := range []string{"package.json", "Dockerfile", filepath.Join("charts", "Chart.yaml"), filepath.Join(".github", "workflows", "ci.yml")} {
+	for _, path := range []string{"package.json", "next.config.js", "svelte.config.js", "index.html", "Dockerfile", filepath.Join("charts", "Chart.yaml"), filepath.Join(".github", "workflows", "ci.yml")} {
 		full := filepath.Join(repo, path)
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatal(err)

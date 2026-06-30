@@ -8,6 +8,7 @@ func TestDefaultRegistryIncludesExpandedBuiltIns(t *testing.T) {
 	reg := DefaultRegistry()
 	for _, name := range []string{
 		"go-backend",
+		"frontend",
 		"reviewer",
 		"ci-fixer",
 		"docs",
@@ -22,8 +23,8 @@ func TestDefaultRegistryIncludesExpandedBuiltIns(t *testing.T) {
 	}
 
 	infos := reg.List()
-	if len(infos) != 8 {
-		t.Fatalf("got %d built-in agents, want 8", len(infos))
+	if len(infos) != 9 {
+		t.Fatalf("got %d built-in agents, want 9", len(infos))
 	}
 	for i := range infos {
 		if infos[i].Description == "" {

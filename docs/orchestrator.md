@@ -106,6 +106,8 @@ agents, strategy, and artifact choices before starting the run.
 Built-in agent recommendations now include specialized repository workflow
 agents:
 
+- `frontend` for UI components, pages, responsive layout, accessibility,
+  framework-aware frontend changes, and npm/pnpm/yarn/bun validation.
 - `security` for dependency, auth/session, secret-handling, and
   security-sensitive changes.
 - `release-manager` for changelogs, release notes, version readiness, and
@@ -115,15 +117,32 @@ agents:
 - `qa` for regression tests, smoke checks, scenario coverage, and manual
   verification notes.
 
+Recommended frontend tasks:
+
+- Use `frontend` for React/Vite/Next.js, Vue/Nuxt, Svelte/SvelteKit, or plain
+  HTML/CSS/JavaScript UI work such as components, pages, layout, responsive
+  fixes, accessibility basics, and styling updates.
+- Pair `frontend` with `qa` when browser smoke checks, screenshots, responsive
+  validation, or manual visual verification are expected.
+- Keep `go-backend` for API, service, and Go implementation work; frontend
+  routing no longer falls back to the backend agent when the frontend agent is
+  available.
+
+Example task descriptions:
+
+- `Update the React dashboard cards so they remain readable at mobile and desktop widths.`
+- `Add an accessible empty state to the Vite search page and run available package scripts.`
+- `Fix the Tailwind navigation layout without introducing a new component library.`
+
 Planner prompts include structured capabilities for every selected agent:
 domains, task keywords, repository files, recommended dependency order,
 architecture guidance, and output expectations. This helps LLM planning choose
 specialists instead of assigning subtasks from name-only descriptions. If LLM
 planning fails, the fallback planner still routes common tasks by domain:
-frontend work goes through implementation, QA, docs, and review; Docker, Helm,
-and Kubernetes work goes through release/deployment, security, QA, docs, and
-review; security, documentation, backend, dependency, CI, and release tasks have
-similar deterministic dependency templates.
+frontend work goes through the frontend application agent, QA, docs, and
+review; Docker, Helm, and Kubernetes work goes through release/deployment,
+security, QA, docs, and review; security, documentation, backend, dependency,
+CI, and release tasks have similar deterministic dependency templates.
 
 ## Issue-Triggered Orchestration
 

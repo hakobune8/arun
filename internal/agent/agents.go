@@ -30,11 +30,11 @@ func DefaultRegistry() *Registry {
 		Version:       "1.0.0",
 		Author:        "AgentOS",
 		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git", "test"},
-		Domains:       []string{"backend", "go", "api", "service", "frontend-fallback"},
+		Domains:       []string{"backend", "go", "api", "service"},
 		TriggerKeywords: []string{
-			"go", "backend", "api", "server", "handler", "endpoint", "database", "service", "react", "frontend", "ui",
+			"go", "backend", "api", "server", "handler", "endpoint", "database", "service",
 		},
-		TriggerFiles: []string{"go.mod", "go.sum", "cmd/", "internal/", "pkg/", "api/", "package.json", "vite.config.ts", "vite.config.js"},
+		TriggerFiles: []string{"go.mod", "go.sum", "cmd/", "internal/", "pkg/", "api/"},
 		ArchitectureGuidance: []string{
 			"Inspect existing layout before editing and follow established package, cmd/, internal/, pkg/, api/, router, and middleware conventions when present.",
 			"Prefer idiomatic standard-library Go for small services; introduce frameworks or new top-level layout only when task complexity warrants it.",
@@ -47,6 +47,31 @@ func DefaultRegistry() *Registry {
 		},
 	}, func(llmClient llm.LLMClient) runtime.Agent {
 		return NewBaseAgent("go-backend", llmClient)
+	})
+
+	r.MustRegister(&Info{
+		Name:          "frontend",
+		Description:   "Frontend application agent — implements UI, layout, responsive, accessibility, and frontend validation work",
+		Version:       "1.0.0",
+		Author:        "AgentOS",
+		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git", "test"},
+		Domains:       []string{"frontend", "ui", "web-app", "responsive", "accessibility", "visual-validation"},
+		TriggerKeywords: []string{
+			"frontend", "ui", "react", "vite", "next.js", "nextjs", "vue", "nuxt", "svelte", "sveltekit", "tailwind", "css", "layout", "responsive", "accessibility", "browser", "component", "page",
+		},
+		TriggerFiles: []string{"package.json", "vite.config.ts", "vite.config.js", "next.config.js", "next.config.mjs", "nuxt.config.ts", "svelte.config.js", "tailwind.config.js", "src/", "app/", "pages/", "components/", "public/", "index.html"},
+		ArchitectureGuidance: []string{
+			"Inspect package.json, framework config, routing, component structure, styling conventions, and state management before editing UI code.",
+			"Preserve existing framework and design-system patterns; prefer existing components, utilities, tokens, and CSS conventions over new dependencies.",
+			"Keep layouts responsive and accessible with semantic markup, keyboard-friendly controls, sensible labels, and mobile plus desktop verification where practical.",
+		},
+		OutputExpectations: []string{
+			"UI implementation changes touch the relevant component, page, style, or asset files instead of reporting no-op success.",
+			"Available package scripts such as lint, typecheck, test, and build are detected and run when present.",
+			"Browser, screenshot, responsive, or manual verification notes are included when visual behavior cannot be fully automated.",
+		},
+	}, func(llmClient llm.LLMClient) runtime.Agent {
+		return NewBaseAgent("frontend", llmClient)
 	})
 
 	r.MustRegister(&Info{

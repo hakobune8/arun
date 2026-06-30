@@ -35,6 +35,10 @@ type QualityContentCheck struct {
 	Contains []string `json:"contains"`
 }
 
+const frontendProjectPresenceCommand = `sh -c 'test -f package.json || test -f index.html || find src app pages components assets public styles -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" -o -name "*.vue" -o -name "*.svelte" -o -name "*.css" -o -name "*.html" \) -print -quit 2>/dev/null | grep -q .'`
+
+const frontendValidationCommand = `sh -c 'if [ -f package.json ]; then PM=npm; [ -f pnpm-lock.yaml ] && PM=pnpm; [ -f yarn.lock ] && PM=yarn; [ -f bun.lockb ] && PM=bun; for script in lint typecheck test build; do if node -e "const p=require(\"./package.json\"); process.exit(p.scripts&&p.scripts[process.argv[1]]?0:1)" "$script"; then case "$PM:$script" in yarn:*) yarn "$script";; pnpm:*) pnpm "$script";; bun:*) bun run "$script";; *) npm run "$script";; esac; fi; done; fi'`
+
 // QualityGateStatus reports the result of validating a subtask's gate.
 type QualityGateStatus struct {
 	Passed bool                     `json:"passed"`
@@ -62,6 +66,13 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 				File:     "main.go",
 				Contains: []string{"net/http", "/healthz", `"status"`},
 			}},
+		}
+	case "frontend":
+		return &QualityGate{
+			ValidationCommands: []string{
+				frontendProjectPresenceCommand,
+				frontendValidationCommand,
+			},
 		}
 	case "ci-fixer":
 		if !isCanonicalGoServiceTask(subtask.Description) {

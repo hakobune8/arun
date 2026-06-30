@@ -376,9 +376,9 @@ func (o *Orchestrator) fallbackPlan(taskDesc string) *TaskPlan {
 	}
 
 	switch {
-	case hasAny("frontend", "react", "tailwind", "css", "browser", "responsive", "vite"):
-		addNext("go-backend", fmt.Sprintf("Implement the frontend or UI change requested by the parent task using the repository's existing frontend conventions. Inspect package.json, Vite, React, Tailwind, routing, component, and styling structure first; keep controls responsive and accessible. Parent task:\n\n%s", taskDesc), nil)
-		addNext("qa", fmt.Sprintf("Add or run focused frontend validation for the requested UI change. Prefer existing npm scripts, browser smoke checks, responsive checks, and manual verification notes when automation is incomplete. Parent task:\n\n%s", taskDesc), depsFor("go-backend"))
+	case hasAny("frontend", "react", "tailwind", "css", "browser", "responsive", "vite", "next.js", "nextjs", "vue", "nuxt", "svelte", "component", "page", "layout", "accessibility"):
+		addNext("frontend", fmt.Sprintf("Implement the frontend or UI change requested by the parent task using the repository's existing frontend conventions. Inspect package.json, framework config, routing, components, styling, and state management first; keep controls responsive and accessible. Detect and run available package scripts such as lint, typecheck, test, and build when present. Parent task:\n\n%s", taskDesc), nil)
+		addNext("qa", fmt.Sprintf("Add or run focused frontend validation for the requested UI change. Prefer existing npm, pnpm, yarn, or bun scripts, browser smoke checks, responsive checks, and manual verification notes when automation is incomplete. Parent task:\n\n%s", taskDesc), depsFor("frontend"))
 	case hasAny("docker", "helm", "kubernetes", "k8s", "ingress", "container", "cluster", "deployment", "chart"):
 		addNext("release-manager", fmt.Sprintf("Handle the deployment or ops-oriented change requested by the parent task. Inspect Dockerfile, compose files, Helm charts, Kubernetes manifests, ingress, deployment, values, and rollback conventions before editing. Parent task:\n\n%s", taskDesc), nil)
 		addNext("security", fmt.Sprintf("Review container, Helm, Kubernetes, secret, permission, and ingress security implications for the requested ops change. Add tests or manual verification notes where useful. Parent task:\n\n%s", taskDesc), depsFor("release-manager"))
@@ -406,7 +406,7 @@ func (o *Orchestrator) fallbackPlan(taskDesc string) *TaskPlan {
 	if !hasAny("docs", "documentation", "readme", "guide", "manual") {
 		addNext("docs", fmt.Sprintf("Update relevant documentation for the requested changes when user-visible behavior, commands, deployment, or configuration changed. Parent task:\n\n%s", taskDesc), depsFor("go-backend", "release-manager"))
 	}
-	addNext("reviewer", fmt.Sprintf("Review the final diff for correctness, tests, security, maintainability, release readiness, routing fit, and convention preservation. Flag over-engineered or convention-breaking changes with severity and file references. Parent task:\n\n%s", taskDesc), depsFor("go-backend", "docs", "ci-fixer", "security", "release-manager", "dependency-updater", "qa"))
+	addNext("reviewer", fmt.Sprintf("Review the final diff for correctness, tests, security, maintainability, release readiness, routing fit, and convention preservation. Flag over-engineered or convention-breaking changes with severity and file references. Parent task:\n\n%s", taskDesc), depsFor("go-backend", "frontend", "docs", "ci-fixer", "security", "release-manager", "dependency-updater", "qa"))
 
 	if len(subtasks) == 0 {
 		for i := range o.agentDefs {
@@ -428,15 +428,26 @@ func builtInAgentInfo(name, fallbackDescription string) AgentMetadata {
 	switch name {
 	case "go-backend":
 		info.Description = "Go backend coding agent that preserves existing architecture before adding idiomatic Go changes"
-		info.Domains = []string{"backend", "go", "api", "service", "frontend-fallback"}
-		info.TriggerKeywords = []string{"go", "backend", "api", "server", "handler", "endpoint", "database", "service", "react", "frontend", "ui"}
-		info.TriggerFiles = []string{"go.mod", "go.sum", "cmd/", "internal/", "pkg/", "api/", "package.json", "vite.config.ts", "vite.config.js"}
+		info.Domains = []string{"backend", "go", "api", "service"}
+		info.TriggerKeywords = []string{"go", "backend", "api", "server", "handler", "endpoint", "database", "service"}
+		info.TriggerFiles = []string{"go.mod", "go.sum", "cmd/", "internal/", "pkg/", "api/"}
 		info.ArchitectureGuidance = []string{
 			"Inspect existing layout before editing and follow established package, cmd/, internal/, pkg/, api/, router, and middleware conventions when present.",
 			"Prefer idiomatic standard-library Go for small services; introduce frameworks or new top-level layout only when task complexity warrants it.",
 			"Separate handlers, configuration, and tests when the repository already uses that structure; avoid over-engineering small repositories.",
 		}
 		info.OutputExpectations = []string{"gofmt, go test ./..., and go vet ./... pass.", "Architecture choices are summarized when new structure is introduced."}
+	case "frontend":
+		info.Description = "Frontend application agent for UI implementation, responsive layout, accessibility, and frontend validation"
+		info.Domains = []string{"frontend", "ui", "web-app", "responsive", "accessibility", "visual-validation"}
+		info.TriggerKeywords = []string{"frontend", "ui", "react", "vite", "next.js", "nextjs", "vue", "nuxt", "svelte", "sveltekit", "tailwind", "css", "layout", "responsive", "accessibility", "browser", "component", "page"}
+		info.TriggerFiles = []string{"package.json", "vite.config.ts", "vite.config.js", "next.config.js", "next.config.mjs", "nuxt.config.ts", "svelte.config.js", "tailwind.config.js", "src/", "app/", "pages/", "components/", "public/", "index.html"}
+		info.ArchitectureGuidance = []string{
+			"Inspect package.json, framework config, routing, component structure, styling conventions, and state management before editing UI code.",
+			"Preserve existing framework and design-system patterns; prefer existing components, utilities, tokens, and CSS conventions over new dependencies.",
+			"Keep layouts responsive and accessible with semantic markup, keyboard-friendly controls, sensible labels, and mobile plus desktop verification where practical.",
+		}
+		info.OutputExpectations = []string{"UI implementation changes touch relevant component, page, style, or asset files instead of reporting no-op success.", "Available package scripts such as lint, typecheck, test, and build are detected and run when present.", "Browser, screenshot, responsive, or manual verification notes are included when visual behavior cannot be fully automated."}
 	case "ci-fixer":
 		info.Description = "CI fix agent for conventional GitHub Actions and validation repairs"
 		info.Domains = []string{"ci", "github-actions", "validation"}
@@ -779,6 +790,15 @@ func (o *Orchestrator) executeSubtask(ctx context.Context, subtask *Subtask, sha
 			Error:     err.Error(),
 		}
 	}
+	_ = runCmd(ctx, runSandbox.RootDir(), "git", "add", "-N", ".") //nolint:errcheck // best-effort diff visibility for new files
+	diff := gitDiff(ctx, runSandbox.RootDir())
+	if subtask.AgentName == "frontend" && strings.TrimSpace(diff) == "" {
+		return SubtaskResult{
+			SubtaskID: subtask.ID,
+			Success:   false,
+			Error:     "frontend subtask produced no diff; UI implementation changes are required",
+		}
+	}
 	if result, ok := o.recoverNoOpBuiltInSubtask(ctx, subtask, runSandbox); ok {
 		return result
 	}
@@ -799,9 +819,18 @@ func (o *Orchestrator) executeSubtask(ctx context.Context, subtask *Subtask, sha
 		SubtaskID:   subtask.ID,
 		Success:     true,
 		Output:      fmt.Sprintf("Executed by %s: %s", agt.Name(), subtask.Description),
-		Diff:        sharedCtx,
+		Diff:        firstNonEmpty(diff, sharedCtx),
 		QualityGate: &gateStatus,
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (o *Orchestrator) runtimeTaskID(subtaskID string) string {
@@ -822,6 +851,12 @@ func subtaskProfile(agentName string) profile.Profile {
 		prof.Commands.Test = "go test ./..."
 		prof.Commands.Lint = "go vet ./..."
 		prof.Commands.Build = "go build ./..."
+	case "frontend":
+		prof.Role = "Frontend application agent"
+		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git", "test"}
+		prof.Commands.Test = frontendValidationCommand
+		prof.Commands.Lint = ""
+		prof.Commands.Build = ""
 	case "ci-fixer":
 		prof.Role = "CI configuration fix agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git", "test"}

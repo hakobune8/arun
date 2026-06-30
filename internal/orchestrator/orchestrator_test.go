@@ -108,7 +108,7 @@ func TestFallbackPlan_RoutesSpecializedDomains(t *testing.T) {
 	t.Parallel()
 
 	agents := map[string]runtime.Agent{}
-	for _, name := range []string{"go-backend", "docs", "ci-fixer", "security", "release-manager", "dependency-updater", "qa", "reviewer"} {
+	for _, name := range []string{"go-backend", "frontend", "docs", "ci-fixer", "security", "release-manager", "dependency-updater", "qa", "reviewer"} {
 		agents[name] = agentpkg.NewBaseAgent(name, llm.NewMockLLMClient(nil))
 	}
 	o := NewOrchestrator(
@@ -123,7 +123,7 @@ func TestFallbackPlan_RoutesSpecializedDomains(t *testing.T) {
 		task       string
 		wantAgents []string
 	}{
-		{"frontend", "Update React Tailwind responsive UI", []string{"go-backend", "qa", "docs", "reviewer"}},
+		{"frontend", "Update React Tailwind responsive UI", []string{"frontend", "qa", "docs", "reviewer"}},
 		{"docker", "Fix Dockerfile container deployment", []string{"release-manager", "security", "qa", "docs", "reviewer"}},
 		{"helm", "Fix Helm chart values for Kubernetes ingress", []string{"release-manager", "security", "qa", "docs", "reviewer"}},
 		{"backend", "Add Go API endpoint handler", []string{"go-backend", "docs", "ci-fixer", "reviewer"}},
@@ -256,6 +256,9 @@ func TestPlan_IncludesAgentConventionGuidanceInPlannerPrompt(t *testing.T) {
 		"Output expectations",
 		"go vet ./...",
 		"security",
+		"frontend",
+		"package.json",
+		"responsive",
 		"release-manager",
 		"dependency-updater",
 		"qa",
@@ -274,6 +277,7 @@ func TestApplyDefaultQualityGate_SpecializedBuiltIns(t *testing.T) {
 		file  string
 	}{
 		{"security", "SECURITY.md"},
+		{"frontend", ""},
 		{"release-manager", "CHANGELOG.md"},
 		{"dependency-updater", "go.mod"},
 		{"qa", "docs/testing.md"},
@@ -285,7 +289,10 @@ func TestApplyDefaultQualityGate_SpecializedBuiltIns(t *testing.T) {
 			if subtask.QualityGate == nil {
 				t.Fatalf("%s missing quality gate", tt.agent)
 			}
-			found := false
+			if tt.file == "" && len(subtask.QualityGate.ValidationCommands) == 0 {
+				t.Fatalf("%s validation commands are empty", tt.agent)
+			}
+			found := tt.file == ""
 			for _, file := range subtask.QualityGate.RequiredFiles {
 				if file == tt.file {
 					found = true
@@ -589,6 +596,36 @@ func TestExecuteSubtask_FailsMissingRequiredFile(t *testing.T) {
 	}
 	if !strings.Contains(result.Error, "required.txt") {
 		t.Fatalf("error = %q, want required file detail", result.Error)
+	}
+}
+
+func TestExecuteSubtask_FrontendFailsNoOp(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("AGENTOS_HOME", filepath.Join(t.TempDir(), "agentos-home"))
+	if err := os.WriteFile(filepath.Join(repo, "package.json"), []byte(`{"scripts":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"frontend": &recordingAgent{name: "frontend"}},
+		&runtime.Config{},
+	)
+
+	subtask := &Subtask{
+		ID:          "step-1",
+		Description: "Update responsive UI",
+		AgentName:   "frontend",
+	}
+	applyDefaultQualityGate(subtask)
+
+	result := o.executeSubtask(context.Background(), subtask, "")
+	if result.Success {
+		t.Fatalf("executeSubtask() succeeded, want frontend no-op failure: %+v", result)
+	}
+	if !strings.Contains(result.Error, "produced no diff") {
+		t.Fatalf("error = %q, want no diff detail", result.Error)
 	}
 }
 

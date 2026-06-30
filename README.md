@@ -254,7 +254,7 @@ publish a new immutable chart release.
 ### v1.0 — Pre-release (RC)
 - [x] Runtime Agent interface (Plan, Execute, Review) with lifecycle hooks
 - [x] Standardized tool interface with Description, lifecycle, and validation
-- [x] Agent plugin registry with built-in agents (go-backend, reviewer, ci-fixer, docs, security, release-manager, dependency-updater, qa)
+- [x] Agent plugin registry with built-in agents (go-backend, frontend, reviewer, ci-fixer, docs, security, release-manager, dependency-updater, qa)
 - [x] Structured event bus with typed events and file store persistence
 - [x] Pluggable memory layer (VectorStore, JSONStore)
 - [x] Sandbox interface (local backend; Docker backend stub)
