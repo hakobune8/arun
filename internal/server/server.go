@@ -908,8 +908,8 @@ func validateGitRef(ref string) error {
 
 func gitCloneEnv(args []string) []string {
 	env := os.Environ()
-	token := os.Getenv("GITHUB_TOKEN")
-	if token == "" || !cloneArgsUseGitHubHTTPS(args) {
+	token, err := agentosgh.TokenFromEnv(context.Background())
+	if err != nil || token == "" || !cloneArgsUseGitHubHTTPS(args) {
 		return env
 	}
 

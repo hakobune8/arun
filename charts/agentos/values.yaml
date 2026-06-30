@@ -74,6 +74,10 @@ env:
   AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT: "10m"
   # GitHub token (optional, for PR operations)
   GITHUB_TOKEN: ""
+  # GitHub App installation authentication (optional, preferred for write operations)
+  GITHUB_APP_ID: ""
+  GITHUB_APP_INSTALLATION_ID: ""
+  GITHUB_APP_PRIVATE_KEY_FILE: ""
 
 auth:
   required: false
@@ -99,6 +103,7 @@ secrets:
   existingSecret: ""
   litellmApiKey: ""
   githubToken: ""
+  githubAppPrivateKey: ""
   githubOAuthClientSecret: ""
   agentosSessionSecret: ""
 

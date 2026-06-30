@@ -58,12 +58,16 @@ See [values.yaml](../charts/agentos/values.yaml) for all available options.
 | `env.AGENTOS_HOME` | `/home/agentos/.agentos` | State directory for run artifacts and local vector indexes |
 | `env.AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT` | `10m` | Maximum runtime for one orchestration subtask |
 | `env.QDRANT_URL` | `""` | Qdrant vector DB URL (optional) |
-| `env.GITHUB_TOKEN` | `""` | GitHub API token (optional) |
+| `env.GITHUB_TOKEN` | `""` | GitHub API token fallback (optional) |
+| `env.GITHUB_APP_ID` | `""` | GitHub App ID for installation-token authentication |
+| `env.GITHUB_APP_INSTALLATION_ID` | `""` | GitHub App installation ID |
+| `env.GITHUB_APP_PRIVATE_KEY_FILE` | `""` | Path to a mounted GitHub App private key PEM |
 | `auth.required` | `false` | Require GitHub login for work-triggering APIs |
 | `auth.github.clientId` | `""` | GitHub OAuth App client ID |
 | `auth.github.callbackUrl` | `""` | GitHub OAuth callback URL |
 | `llm.presets` | default LiteLLM preset | Admin-defined LLM presets shown in the Web UI |
 | `secrets.existingSecret` | `""` | Existing Kubernetes Secret containing sensitive values |
+| `secrets.githubAppPrivateKey` | `""` | GitHub App private key PEM rendered into the chart Secret |
 | `persistence.size` | `10Gi` | Storage for run artifacts |
 | `ingress.enabled` | `false` | Enable Ingress |
 | `resources.limits.cpu` | `500m` | CPU limit |
