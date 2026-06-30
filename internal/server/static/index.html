@@ -1135,9 +1135,14 @@ async function submitScopedRun(e) {
 }
 
 function renderSearch() {
-  return '<div class="card"><h2>Search</h2><div class="search-row">' +
-    '<input type="text" id="searchQuery" placeholder="Search memory, guidelines, PRs..." onkeydown="if(event.key===\'Enter\')doSearch()">' +
-    '<select id="searchSource"><option value="">All Sources</option><option value="memory">Memory</option><option value="guideline">Guidelines</option><option value="pr">PRs</option></select>' +
+  const repo = currentOrchestration && currentOrchestration.repo ? currentOrchestration.repo : '';
+  const branch = currentOrchestration && currentOrchestration.baseBranch ? currentOrchestration.baseBranch : 'main';
+  return '<div class="card"><h2>Search</h2>' +
+    '<div class="inline-grid"><div class="form-group"><label>Repository</label><input type="text" id="searchRepo" value="' + escapeAttr(repo) + '" placeholder="owner/repo"></div>' +
+    '<div class="form-group"><label>Base Branch</label><input type="text" id="searchBranch" value="' + escapeAttr(branch) + '" placeholder="main"></div></div>' +
+    '<div class="search-row">' +
+    '<input type="text" id="searchQuery" placeholder="Search repository context..." onkeydown="if(event.key===\'Enter\')doSearch()">' +
+    '<select id="searchSource"><option value="">All Sources</option><option value="memory">Memory</option><option value="guideline">Guidelines</option><option value="run">Runs</option><option value="artifact">Artifacts</option><option value="github">GitHub</option><option value="code">Code/files</option></select>' +
     '<button class="btn" onclick="doSearch()">Search</button></div><div id="searchResults"></div></div>';
 }
 
@@ -1145,17 +1150,90 @@ async function doSearch() {
   const q = document.getElementById('searchQuery').value.trim();
   if (!q) return;
   const src = document.getElementById('searchSource').value;
-  const url = '/api/search?q=' + encodeURIComponent(q) + (src ? '&source=' + encodeURIComponent(src) : '');
+  const repo = document.getElementById('searchRepo').value.trim();
+  const branch = document.getElementById('searchBranch').value.trim() || 'main';
+  const url = '/api/search?q=' + encodeURIComponent(q) + (src ? '&source=' + encodeURIComponent(src) : '') +
+    (repo ? '&repo=' + encodeURIComponent(repo) + '&baseBranch=' + encodeURIComponent(branch) : '');
   const div = document.getElementById('searchResults');
   div.innerHTML = '<p class="empty">Searching...</p>';
   try {
     const results = await api(url);
-    div.innerHTML = results.length === 0 ? '<p class="empty">No results.</p>' : results.map(item =>
-      '<div style="padding:10px 0;border-bottom:1px solid #30363d"><span class="tag">' + escape(item.source || 'unknown') + '</span> ' + escape(item.content || item.title || '') + '</div>'
-    ).join('');
+    window.searchResultCache = {};
+    results.forEach(item => { window.searchResultCache[item.id] = item; });
+    div.innerHTML = results.length === 0 ? '<p class="empty">No results.</p>' : results.map(renderSearchResult).join('');
   } catch(e) {
     div.innerHTML = '<p class="error">Error: ' + escape(e.message) + '</p>';
   }
+}
+
+function renderSearchResult(item) {
+  const meta = item.metadata || {};
+  const tags = [
+    '<span class="tag">' + escape(item.source || 'unknown') + '</span>',
+    item.repo ? '<span class="tag">' + escape(item.repo) + '</span>' : '',
+    item.branch ? '<span class="tag">' + escape(item.branch) + '</span>' : '',
+    item.runId ? '<span class="tag">' + escape(item.runId) + '</span>' : '',
+    meta.status ? '<span class="tag">' + escape(meta.status) + '</span>' : '',
+    item.score ? '<span class="tag">score ' + escape(Number(item.score).toFixed(1)) + '</span>' : ''
+  ].filter(Boolean).join('');
+  const actions = '<div class="actions" style="margin-top:8px">' +
+    '<button class="btn btn-secondary" onclick="promoteSearchResultToMemory(\'' + escapeAttr(item.id) + '\')">Promote Memory</button>' +
+    '<button class="btn btn-secondary" onclick="promoteSearchResultToGuideline(\'' + escapeAttr(item.id) + '\')">Promote Guideline</button>' +
+    (item.source === 'memory' ? '<button class="btn btn-danger" onclick="archiveSearchMemory(\'' + escapeAttr(item.id) + '\')">Mark Stale</button>' : '') +
+    (item.url ? '<a class="btn btn-secondary" href="' + escapeAttr(item.url) + '" target="_blank" rel="noopener noreferrer">Open</a>' : '') +
+    '</div>';
+  return '<div style="padding:12px 0;border-bottom:1px solid #30363d">' +
+    '<div class="detail-meta">' + tags + '</div>' +
+    '<h3>' + escape(item.title || item.id || item.source || 'Result') + '</h3>' +
+    '<p style="margin:8px 0">' + escape(shortText(item.content || '', 800)) + '</p>' +
+    actions +
+    '</div>';
+}
+
+async function promoteSearchResultToMemory(id) {
+  const item = window.searchResultCache && window.searchResultCache[id];
+  if (!item) return;
+  await api('/api/repository-memory', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      repo: item.repo,
+      baseBranch: item.branch || 'main',
+      type: item.source || 'note',
+      content: item.content || item.title || '',
+      status: 'pending'
+    })
+  });
+  await doSearch();
+}
+
+async function promoteSearchResultToGuideline(id) {
+  const item = window.searchResultCache && window.searchResultCache[id];
+  if (!item) return;
+  await api('/api/repository-guidelines', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      repo: item.repo,
+      baseBranch: item.branch || 'main',
+      title: item.title || 'Search result guideline',
+      type: item.source || 'general',
+      content: item.content || item.title || '',
+      required: false
+    })
+  });
+  await doSearch();
+}
+
+async function archiveSearchMemory(id) {
+  const item = window.searchResultCache && window.searchResultCache[id];
+  if (!item) return;
+  await api('/api/repository-memory/' + encodeURIComponent(item.id), {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ content: item.content || '', type: item.metadata && item.metadata.type || 'note', status: 'archived', pinned: false })
+  });
+  await doSearch();
 }
 
 async function loadAudit() {

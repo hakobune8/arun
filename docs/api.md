@@ -74,17 +74,24 @@ Returns detailed information about a specific run, including steps, errors, and 
 ### Search
 
 ```
-GET /api/search?q={query}&type={type}&limit={limit}
+GET /api/search?q={query}&source={source}&limit={limit}
+GET /api/search?q={query}&repo={repo}&baseBranch={branch}&source={source}&limit={limit}
 ```
 
 Search across memory, guidelines, and past PRs.
+
+When `repo` is provided, search is scoped to that repository and branch and
+returns repository context results from memory, guidelines, orchestration runs,
+run artifacts, GitHub artifacts, and code/files.
 
 **Parameters:**
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `q` | string | required | Search query |
-| `type` | string | `all` | Source type: `memory`, `guideline`, `pr`, `all` |
-| `limit` | int | `10` | Maximum results |
+| `source` | string | `all` | Source filter: `memory`, `guideline`, `run`, `artifact`, `github`, `code`, `pr`, `all` |
+| `repo` | string | optional | Repository scope, for example `owner/repo` |
+| `baseBranch` | string | `main` | Branch scope when `repo` is set |
+| `limit` | int | `10` or `50` | Maximum results |
 
 **Response** (200):
 ```json
@@ -93,7 +100,10 @@ Search across memory, guidelines, and past PRs.
     "source": "memory",
     "content": "...",
     "score": 0.95,
-    "metadata": { "title": "..." }
+    "repo": "owner/repo",
+    "branch": "main",
+    "runId": "run-0123456789abcdef",
+    "metadata": { "status": "approved" }
   }
 ]
 ```

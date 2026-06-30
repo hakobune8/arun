@@ -401,6 +401,122 @@ func TestRepositoryGuidelines_PlanningContextAndRequiredEnforcement(t *testing.T
 	}
 }
 
+func TestRepositoryContextSearch_ScopesSourcesByRepository(t *testing.T) {
+	t.Setenv("AGENTOS_HOME", t.TempDir())
+	ctx := context.Background()
+	memStore, err := repositoryMemoryStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := memStore.Save(ctx, &memory.RepositoryEntry{
+		Repo:    "owner/repo",
+		Branch:  "main",
+		Type:    "validation",
+		Content: "Run repository scoped search tests.",
+		Status:  memory.RepositoryMemoryApproved,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := memStore.Save(ctx, &memory.RepositoryEntry{
+		Repo:    "other/repo",
+		Branch:  "main",
+		Type:    "validation",
+		Content: "Run repository scoped search tests.",
+		Status:  memory.RepositoryMemoryApproved,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	glStore, err := repositoryGuidelineStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := glStore.Save(ctx, &guideline.RepositoryGuideline{
+		Repo:    "owner/repo",
+		Branch:  "main",
+		Title:   "Search guideline",
+		Content: "Keep context search scoped to the selected repository.",
+		Status:  guideline.RepositoryGuidelineActive,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := saveOrchestrationRecord(&orchestrationRecord{
+		ID:         "run-0123456789abcdef",
+		Repo:       "owner/repo",
+		BaseBranch: "main",
+		Task:       "Improve repository scoped search",
+		Status:     "completed",
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		Plan: &orchestrator.TaskPlan{Subtasks: []orchestrator.Subtask{{
+			ID:          "step-1",
+			AgentName:   "go-backend",
+			Description: "Implement repository scoped context search",
+		}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := repositoryContextSearch(ctx, repositoryContextSearchQuery{
+		Repo:   "owner/repo",
+		Branch: "main",
+		Query:  "repository scoped search",
+		Limit:  20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) < 3 {
+		t.Fatalf("results = %+v, want memory, guideline, and run/artifact results", results)
+	}
+	for _, result := range results {
+		if result.Repo != "owner/repo" {
+			t.Fatalf("result repo = %q, want owner/repo: %+v", result.Repo, result)
+		}
+	}
+
+	memoryOnly, err := repositoryContextSearch(ctx, repositoryContextSearchQuery{
+		Repo:   "owner/repo",
+		Branch: "main",
+		Query:  "repository scoped search",
+		Source: "memory",
+		Limit:  20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(memoryOnly) != 1 || memoryOnly[0].Source != "memory" {
+		t.Fatalf("memoryOnly = %+v, want one memory result", memoryOnly)
+	}
+}
+
+func TestServer_SearchEndpoint_RepositoryContext(t *testing.T) {
+	t.Setenv("AGENTOS_HOME", t.TempDir())
+	s := NewServer(0)
+	store, err := repositoryMemoryStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Save(context.Background(), &memory.RepositoryEntry{
+		Repo:    "owner/repo",
+		Branch:  "main",
+		Type:    "architecture",
+		Content: "Repository context search endpoint result.",
+		Status:  memory.RepositoryMemoryApproved,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	w := serveRequest(s, "GET", "/api/search?repo=owner/repo&baseBranch=main&source=memory&q=context", nil)
+	assertStatus(t, w.Code, http.StatusOK)
+	var results []repositoryContextSearchResult
+	if err := json.Unmarshal(w.Body.Bytes(), &results); err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Source != "memory" || results[0].Repo != "owner/repo" {
+		t.Fatalf("results = %+v, want scoped memory result", results)
+	}
+}
+
 // --- Runs ---
 
 func TestServer_RunsEndpoint_ReturnsEmptyList(t *testing.T) {

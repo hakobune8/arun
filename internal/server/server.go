@@ -464,12 +464,34 @@ func (s *Server) handleRunDetail(w http.ResponseWriter, r *http.Request) {
 // --- Search ---
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.requireAuth(w, r); !ok {
+	user, ok := s.requireAuth(w, r)
+	if !ok {
 		return
 	}
 	query := r.URL.Query().Get("q")
 	if query == "" {
 		http.Error(w, "query param q required", http.StatusBadRequest)
+		return
+	}
+	repo := strings.TrimSpace(r.URL.Query().Get("repo"))
+	if repo != "" {
+		branch := defaultBaseBranch(r.URL.Query().Get("baseBranch"))
+		if !s.requireAutomationPermission(w, r, user, "search.repository", "repository", repo, "") {
+			return
+		}
+		results, err := repositoryContextSearch(r.Context(), repositoryContextSearchQuery{
+			Repo:   repo,
+			Branch: branch,
+			Query:  query,
+			Source: r.URL.Query().Get("source"),
+			Limit:  parsePositiveInt(r.URL.Query().Get("limit"), 50),
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(results) //nolint:errcheck // best-effort
 		return
 	}
 
