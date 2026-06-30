@@ -137,19 +137,21 @@ type TaskPlan struct {
 
 // Subtask represents a single unit of work within a task plan.
 type Subtask struct {
-	ID          string   `json:"id"`
-	Description string   `json:"description"`
-	AgentName   string   `json:"agent_type"`
-	Deps        []string `json:"dependencies"`
+	ID          string       `json:"id"`
+	Description string       `json:"description"`
+	AgentName   string       `json:"agent_type"`
+	Deps        []string     `json:"dependencies"`
+	QualityGate *QualityGate `json:"quality_gate,omitempty"`
 }
 
 // SubtaskResult contains the result of executing a subtask.
 type SubtaskResult struct {
-	SubtaskID string `json:"subtask_id"`
-	Output    string `json:"output"`
-	Diff      string `json:"diff,omitempty"`
-	Error     string `json:"error,omitempty"`
-	Success   bool   `json:"success"`
+	SubtaskID   string             `json:"subtask_id"`
+	Output      string             `json:"output"`
+	Diff        string             `json:"diff,omitempty"`
+	Error       string             `json:"error,omitempty"`
+	Success     bool               `json:"success"`
+	QualityGate *QualityGateStatus `json:"quality_gate,omitempty"`
 }
 
 // Plan uses an LLM to break a task description into a plan of subtasks.
@@ -166,11 +168,17 @@ Output ONLY valid JSON with this structure:
       "id": "step-1",
       "description": "what to do",
       "agent_type": "agent name from the list",
-      "dependencies": []
+      "dependencies": [],
+      "quality_gate": {
+        "required_files": ["relative/path.ext"],
+        "validation_commands": ["command to run from repository root"],
+        "content_checks": [{"file":"relative/path.ext","contains":["required text"]}]
+      }
     }
   ]
 }
 
+Use quality_gate when a subtask has required files, validation commands, or required content. Omit empty quality gates.
 Do not include markdown, explanations, or reasoning. The assistant message content must be the JSON object only.`,
 	}
 
@@ -240,6 +248,7 @@ func enrichSubtasks(plan *TaskPlan, parentTask string) {
 		default:
 			plan.Subtasks[i].Description = appendContext(plan.Subtasks[i].Description, parentTask, "")
 		}
+		applyDefaultQualityGate(&plan.Subtasks[i])
 	}
 }
 
@@ -270,6 +279,7 @@ func (o *Orchestrator) fallbackPlan(taskDesc string) *TaskPlan {
 				Description: description,
 				Deps:        deps,
 			})
+			applyDefaultQualityGate(&subtasks[len(subtasks)-1])
 		}
 	}
 
@@ -287,6 +297,7 @@ func (o *Orchestrator) fallbackPlan(taskDesc string) *TaskPlan {
 				AgentName:   info.name,
 				Description: taskDesc,
 			})
+			applyDefaultQualityGate(&subtasks[len(subtasks)-1])
 		}
 	}
 
@@ -321,8 +332,8 @@ func (o *Orchestrator) ExecuteWithObserver(ctx context.Context, plan *TaskPlan, 
 	switch o.strategy {
 	case StrategySequential:
 		sharedCtx := ""
-		for _, subtask := range plan.Subtasks {
-			result := o.executeObservedSubtask(ctx, subtask, sharedCtx, observer)
+		for i := range plan.Subtasks {
+			result := o.executeObservedSubtask(ctx, &plan.Subtasks[i], sharedCtx, observer)
 			results = append(results, result)
 			if result.Diff != "" {
 				sharedCtx = result.Diff
@@ -362,7 +373,7 @@ func (o *Orchestrator) executeParallel(ctx context.Context, plan *TaskPlan, obse
 			if started[subtask.ID] || completed[subtask.ID] {
 				continue
 			}
-			if failed, reason := failedDependency(subtask, subtasksByID, completed, successful); failed {
+			if failed, reason := failedDependency(&subtask, subtasksByID, completed, successful); failed {
 				result := SubtaskResult{SubtaskID: subtask.ID, Success: false, Error: reason}
 				results[i] = result
 				completed[subtask.ID] = true
@@ -373,16 +384,16 @@ func (o *Orchestrator) executeParallel(ctx context.Context, plan *TaskPlan, obse
 				progressed = true
 				continue
 			}
-			if !dependenciesSatisfied(subtask, completed, successful) {
+			if !dependenciesSatisfied(&subtask, completed, successful) {
 				continue
 			}
 
 			started[subtask.ID] = true
 			running++
 			progressed = true
-			go func(index int, st Subtask) {
-				ch <- indexedSubtaskResult{o.executeObservedSubtask(ctx, st, "", observer), index}
-			}(i, subtask)
+			go func(index int) {
+				ch <- indexedSubtaskResult{o.executeObservedSubtask(ctx, &plan.Subtasks[index], "", observer), index}
+			}(i)
 		}
 
 		if len(completed) == len(plan.Subtasks) {
@@ -420,7 +431,7 @@ func (o *Orchestrator) executeParallel(ctx context.Context, plan *TaskPlan, obse
 	return results
 }
 
-func failedDependency(subtask Subtask, subtasksByID map[string]Subtask, completed, successful map[string]bool) (failed bool, reason string) {
+func failedDependency(subtask *Subtask, subtasksByID map[string]Subtask, completed, successful map[string]bool) (failed bool, reason string) {
 	for _, dep := range subtask.Deps {
 		if _, ok := subtasksByID[dep]; !ok {
 			return true, fmt.Sprintf("dependency %q was not found", dep)
@@ -432,7 +443,7 @@ func failedDependency(subtask Subtask, subtasksByID map[string]Subtask, complete
 	return false, ""
 }
 
-func dependenciesSatisfied(subtask Subtask, completed, successful map[string]bool) bool {
+func dependenciesSatisfied(subtask *Subtask, completed, successful map[string]bool) bool {
 	for _, dep := range subtask.Deps {
 		if !completed[dep] || !successful[dep] {
 			return false
@@ -458,10 +469,10 @@ func executionError(results []SubtaskResult) error {
 	return errors.New("subtasks failed: " + strings.Join(failed, "; "))
 }
 
-func (o *Orchestrator) executeObservedSubtask(ctx context.Context, subtask Subtask, sharedCtx string, observer SubtaskObserver) SubtaskResult {
+func (o *Orchestrator) executeObservedSubtask(ctx context.Context, subtask *Subtask, sharedCtx string, observer SubtaskObserver) SubtaskResult {
 	started := time.Now().UTC()
 	if observer != nil {
-		observer(SubtaskEvent{Type: SubtaskStarted, Subtask: subtask, Started: started})
+		observer(SubtaskEvent{Type: SubtaskStarted, Subtask: *subtask, Started: started})
 	}
 
 	runCtx := ctx
@@ -478,12 +489,12 @@ func (o *Orchestrator) executeObservedSubtask(ctx context.Context, subtask Subta
 	}
 	finished := time.Now().UTC()
 	if observer != nil {
-		observer(SubtaskEvent{Type: SubtaskCompleted, Subtask: subtask, Result: &result, Started: started, Finished: finished})
+		observer(SubtaskEvent{Type: SubtaskCompleted, Subtask: *subtask, Result: &result, Started: started, Finished: finished})
 	}
 	return result
 }
 
-func (o *Orchestrator) executeSubtask(ctx context.Context, subtask Subtask, sharedCtx string) SubtaskResult {
+func (o *Orchestrator) executeSubtask(ctx context.Context, subtask *Subtask, sharedCtx string) SubtaskResult {
 	agt, ok := o.agents[subtask.AgentName]
 	if !ok {
 		agt = o.DefaultAgent()
@@ -522,12 +533,25 @@ func (o *Orchestrator) executeSubtask(ctx context.Context, subtask Subtask, shar
 	if result, ok := o.recoverNoOpBuiltInSubtask(ctx, subtask, runSandbox); ok {
 		return result
 	}
+	gateStatus := validateQualityGate(ctx, runSandbox.RootDir(), subtask.QualityGate)
+	if !gateStatus.Passed {
+		if result, ok := o.recoverNoOpBuiltInSubtaskWithStatus(ctx, subtask, runSandbox, gateStatus); ok {
+			return result
+		}
+		return SubtaskResult{
+			SubtaskID:   subtask.ID,
+			Success:     false,
+			Error:       qualityGateError(gateStatus),
+			QualityGate: &gateStatus,
+		}
+	}
 
 	return SubtaskResult{
-		SubtaskID: subtask.ID,
-		Success:   true,
-		Output:    fmt.Sprintf("Executed by %s: %s", agt.Name(), subtask.Description),
-		Diff:      sharedCtx,
+		SubtaskID:   subtask.ID,
+		Success:     true,
+		Output:      fmt.Sprintf("Executed by %s: %s", agt.Name(), subtask.Description),
+		Diff:        sharedCtx,
+		QualityGate: &gateStatus,
 	}
 }
 
@@ -587,6 +611,13 @@ func (o *Orchestrator) MergeResults(results []SubtaskResult) string {
 		}
 		if r.Error != "" {
 			b.WriteString(fmt.Sprintf("Error: %s\n", redactor.RedactString(r.Error)))
+		}
+		if r.QualityGate != nil {
+			gate := "PASS"
+			if !r.QualityGate.Passed {
+				gate = "FAIL"
+			}
+			b.WriteString(fmt.Sprintf("Quality gate: %s\n", gate))
 		}
 		b.WriteString("\n")
 	}

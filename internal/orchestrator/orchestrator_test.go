@@ -156,6 +156,9 @@ func TestPlan_EmptyLLMContentUsesFallbackPlan(t *testing.T) {
 	if !strings.Contains(plan.Subtasks[0].Description, parentTask) || !strings.Contains(plan.Subtasks[0].Description, "go.mod") {
 		t.Fatalf("go-backend fallback description = %q, want parent task and concrete Go files", plan.Subtasks[0].Description)
 	}
+	if plan.Subtasks[0].QualityGate.empty() {
+		t.Fatalf("go-backend fallback subtask missing quality gate: %+v", plan.Subtasks[0])
+	}
 }
 
 func TestPlan_EnrichesGeneratedSubtasksWithParentRequirements(t *testing.T) {
@@ -186,6 +189,9 @@ func TestPlan_EnrichesGeneratedSubtasksWithParentRequirements(t *testing.T) {
 		if !strings.Contains(description, want) {
 			t.Fatalf("enriched description missing %q: %s", want, description)
 		}
+	}
+	if plan.Subtasks[0].QualityGate == nil || len(plan.Subtasks[0].QualityGate.RequiredFiles) == 0 {
+		t.Fatalf("generated subtask missing quality gate: %+v", plan.Subtasks[0])
 	}
 }
 
@@ -330,7 +336,7 @@ func TestExecuteSubtask_UsesDefaultProfileAndRepo(t *testing.T) {
 		&runtime.Config{},
 	)
 
-	result := o.executeSubtask(context.Background(), Subtask{
+	result := o.executeSubtask(context.Background(), &Subtask{
 		ID:          "step-1",
 		Description: "exercise repo",
 		AgentName:   "test-agent",
@@ -366,7 +372,7 @@ func TestExecuteSubtask_ScopesRuntimeTaskIDWithRunID(t *testing.T) {
 	)
 	o.SetRunID("run-abc")
 
-	result := o.executeSubtask(context.Background(), Subtask{
+	result := o.executeSubtask(context.Background(), &Subtask{
 		ID:          "step-1",
 		Description: "exercise repo",
 		AgentName:   "test-agent",
@@ -376,6 +382,62 @@ func TestExecuteSubtask_ScopesRuntimeTaskIDWithRunID(t *testing.T) {
 	}
 	if agent.taskID != "run-abc-step-1" {
 		t.Fatalf("task ID = %q, want run-scoped ID", agent.taskID)
+	}
+}
+
+func TestExecuteSubtask_FailsMissingRequiredFile(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("AGENTOS_HOME", filepath.Join(t.TempDir(), "agentos-home"))
+
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"test-agent": &recordingAgent{}},
+		&runtime.Config{},
+	)
+
+	result := o.executeSubtask(context.Background(), &Subtask{
+		ID:          "step-1",
+		Description: "create required artifact",
+		AgentName:   "test-agent",
+		QualityGate: &QualityGate{RequiredFiles: []string{"required.txt"}},
+	}, "")
+	if result.Success {
+		t.Fatalf("executeSubtask() succeeded, want quality gate failure: %+v", result)
+	}
+	if result.QualityGate == nil || result.QualityGate.Passed {
+		t.Fatalf("quality gate = %+v, want failed status", result.QualityGate)
+	}
+	if !strings.Contains(result.Error, "required.txt") {
+		t.Fatalf("error = %q, want required file detail", result.Error)
+	}
+}
+
+func TestValidateQualityGate_RequiredCommandAndContent(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("run go test ./...\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	status := validateQualityGate(context.Background(), repo, &QualityGate{
+		RequiredFiles:      []string{"README.md"},
+		ValidationCommands: []string{"test -f README.md"},
+		ContentChecks: []QualityContentCheck{{
+			File:     "README.md",
+			Contains: []string{"go test ./..."},
+		}},
+	})
+	if !status.Passed {
+		t.Fatalf("quality gate failed: %+v", status)
+	}
+}
+
+func TestValidateQualityGate_BlocksEscapingPath(t *testing.T) {
+	status := validateQualityGate(context.Background(), t.TempDir(), &QualityGate{
+		RequiredFiles: []string{"../secret.txt"},
+	})
+	if status.Passed {
+		t.Fatalf("quality gate passed, want path escape failure: %+v", status)
 	}
 }
 
@@ -441,7 +503,7 @@ func TestRecoverNoOpDocs_CreatesRequiredREADME(t *testing.T) {
 		&runtime.Config{},
 	)
 
-	result, ok := o.recoverNoOpBuiltInSubtask(context.Background(), Subtask{
+	result, ok := o.recoverNoOpBuiltInSubtask(context.Background(), &Subtask{
 		ID:          "step-2",
 		AgentName:   "docs",
 		Description: "Update README for /healthz using net/http and go test.",
@@ -472,7 +534,7 @@ func TestRecoverNoOpCIFixer_CreatesTestsAndWorkflow(t *testing.T) {
 		&runtime.Config{},
 	)
 
-	result, ok := o.recoverNoOpBuiltInSubtask(context.Background(), Subtask{
+	result, ok := o.recoverNoOpBuiltInSubtask(context.Background(), &Subtask{
 		ID:          "step-3",
 		AgentName:   "ci-fixer",
 		Description: "Add tests and GitHub Actions for /healthz using net/http and go test ./...",
@@ -502,7 +564,7 @@ func TestRecoverBuiltInSubtask_UsesFreshContextAfterTimeout(t *testing.T) {
 	canceledCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	result, ok := o.recoverBuiltInSubtask(canceledCtx, Subtask{
+	result, ok := o.recoverBuiltInSubtask(canceledCtx, &Subtask{
 		ID:          "step-1",
 		AgentName:   "go-backend",
 		Description: "Create /healthz with net/http in https://github.com/kazyamaz200/agentos-test.git",
