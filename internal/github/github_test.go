@@ -384,6 +384,48 @@ func TestClient_CreateIssue(t *testing.T) {
 	}
 }
 
+func TestClient_CloseIssue(t *testing.T) {
+	t.Parallel()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			t.Errorf("method = %s, want PATCH", r.Method)
+		}
+		if r.URL.Path != "/repos/owner/repo/issues/7" {
+			t.Errorf("path = %s, want /repos/owner/repo/issues/7", r.URL.Path)
+		}
+		var req UpdateIssueRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if req.State != "closed" {
+			t.Fatalf("request = %+v", req)
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck // test helper
+			"number":   7,
+			"title":    "Closed",
+			"html_url": "https://github.com/owner/repo/issues/7",
+			"state":    "closed",
+		})
+	}))
+	defer ts.Close()
+
+	c := &Client{
+		BaseURL:   ts.URL,
+		Token:     "test-token",
+		RepoOwner: "owner",
+		RepoName:  "repo",
+		http:      ts.Client(),
+	}
+	issue, err := c.CloseIssue(7)
+	if err != nil {
+		t.Fatalf("CloseIssue() error = %v", err)
+	}
+	if issue.State != "closed" || issue.Number != 7 {
+		t.Fatalf("issue = %+v", issue)
+	}
+}
+
 func TestClient_CreateIssueComment(t *testing.T) {
 	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

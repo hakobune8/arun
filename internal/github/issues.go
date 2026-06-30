@@ -28,6 +28,11 @@ type CreateIssueCommentRequest struct {
 	Body string `json:"body"`
 }
 
+// UpdateIssueRequest contains the parameters for updating an issue.
+type UpdateIssueRequest struct {
+	State string `json:"state,omitempty"`
+}
+
 // CreateIssue creates a new GitHub issue.
 func (c *Client) CreateIssue(req CreateIssueRequest) (*Issue, error) {
 	path := fmt.Sprintf("/%s/issues", c.RepoPath())
@@ -35,6 +40,18 @@ func (c *Client) CreateIssue(req CreateIssueRequest) (*Issue, error) {
 	var issue Issue
 	if err := c.doJSON("POST", path, req, &issue); err != nil {
 		return nil, fmt.Errorf("create issue: %w", err)
+	}
+
+	return &issue, nil
+}
+
+// CloseIssue closes an existing GitHub issue.
+func (c *Client) CloseIssue(number int) (*Issue, error) {
+	path := fmt.Sprintf("/%s/issues/%d", c.RepoPath(), number)
+
+	var issue Issue
+	if err := c.doJSON("PATCH", path, UpdateIssueRequest{State: "closed"}, &issue); err != nil {
+		return nil, fmt.Errorf("close issue: %w", err)
 	}
 
 	return &issue, nil

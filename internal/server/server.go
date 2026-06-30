@@ -497,6 +497,8 @@ type orchestrateFromIssueRequest struct {
 	Agents            []string `json:"agents,omitempty"`
 	Strategy          string   `json:"strategy,omitempty"`
 	CreatePullRequest *bool    `json:"createPullRequest,omitempty"`
+	ClosePolicy       string   `json:"closePolicy,omitempty"`
+	RequireApproval   *bool    `json:"requireApproval,omitempty"`
 }
 
 type orchestrateRecommendRequest struct {
@@ -566,14 +568,27 @@ type orchestrationGitHubState struct {
 	SourceTriggerID       string `json:"sourceTriggerId,omitempty"`
 	SourceStartCommentURL string `json:"sourceStartCommentUrl,omitempty"`
 	SourceFinalCommentURL string `json:"sourceFinalCommentUrl,omitempty"`
+	ClosePolicy           string `json:"closePolicy,omitempty"`
+	ApprovalStatus        string `json:"approvalStatus,omitempty"`
+	ApprovalActor         string `json:"approvalActor,omitempty"`
+	ApprovalReason        string `json:"approvalReason,omitempty"`
+	ApprovedAt            string `json:"approvedAt,omitempty"`
+	SourceIssueClosed     bool   `json:"sourceIssueClosed,omitempty"`
+	SourceIssueClosedAt   string `json:"sourceIssueClosedAt,omitempty"`
 }
 
 type orchestrationSourceIssue struct {
-	Repo      string
-	Number    int
-	Title     string
-	URL       string
-	TriggerID string
+	Repo        string
+	Number      int
+	Title       string
+	URL         string
+	TriggerID   string
+	ClosePolicy string
+}
+
+type orchestrationApprovalRequest struct {
+	Action string `json:"action"`
+	Reason string `json:"reason,omitempty"`
 }
 
 type orchestrationSubtaskState struct {
@@ -874,6 +889,10 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 	record.Results = results
 	record.Summary = summary
 	record.Status = "completed"
+	if record.GitHub != nil && record.GitHub.ClosePolicy == "after_human_approval" && record.GitHub.ApprovalStatus == "pending" {
+		record.Status = "pending_approval"
+		appendOrchestrationEvent(record, "approval.pending", "", "Human approval is required before closing the source Issue")
+	}
 	appendOrchestrationEvent(record, "completed", "", "Orchestration completed")
 	record.UpdatedAt = time.Now().UTC()
 	if err := saveOrchestrationRecord(record); err != nil {
@@ -882,6 +901,10 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 	s.auditOrchestrationOutcome(record, auditOutcomeSuccess, "")
 	s.createPullRequestForOrchestration(record)
 	s.postSourceIssueFinalComment(record)
+	s.closeSourceIssueIfPolicyAllows(record)
+	if err := saveOrchestrationRecord(record); err != nil {
+		slog.Warn("save orchestration failed", "id", record.ID, "error", err)
+	}
 }
 
 func (s *Server) handleOrchestrates(w http.ResponseWriter, r *http.Request) {
@@ -912,6 +935,10 @@ func (s *Server) handleOrchestrateDetail(w http.ResponseWriter, r *http.Request)
 		s.handleOrchestrateCancel(w, r, user)
 		return
 	}
+	if strings.HasSuffix(r.URL.Path, "/approval") {
+		s.handleOrchestrateApproval(w, r, user)
+		return
+	}
 	if r.Method != http.MethodGet {
 		http.Error(w, "GET required", http.StatusMethodNotAllowed)
 		return
@@ -921,6 +948,63 @@ func (s *Server) handleOrchestrateDetail(w http.ResponseWriter, r *http.Request)
 	record, err := readOrchestrationRecord(id)
 	if err != nil {
 		http.Error(w, "orchestration not found: "+id, http.StatusNotFound)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(record) //nolint:errcheck // best-effort response
+}
+
+func (s *Server) handleOrchestrateApproval(w http.ResponseWriter, r *http.Request, user *authUser) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST required", http.StatusMethodNotAllowed)
+		return
+	}
+	id := filepath.Base(filepath.Dir(r.URL.Path))
+	if !s.requireAutomationPermission(w, r, user, "orchestrate.approval", "orchestration/"+id, "", id) {
+		return
+	}
+	var req orchestrationApprovalRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		http.Error(w, "parse body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	req.Action = strings.ToLower(strings.TrimSpace(req.Action))
+	if req.Action != "approve" && req.Action != "reject" {
+		http.Error(w, "action must be approve or reject", http.StatusBadRequest)
+		return
+	}
+	record, err := readOrchestrationRecord(id)
+	if err != nil {
+		http.Error(w, "orchestration not found: "+id, http.StatusNotFound)
+		return
+	}
+	if record.GitHub == nil || record.GitHub.ApprovalStatus == "" {
+		http.Error(w, "orchestration does not require approval", http.StatusConflict)
+		return
+	}
+	if record.GitHub.ApprovalStatus == "approved" || record.GitHub.ApprovalStatus == "rejected" {
+		http.Error(w, "approval is already resolved", http.StatusConflict)
+		return
+	}
+
+	now := time.Now().UTC()
+	record.GitHub.ApprovalActor = actorLogin(user)
+	record.GitHub.ApprovalReason = strings.TrimSpace(req.Reason)
+	record.GitHub.ApprovedAt = now.Format(time.RFC3339)
+	if req.Action == "approve" {
+		record.GitHub.ApprovalStatus = "approved"
+		appendOrchestrationEvent(record, "approval.approved", "", "Approval granted")
+		if record.Status == "pending_approval" {
+			record.Status = "completed"
+		}
+		s.closeSourceIssueIfPolicyAllows(record)
+	} else {
+		record.GitHub.ApprovalStatus = "rejected"
+		record.Status = "approval_rejected"
+		appendOrchestrationEvent(record, "approval.rejected", "", approvalRejectionMessage(record.GitHub.ApprovalReason))
+	}
+	record.UpdatedAt = now
+	if err := saveOrchestrationRecord(record); err != nil {
+		http.Error(w, "save orchestration: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	_ = json.NewEncoder(w).Encode(record) //nolint:errcheck // best-effort response
@@ -1457,6 +1541,23 @@ func orchestrationRequestFromIssue(importReq *orchestrateFromIssueRequest, reg *
 	if importReq.CreatePullRequest != nil {
 		createPullRequest = *importReq.CreatePullRequest
 	}
+	closePolicy := normalizeClosePolicy(importReq.ClosePolicy)
+	if closePolicy == "" {
+		closePolicy = controls.ClosePolicy
+	}
+	if closePolicy == "" {
+		closePolicy = defaultClosePolicy(&rec, createPullRequest)
+	}
+	requireApproval := closePolicy == "after_human_approval"
+	if controls.RequireApproval != nil {
+		requireApproval = *controls.RequireApproval
+	}
+	if importReq.RequireApproval != nil {
+		requireApproval = *importReq.RequireApproval
+	}
+	if requireApproval {
+		closePolicy = "after_human_approval"
+	}
 
 	req := &orchestrateRequest{
 		Agents:         agents,
@@ -1474,11 +1575,12 @@ func orchestrationRequestFromIssue(importReq *orchestrateFromIssueRequest, reg *
 		},
 	}
 	source := &orchestrationSourceIssue{
-		Repo:      repo,
-		Number:    importReq.IssueNumber,
-		Title:     title,
-		URL:       strings.TrimSpace(importReq.IssueURL),
-		TriggerID: strings.TrimSpace(importReq.TriggerID),
+		Repo:        repo,
+		Number:      importReq.IssueNumber,
+		Title:       title,
+		URL:         strings.TrimSpace(importReq.IssueURL),
+		TriggerID:   strings.TrimSpace(importReq.TriggerID),
+		ClosePolicy: closePolicy,
 	}
 	return req, source, nil
 }
@@ -1487,6 +1589,8 @@ type issueTriggerOptions struct {
 	Agents            []string
 	Strategy          string
 	CreatePullRequest *bool
+	ClosePolicy       string
+	RequireApproval   *bool
 }
 
 func issueTriggerControls(labels []string, text string) issueTriggerOptions {
@@ -1503,6 +1607,15 @@ func issueTriggerControls(labels []string, text string) issueTriggerOptions {
 			opts.Strategy = "parallel"
 		case "agentos:sequential":
 			opts.Strategy = "sequential"
+		case "agentos:close-never":
+			opts.ClosePolicy = "never"
+		case "agentos:close-on-quality-gate-pass":
+			opts.ClosePolicy = "on_quality_gate_pass"
+		case "agentos:close-on-pr-merge":
+			opts.ClosePolicy = "on_pr_merge"
+		case "agentos:approval-required":
+			value := true
+			opts.RequireApproval = &value
 		}
 	}
 	if command, ok := parseAgentOSRunCommand(text); ok {
@@ -1514,6 +1627,12 @@ func issueTriggerControls(labels []string, text string) issueTriggerOptions {
 		}
 		if command.CreatePullRequest != nil {
 			opts.CreatePullRequest = command.CreatePullRequest
+		}
+		if command.ClosePolicy != "" {
+			opts.ClosePolicy = command.ClosePolicy
+		}
+		if command.RequireApproval != nil {
+			opts.RequireApproval = command.RequireApproval
 		}
 	}
 	return opts
@@ -1542,11 +1661,45 @@ func parseAgentOSRunCommand(text string) (issueTriggerOptions, bool) {
 			case "create_pr", "createpullrequest":
 				enabled := strings.EqualFold(value, "true") || value == "1" || strings.EqualFold(value, "yes")
 				opts.CreatePullRequest = &enabled
+			case "close_policy", "closepolicy":
+				if policy := normalizeClosePolicy(value); policy != "" {
+					opts.ClosePolicy = policy
+				}
+			case "approval", "require_approval", "requireapproval":
+				enabled := strings.EqualFold(value, "true") || value == "1" || strings.EqualFold(value, "yes")
+				opts.RequireApproval = &enabled
 			}
 		}
 		return opts, true
 	}
 	return issueTriggerOptions{}, false
+}
+
+func normalizeClosePolicy(policy string) string {
+	switch strings.ToLower(strings.TrimSpace(policy)) {
+	case "", "default":
+		return ""
+	case "never":
+		return "never"
+	case "on_pr_merge", "on-pr-merge", "pr_merge":
+		return "on_pr_merge"
+	case "on_quality_gate_pass", "on-quality-gate-pass", "quality_gate_pass":
+		return "on_quality_gate_pass"
+	case "after_human_approval", "after-human-approval", "human_approval":
+		return "after_human_approval"
+	default:
+		return ""
+	}
+}
+
+func defaultClosePolicy(rec *orchestrationRecommendation, createPullRequest bool) string {
+	if rec != nil && rec.RequireApproval {
+		return "after_human_approval"
+	}
+	if createPullRequest {
+		return "on_pr_merge"
+	}
+	return "never"
 }
 
 func sanitizeAgentNames(values []string) []string {
@@ -1597,6 +1750,13 @@ func attachSourceIssue(state *orchestrationGitHubState, source *orchestrationSou
 	state.SourceIssueTitle = source.Title
 	state.SourceIssueURL = source.URL
 	state.SourceTriggerID = source.TriggerID
+	state.ClosePolicy = normalizeClosePolicy(source.ClosePolicy)
+	if state.ClosePolicy == "" {
+		state.ClosePolicy = "never"
+	}
+	if state.ClosePolicy == "after_human_approval" && state.ApprovalStatus == "" {
+		state.ApprovalStatus = "pending"
+	}
 	if state.IssueNumber == 0 && state.IssueURL == "" {
 		state.IssueNumber = source.Number
 		state.IssueTitle = source.Title
@@ -1785,6 +1945,71 @@ func (s *Server) createSourceIssueComment(record *orchestrationRecord, body stri
 	}
 	client := agentosgh.NewClient(owner, name)
 	return client.CreateIssueComment(record.GitHub.SourceIssueNumber, agentosgh.CreateIssueCommentRequest{Body: body})
+}
+
+func (s *Server) closeSourceIssueIfPolicyAllows(record *orchestrationRecord) {
+	if record == nil || record.GitHub == nil || record.GitHub.SourceIssueNumber == 0 || record.GitHub.SourceIssueClosed {
+		return
+	}
+	if !sourceIssueClosePolicyAllows(record) {
+		return
+	}
+	owner, name, _, ok := githubRepoForAPI(record.GitHub.Repo)
+	if !ok {
+		record.GitHub.Error = "close source issue: invalid GitHub repository"
+		s.auditGitHubArtifact(record, "github.issue.close", auditOutcomeFailure, record.GitHub.Error)
+		return
+	}
+	client := agentosgh.NewClient(owner, name)
+	if _, err := client.CloseIssue(record.GitHub.SourceIssueNumber); err != nil {
+		record.GitHub.Error = "close source issue: " + err.Error()
+		s.auditGitHubArtifact(record, "github.issue.close", auditOutcomeFailure, record.GitHub.Error)
+		return
+	}
+	now := time.Now().UTC()
+	record.GitHub.SourceIssueClosed = true
+	record.GitHub.SourceIssueClosedAt = now.Format(time.RFC3339)
+	record.GitHub.Error = ""
+	appendOrchestrationEvent(record, "github.issue.closed", "", "Source Issue closed")
+	record.UpdatedAt = now
+	s.auditGitHubArtifact(record, "github.issue.close", auditOutcomeSuccess, record.GitHub.SourceIssueURL)
+}
+
+func sourceIssueClosePolicyAllows(record *orchestrationRecord) bool {
+	if record == nil || record.GitHub == nil || record.Status != "completed" {
+		return false
+	}
+	switch normalizeClosePolicy(record.GitHub.ClosePolicy) {
+	case "on_quality_gate_pass":
+		return orchestrationQualityGatePassed(record)
+	case "after_human_approval":
+		return record.GitHub.ApprovalStatus == "approved"
+	default:
+		return false
+	}
+}
+
+func orchestrationQualityGatePassed(record *orchestrationRecord) bool {
+	if record == nil || len(record.Results) == 0 {
+		return false
+	}
+	for _, result := range record.Results {
+		if !result.Success {
+			return false
+		}
+		if result.QualityGate != nil && !result.QualityGate.Passed {
+			return false
+		}
+	}
+	return true
+}
+
+func approvalRejectionMessage(reason string) string {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return "Approval rejected"
+	}
+	return "Approval rejected: " + reason
 }
 
 func sourceIssueStartCommentBody(record *orchestrationRecord) string {

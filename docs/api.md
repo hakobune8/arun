@@ -117,6 +117,20 @@ When authentication is enabled, work-triggering APIs require a valid signed
 session cookie. Repository cloning and GitHub API operations still use the
 server-side `GITHUB_TOKEN` in v1.0.
 
+Issue-sourced orchestrations can require human approval before closing their
+source Issue:
+
+```http
+POST /api/orchestrates/{id}/approval
+Content-Type: application/json
+
+{"action":"approve","reason":"optional note"}
+```
+
+Use `{"action":"reject","reason":"..."}` to reject a pending approval. Approval
+actions require the same automation authorization controls as other sensitive
+orchestration actions.
+
 ## Rate Limiting
 
 No rate limiting is currently implemented. Consider using a reverse proxy for production deployments.

@@ -531,11 +531,26 @@ async function cancelCurrentOrchestration() {
   }
 }
 
+async function submitApproval(action) {
+  if (!selectedOrchestrateId) return;
+  const reason = action === 'reject' ? prompt('Reason') || '' : '';
+  try {
+    await api('/api/orchestrates/' + encodeURIComponent(selectedOrchestrateId) + '/approval', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({action, reason})
+    });
+    await refreshCurrentOrchestration();
+  } catch(e) {
+    alert('Approval failed: ' + e.message);
+  }
+}
+
 function startOrchestrationPoll() {
   if (orchPoll) clearInterval(orchPoll);
   orchPoll = setInterval(() => {
     if (!currentOrchestration) return;
-    if (['completed','failed','canceled'].includes(currentOrchestration.status)) {
+    if (['completed','failed','canceled','pending_approval','approval_rejected'].includes(currentOrchestration.status)) {
       clearInterval(orchPoll);
       orchPoll = null;
       return;
@@ -559,7 +574,7 @@ function renderOrchestrationDetail() {
     '<div class="card">' +
     '<div class="detail-header"><div><h2>' + escape(r.id) + ' ' + statusSpan(r.status) + '</h2>' +
     '<div class="detail-meta"><span class="repo-pill">' + escape(r.repo || '-') + '</span><span class="repo-pill">' + escape(r.baseBranch || '-') + '</span><span class="repo-pill">' + escape(r.strategy || '-') + '</span><span class="repo-pill">' + escape(r.llmPreset || '-') + '</span><span class="repo-pill">' + escape(r.outputLanguage || 'en') + '</span></div></div>' +
-    '<div class="actions">' + ((r.status === 'planning' || r.status === 'running') ? '<button class="btn btn-danger" onclick="cancelCurrentOrchestration()">Cancel</button>' : '') + '<button class="btn btn-secondary" onclick="refreshCurrentOrchestration()">Refresh</button></div></div>' +
+    '<div class="actions">' + renderApprovalActions(r) + ((r.status === 'planning' || r.status === 'running') ? '<button class="btn btn-danger" onclick="cancelCurrentOrchestration()">Cancel</button>' : '') + '<button class="btn btn-secondary" onclick="refreshCurrentOrchestration()">Refresh</button></div></div>' +
     '<p class="muted" style="margin-top:12px">' + escape(r.task || '') + '</p>' +
     renderGitHubArtifacts(r.github) +
     (r.error ? '<p class="error" style="margin-top:10px">' + escape(r.error) + '</p>' : '') +
@@ -582,8 +597,16 @@ function renderGitHubArtifacts(github) {
   if (github.branchName) items.push('<span class="repo-pill">branch ' + escape(github.branchName) + '</span>');
   if (github.issueUrl) items.push('<a class="repo-pill" href="' + escape(github.issueUrl) + '" target="_blank" rel="noopener noreferrer">Issue #' + escape(github.issueNumber || '') + '</a>');
   if (github.pullRequestUrl) items.push('<a class="repo-pill" href="' + escape(github.pullRequestUrl) + '" target="_blank" rel="noopener noreferrer">PR #' + escape(github.pullRequestNumber || '') + '</a>');
+  if (github.closePolicy) items.push('<span class="repo-pill">close ' + escape(github.closePolicy) + '</span>');
+  if (github.approvalStatus) items.push('<span class="repo-pill">approval ' + escape(github.approvalStatus) + '</span>');
+  if (github.sourceIssueClosed) items.push('<span class="repo-pill status-success">source closed</span>');
   if (github.error) items.push('<span class="repo-pill status-failed">' + escape(github.error) + '</span>');
   return items.length ? '<div class="detail-meta" style="margin-top:10px">' + items.join('') + '</div>' : '';
+}
+
+function renderApprovalActions(r) {
+  if (!r || r.status !== 'pending_approval' || !r.github || r.github.approvalStatus !== 'pending') return '';
+  return "<button class=\"btn\" onclick=\"submitApproval('approve')\">Approve</button><button class=\"btn btn-danger\" onclick=\"submitApproval('reject')\">Reject</button>";
 }
 
 function detailTabButton(name, label) {

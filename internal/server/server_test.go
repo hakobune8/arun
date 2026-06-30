@@ -1128,7 +1128,7 @@ func TestServer_OrchestrateRecommendEndpoint(t *testing.T) {
 func TestIssueTriggerControls_LabelAndSlashCommand(t *testing.T) {
 	body := `Please handle this.
 
-/agentos run agents=docs,reviewer strategy=parallel create_pr=false`
+/agentos run agents=docs,reviewer strategy=parallel create_pr=false close_policy=after_human_approval approval=true`
 	got := issueTriggerControls([]string{"agentos:create-pr"}, body)
 	if got.Strategy != "parallel" {
 		t.Fatalf("Strategy = %q, want parallel", got.Strategy)
@@ -1138,6 +1138,9 @@ func TestIssueTriggerControls_LabelAndSlashCommand(t *testing.T) {
 	}
 	if got.CreatePullRequest == nil || *got.CreatePullRequest {
 		t.Fatalf("CreatePullRequest = %v, want false", got.CreatePullRequest)
+	}
+	if got.ClosePolicy != "after_human_approval" || got.RequireApproval == nil || !*got.RequireApproval {
+		t.Fatalf("approval controls = %+v, want after_human_approval/true", got)
 	}
 }
 
@@ -1168,6 +1171,9 @@ func TestOrchestrationRequestFromIssue_UsesRecommendationAndSource(t *testing.T)
 	}
 	if req.GitHub == nil || !req.GitHub.CreatePullRequest || req.GitHub.BranchName != "agentos/issue-203" {
 		t.Fatalf("GitHub = %+v", req.GitHub)
+	}
+	if source.ClosePolicy != "on_pr_merge" {
+		t.Fatalf("ClosePolicy = %q, want on_pr_merge", source.ClosePolicy)
 	}
 }
 
@@ -1229,6 +1235,40 @@ func TestSourceIssueCommentBodies(t *testing.T) {
 		!strings.Contains(final, "https://github.com/owner/repo/pull/2") ||
 		!strings.Contains(final, "CI fixed.") {
 		t.Fatalf("final comment = %q", final)
+	}
+}
+
+func TestSourceIssueClosePolicyAllows(t *testing.T) {
+	record := &orchestrationRecord{
+		Status: "completed",
+		Results: []orchestrator.SubtaskResult{{
+			Success: true,
+			QualityGate: &orchestrator.QualityGateStatus{
+				Passed: true,
+			},
+		}},
+		GitHub: &orchestrationGitHubState{ClosePolicy: "on_quality_gate_pass"},
+	}
+	if !sourceIssueClosePolicyAllows(record) {
+		t.Fatal("on_quality_gate_pass should allow close when results and gates passed")
+	}
+	record.Results[0].QualityGate.Passed = false
+	if sourceIssueClosePolicyAllows(record) {
+		t.Fatal("on_quality_gate_pass should not allow close when quality gate failed")
+	}
+	record.Results[0].QualityGate.Passed = true
+	record.GitHub.ClosePolicy = "after_human_approval"
+	record.GitHub.ApprovalStatus = "pending"
+	if sourceIssueClosePolicyAllows(record) {
+		t.Fatal("pending approval should not allow close")
+	}
+	record.GitHub.ApprovalStatus = "approved"
+	if !sourceIssueClosePolicyAllows(record) {
+		t.Fatal("approved human approval should allow close")
+	}
+	record.GitHub.ClosePolicy = "never"
+	if sourceIssueClosePolicyAllows(record) {
+		t.Fatal("never should not allow close")
 	}
 }
 

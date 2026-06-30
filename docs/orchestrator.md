@@ -112,17 +112,29 @@ Issue labels can adjust launch behavior:
 - `agentos:report-only` disables PR creation.
 - `agentos:parallel` selects parallel orchestration.
 - `agentos:sequential` selects sequential orchestration.
+- `agentos:close-never` prevents automatic source Issue close.
+- `agentos:close-on-quality-gate-pass` closes the source Issue after successful
+  completion and passing quality gates.
+- `agentos:close-on-pr-merge` records a conservative PR-merge close policy.
+- `agentos:approval-required` requires human approval before closing.
 
 Issue text can also include a slash command line:
 
 ```text
-/agentos run agents=docs,reviewer strategy=parallel create_pr=false
+/agentos run agents=docs,reviewer strategy=parallel create_pr=false close_policy=after_human_approval approval=true
 ```
 
 The slash command overrides matching label-derived controls. The server records
 a trigger ID when one is provided and rejects duplicate in-flight runs for the
 same source Issue, which keeps repeated label or command events from starting
 parallel duplicate orchestrations.
+
+Supported close policies are `never`, `on_pr_merge`, `on_quality_gate_pass`,
+and `after_human_approval`. Webhook-based PR merge detection is intentionally
+not required for v1.1; `on_pr_merge` is recorded as a conservative policy for
+manual follow-up. `after_human_approval` puts a completed run into
+`pending_approval` until an authorized user approves or rejects it from the Web
+UI or approval API.
 
 For Issue-sourced runs, AgentOS posts a start comment and one final status
 comment back to the source Issue when GitHub write credentials are configured.
