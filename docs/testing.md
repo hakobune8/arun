@@ -12,21 +12,23 @@ of the AgentOS Web UI at `https://agentos.nakanoshima.hakobune8.com`.
 
 ---
 
-## 1. Dashboard
+## 1. Orchestrate
 
 ### Steps
 1. Open `https://agentos.nakanoshima.hakobune8.com`
-2. The Dashboard tab is shown by default
+2. The Orchestrate view is shown by default
 
 ### Expected Results
-- [ ] Header shows "AgentOS v1.0" with navigation tabs
-- [ ] Stats cards show: Total Runs, Completed, Failed, In Progress
-- [ ] "Recent Runs" table shows the 10 most recent runs (or empty)
-- [ ] Tabs: Dashboard, Runs, Agents, Search, GitHub, Orchestrate, New Run
+- [ ] Header shows "AgentOS" and the authenticated GitHub user when auth is enabled
+- [ ] Main navigation exposes Orchestrate, Agents, and Audit
+- [ ] Orchestrate has New, List, and Detail segments
+- [ ] New orchestration starts with Repository, then Task, then Agents
+- [ ] Repository is selected from the GitHub repository picker
+- [ ] The mobile bottom navigation remains visible and usable
 
 ### Input Values
 - No input required
-- Runs display automatically from `~/.agentos/runs/`
+- Orchestration records display from `${AGENTOS_HOME}/orchestrations/`
 
 ---
 
@@ -47,55 +49,51 @@ of the AgentOS Web UI at `https://agentos.nakanoshima.hakobune8.com`.
 
 ---
 
-## 3. New Run
+## 3. New Orchestration
 
 ### Steps
-1. Click the **New Run** tab
+1. Open **Orchestrate** and select the **New** segment
 2. Fill in the form:
-   - **Agent**: `go-backend`
-   - **Task Title**: `"Add greeting function"`
-   - **Description**: `"Add a function Greet(name string) string that returns a greeting message. Use the existing codebase style."`
-   - **Repository Path**: `<path to a local Go project>`
-3. Click **Start Run**
-4. Wait for the run ID link to appear
-5. Click the run ID link to view details
+   - **Repository**: select a GitHub repository
+   - **Base Branch**: `main`
+   - **Task**: `"Add a function Greet(name string) string that returns a greeting message. Use the existing codebase style."`
+   - **Agents**: `go-backend`
+3. Click **Start Orchestration**
+4. Wait for the orchestration detail view to appear
 
 ### Expected Results
-- [ ] Agent dropdown shows all registered agents
-- [ ] Form submission triggers async run
-- [ ] Status message shows run ID with clickable link
-- [ ] Run detail page shows artifacts (plan.json, diff.patch, summary.md, etc.)
+- [ ] Repository selector shows GitHub repositories visible to the deployment credentials
+- [ ] Agent checklist shows all registered agents
+- [ ] Form submission triggers an async orchestration
+- [ ] Detail view shows run status, task text, tabs, timeline, and artifacts
 
 ### Input Values
 | Field | Value |
 |-------|-------|
-| Agent | `go-backend` |
-| Task Title | `Add greeting function` |
-| Description | `Add a function Greet(name string) string that returns a greeting message. Use the existing codebase style.` |
-| Repository Path | `/path/to/your/go-project` |
+| Repository | any test GitHub repository |
+| Base Branch | `main` |
+| Agents | `go-backend` |
+| Task | `Add a function Greet(name string) string that returns a greeting message. Use the existing codebase style.` |
 
 ---
 
-## 4. Runs Page
+## 4. Orchestration List And Detail
 
 ### Steps
-1. Click the **Runs** tab
-2. View the run history table
-3. Type a run ID in the filter input
-4. Select a status filter
-5. Click **View** on any run
+1. Open **Orchestrate** and select the **List** segment
+2. View orchestration history
+3. Open any orchestration
+4. Use the **Detail** tabs to inspect Overview, Runs, Memory, Guidelines, Search, and GitHub
 
 ### Expected Results
-- [ ] Run history table shows all runs with ID, Status, Agent, Created
-- [ ] Status filtering works (All, Completed, Failed, Pending)
-- [ ] ID text filter works
-- [ ] Run detail view shows all artifacts
-- [ ] Artifacts are displayed in a readable order (run_state.json, plan.json, diff.patch, etc.)
+- [ ] List shows orchestration ID, status, task, repository, branch, and recency
+- [ ] Detail header shows selected repository, branch, strategy, preset, and task text
+- [ ] Overview shows subtasks, pass/fail counts, summary, and timeline
+- [ ] Runs tab shows subtask assignments and outputs
+- [ ] Memory, Guidelines, Search, and GitHub tabs load without layout overflow
 
 ### Input Values
-- Filter: any partial run ID
-- Status: select "Completed" to see only successful runs
-- Click "View" on any run to see details
+- Select any existing orchestration.
 
 ---
 
@@ -174,10 +172,10 @@ of the AgentOS Web UI at `https://agentos.nakanoshima.hakobune8.com`.
 
 | # | Page | Action | Key Verifications |
 |---|------|--------|-------------------|
-| 1 | Dashboard | Load page | Stats cards, recent runs, navigation |
-| 2 | Agents | View list | 8 agents, metadata, tool tags, guidance |
-| 3 | New Run | Submit task | Async execution, artifact viewing |
-| 4 | Runs | Browse history | Filter by ID/status, detail view |
+| 1 | Orchestrate | Load page | Repository, Task, Agents order and mobile navigation |
+| 2 | Agents | View list | Built-in agents, metadata, tool tags, guidance |
+| 3 | New Orchestration | Submit task | Async orchestration and detail view |
+| 4 | Orchestration List | Browse history | List and detail tabs |
 | 5 | Search | Query search | Results with source labels |
 | 6 | GitHub | Load repo | Issues, PRs, Checks tabs |
 | 7 | Orchestrate | Multi-agent | Plan preview, execution, summary |
