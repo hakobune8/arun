@@ -31,7 +31,8 @@ helm install agentos agentos/agentos \
 - **Task Planning** — LLM generates structured execution plans from task descriptions
 - **Tool Execution** — Read, write, search, shell, git, and test tools
 - **Review & Retry** — Automated code review with retry on test/lint failure
-- **GitHub Integration** — Issue fetching, PR creation, CI check inspection
+- **GitHub Automation** — Issue-triggered runs, PR creation, source issue comments, close policies, and approval gates
+- **GitHub App Tokens** — Installation-token support for repository write operations
 - **CI Fix Agent** — Automatic analysis and fix suggestions for CI failures
 - **Vector Search** — Local (JSON) or Qdrant vector store for semantic search
 - **Agent Memory** — Persistent memory with vector-based retrieval
@@ -39,10 +40,11 @@ helm install agentos agentos/agentos \
 - **Past PR Search** — Search across previous runs and PRs
 - **MCP Integration** — Connect to MCP servers for external tools
 - **Sandbox Interface** — Local execution today, Docker backend planned
-- **Web UI** — Built-in web dashboard for runs and search
+- **Web UI** — Built-in dashboard for runs, orchestration progress, logs, cancellation, recommendations, and approvals
 - **Agent Factory** — Create agents dynamically from profile templates
 - **Multi-Agent Orchestration** — Coordinate multiple agents on complex tasks
-- **Safety First** — Command denylist, secret detection, main branch protection
+- **Quality Gates** — Validate expected outputs, tests, lint, diffs, and generated artifacts before completion
+- **Safety First** — Command denylist, secret redaction, RBAC, audit logs, and main branch protection
 - **Full Audit Trail** — All LLM calls, tool executions, and artifacts saved per run
 - **Extensible** — Interface-based design for tools, LLM clients, and agents
 
@@ -106,6 +108,10 @@ agentos orchestrate \
   --strategy parallel \
   --repo . \
   --task "Implement user auth, tests, and documentation"
+
+# Start an issue-sourced orchestration from the Web/API
+# Supports close policies such as never, on_quality_gate_pass,
+# on_pr_merge, and after_human_approval.
 
 # Shell completion
 agentos completion zsh
@@ -200,6 +206,7 @@ pr_body.md        # Pull request body draft
 - [Architecture](docs/architecture.md) — System architecture overview
 - [Configuration](docs/configuration.md) — LiteLLM, Qdrant, Docker, MCP, templates
 - [Upgrade to v1.0](docs/upgrade-v1.md) — Migration notes for v0.x users
+- [Upgrade to v1.1](docs/upgrade-v1.1.md) — GitHub automation, quality gates, and approval changes
 - [Profiles](docs/profiles.md) — Profile YAML schema reference
 - [Agent Definitions](docs/agent-definitions.md) — Versioned Agent YAML format (agentos.io/v1)
 - [Safety](docs/safety.md) — Safety mechanisms and command policies
