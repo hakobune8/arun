@@ -181,6 +181,8 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
           <div class="form-group">
             <label>Task Description</label>
             <textarea id="orchTask" placeholder="Describe what the agents should accomplish..." required></textarea>
+            <button type="button" class="btn btn-secondary" style="margin-top:8px" onclick="recommendOrchestration()">Recommend</button>
+            <div id="orchRecommendation"></div>
           </div>
           <div class="form-group">
             <label>GitHub Artifacts</label>
@@ -427,6 +429,53 @@ async function submitOrchestrate(e) {
   } finally {
     btn.disabled = false;
   }
+}
+
+async function recommendOrchestration() {
+  const target = document.getElementById('orchRecommendation');
+  const task = document.getElementById('orchTask').value.trim();
+  if (!task) {
+    target.innerHTML = '<p class="error" style="margin-top:8px">Enter a task description first.</p>';
+    return;
+  }
+  target.innerHTML = '<p class="empty">Generating recommendation...</p>';
+  try {
+    const rec = await api('/api/orchestrate/recommend', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        repo: document.getElementById('orchRepo').value.trim(),
+        baseBranch: document.getElementById('orchBaseBranch').value.trim() || 'main',
+        task: task
+      })
+    });
+    window.lastOrchRecommendation = rec;
+    target.innerHTML = renderRecommendation(rec);
+  } catch(e) {
+    target.innerHTML = '<p class="error" style="margin-top:8px">Recommendation failed: ' + escape(e.message) + '</p>';
+  }
+}
+
+function renderRecommendation(rec) {
+  const confidence = Math.round((rec.confidence || 0) * 100);
+  const agents = (rec.agents || []).map(a => '<span class="tag">' + escape(a) + '</span>').join('');
+  return '<div class="agent-card" style="margin-top:10px">' +
+    '<h3>' + escape(rec.preset || 'general') + ' <span class="muted">' + confidence + '%</span></h3>' +
+    '<p>' + escape(rec.rationale || '') + '</p>' +
+    '<div class="tags">' + agents + '<span class="tag">' + escape(rec.strategy || 'sequential') + '</span>' +
+    '<span class="tag">' + (rec.createPullRequest ? 'create PR' : 'report only') + '</span>' +
+    '<span class="tag">' + (rec.requireApproval ? 'approval recommended' : 'no approval gate') + '</span></div>' +
+    '<button type="button" class="btn btn-secondary" style="margin-top:10px" onclick="applyRecommendation()">Apply Recommendation</button>' +
+    '</div>';
+}
+
+function applyRecommendation() {
+  const rec = window.lastOrchRecommendation;
+  if (!rec) return;
+  const wanted = new Set(rec.agents || []);
+  document.querySelectorAll('#orchAgents input').forEach(c => { c.checked = wanted.has(c.value); });
+  if (rec.strategy) document.getElementById('orchStrategy').value = rec.strategy;
+  document.getElementById('orchCreatePR').checked = !!rec.createPullRequest;
 }
 
 async function loadOrchestrates() {
