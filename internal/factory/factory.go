@@ -240,6 +240,8 @@ func ProfileFromDefinition(def *agent.Definition) *profile.Profile {
 	prof.Commands.Test = def.Spec.Commands.Test
 	prof.Commands.Lint = def.Spec.Commands.Lint
 	prof.Commands.Build = def.Spec.Commands.Build
+	prof.Guidance.Architecture = def.Spec.Guidance.Architecture
+	prof.Guidance.OutputExpectations = def.Spec.Guidance.OutputExpectations
 	if def.Spec.Limits.MaxRetries > 0 {
 		prof.Limits.MaxRetries = def.Spec.Limits.MaxRetries
 	}

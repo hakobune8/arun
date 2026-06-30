@@ -579,10 +579,19 @@ func TestOrchestrationRecordStore_RoundTrip(t *testing.T) {
 		BaseBranch: "main",
 		Task:       "test",
 		Agents:     []string{"go-backend"},
-		Strategy:   "parallel",
-		Status:     "completed",
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		CustomAgents: []agent.Definition{{
+			APIVersion: agent.CurrentSchemaVersion,
+			Kind:       "Agent",
+			Metadata:   agent.DefinitionMetadata{Name: "repo-security", Labels: map[string]string{"role": "security"}},
+			Spec: agent.DefinitionSpec{
+				LLM:   agent.LLMConfig{Model: "coder"},
+				Tools: agent.ToolsConfig{Allow: []string{"read_file", "search"}},
+			},
+		}},
+		Strategy:  "parallel",
+		Status:    "completed",
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	if err := saveOrchestrationRecord(record); err != nil {
 		t.Fatalf("saveOrchestrationRecord() error = %v", err)
@@ -594,12 +603,96 @@ func TestOrchestrationRecordStore_RoundTrip(t *testing.T) {
 	if got.ID != record.ID || got.Repo != record.Repo || got.Status != record.Status {
 		t.Fatalf("record = %+v, want %+v", got, record)
 	}
+	if len(got.CustomAgents) != 1 || got.CustomAgents[0].Metadata.Name != "repo-security" {
+		t.Fatalf("custom agents were not preserved: %+v", got.CustomAgents)
+	}
 	records, err := listOrchestrationRecords()
 	if err != nil {
 		t.Fatalf("listOrchestrationRecords() error = %v", err)
 	}
 	if len(records) != 1 || records[0].ID != record.ID {
 		t.Fatalf("records = %+v, want one %s", records, record.ID)
+	}
+}
+
+func TestLoadRepositoryAgentDefinitions_LoadsValidDefinitions(t *testing.T) {
+	repo := t.TempDir()
+	dir := filepath.Join(repo, ".agentos", "agents")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "frontend.yaml"), []byte(`apiVersion: agentos.io/v1
+kind: Agent
+metadata:
+  name: frontend-app
+  labels:
+    role: frontend
+spec:
+  llm:
+    model: coder
+  tools:
+    allow:
+      - read_file
+      - write_file
+      - search
+      - shell
+      - git
+      - test
+  safety:
+    denyCommands:
+      - rm -rf
+      - sudo
+  commands:
+    test: npm test
+  guidance:
+    architecture:
+      - Follow existing components.
+    outputExpectations:
+      - Build passes.
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	defs, err := loadRepositoryAgentDefinitions(repo, agent.DefaultRegistry())
+	if err != nil {
+		t.Fatalf("loadRepositoryAgentDefinitions() error = %v", err)
+	}
+	if len(defs) != 1 || defs[0].Metadata.Name != "frontend-app" {
+		t.Fatalf("defs = %+v", defs)
+	}
+}
+
+func TestValidateCustomAgentDefinitions_RejectsBuiltInOverride(t *testing.T) {
+	def := agent.Definition{
+		APIVersion: agent.CurrentSchemaVersion,
+		Kind:       "Agent",
+		Metadata:   agent.DefinitionMetadata{Name: "go-backend"},
+		Spec: agent.DefinitionSpec{
+			LLM:   agent.LLMConfig{Model: "coder"},
+			Tools: agent.ToolsConfig{Allow: []string{"read_file"}},
+		},
+	}
+	_, err := validateCustomAgentDefinitions([]agent.Definition{def}, agent.DefaultRegistry())
+	if err == nil || !strings.Contains(err.Error(), "cannot override") {
+		t.Fatalf("error = %v, want override rejection", err)
+	}
+}
+
+func TestValidateCustomAgentDefinitions_RejectsUnsafeCommands(t *testing.T) {
+	def := agent.Definition{
+		APIVersion: agent.CurrentSchemaVersion,
+		Kind:       "Agent",
+		Metadata:   agent.DefinitionMetadata{Name: "repo-security"},
+		Spec: agent.DefinitionSpec{
+			LLM:      agent.LLMConfig{Model: "coder"},
+			Tools:    agent.ToolsConfig{Allow: []string{"read_file", "shell"}},
+			Safety:   agent.SafetyConfig{DenyCommands: []string{"sudo"}},
+			Commands: agent.CommandsConfig{Test: "sudo go test ./..."},
+		},
+	}
+	_, err := validateCustomAgentDefinitions([]agent.Definition{def}, agent.DefaultRegistry())
+	if err == nil || !strings.Contains(err.Error(), "unsafe command") {
+		t.Fatalf("error = %v, want unsafe command rejection", err)
 	}
 }
 

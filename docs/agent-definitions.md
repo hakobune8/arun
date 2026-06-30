@@ -4,6 +4,10 @@ AgentOS supports a versioned, declarative YAML format for defining agents.
 The runtime can instantiate agents directly from definition files — no Go
 code required.
 
+Target repositories can also provide custom orchestration agents under
+`.agentos/agents/*.yaml`. See [Repository Agents](repository-agents.md) for
+Web UI loading, validation rules, and examples.
+
 ## Schema
 
 ```yaml

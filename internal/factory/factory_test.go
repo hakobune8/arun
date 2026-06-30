@@ -184,6 +184,10 @@ func TestProfileFromDefinition(t *testing.T) {
 				MaxRetries:    2,
 				MaxIterations: 5,
 			},
+			Guidance: agent.GuidanceConfig{
+				Architecture:       []string{"Preserve layout."},
+				OutputExpectations: []string{"Tests pass."},
+			},
 		},
 	}
 
@@ -208,5 +212,11 @@ func TestProfileFromDefinition(t *testing.T) {
 	}
 	if len(prof.Tools.DenyCommands) != 1 || prof.Tools.DenyCommands[0] != "sudo" {
 		t.Fatalf("deny commands not mapped: %+v", prof.Tools.DenyCommands)
+	}
+	if len(prof.Guidance.Architecture) != 1 || prof.Guidance.Architecture[0] != "Preserve layout." {
+		t.Fatalf("architecture guidance not mapped: %+v", prof.Guidance.Architecture)
+	}
+	if len(prof.Guidance.OutputExpectations) != 1 || prof.Guidance.OutputExpectations[0] != "Tests pass." {
+		t.Fatalf("output expectations not mapped: %+v", prof.Guidance.OutputExpectations)
 	}
 }
