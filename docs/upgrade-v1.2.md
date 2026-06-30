@@ -137,7 +137,16 @@ chart version.
   agents.
 - Confirm `CHANGELOG.md` v1.2.0 notes include every closed v1.2 milestone issue.
 - Verify README feature summaries match the final agent registry and Web UI.
+- Verify the README screenshot shows the current React/Tailwind Web UI rather
+  than the legacy static HTML UI.
+- Verify `charts/agentos/Chart.yaml` has the final release `version` and
+  `appVersion`, and `charts/agentos/values.yaml` defaults `image.tag` to the
+  final release image tag.
+- Verify `docs/deployment.md` and README install examples either rely on the
+  chart default image tag or explicitly reference the final v1.2.0 image tag.
 - Confirm this upgrade guide no longer contains draft-only wording before the
   v1.2.0 tag is created.
-- Build and deploy the final v1.2.0 image, then run the documented health and
-  Web UI asset checks.
+- Build and deploy the final v1.2.0 image, then run the documented health,
+  Web UI asset, and repository picker checks.
+- Confirm the deployed image tag, chart version, GitHub release tag, and
+  changelog heading all refer to the same final v1.2.0 version.
