@@ -20,6 +20,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/kazyamaz200/agentos/internal/safety"
 )
 
 // LogEntry is a generic log message with level, component, and optional
@@ -56,12 +58,13 @@ type LLMLogEntry struct {
 // Logger writes structured JSON log entries (generic logs, tool calls, LLM
 // calls) to files in a run directory.
 type Logger struct {
-	runDir string
+	runDir   string
+	redactor *safety.Redactor
 }
 
 // NewLogger returns a Logger that writes to files in runDir.
 func NewLogger(runDir string) *Logger {
-	return &Logger{runDir: runDir}
+	return &Logger{runDir: runDir, redactor: safety.NewRedactor()}
 }
 
 // Log appends a LogEntry to run.log.
@@ -70,8 +73,8 @@ func (l *Logger) Log(level, component, message string, data any) error {
 		Timestamp: time.Now(),
 		Level:     level,
 		Component: component,
-		Message:   message,
-		Data:      data,
+		Message:   l.redactor.RedactString(message),
+		Data:      l.redactor.RedactValue(data),
 	}
 	return l.appendJSON("run.log", entry)
 }
@@ -81,8 +84,8 @@ func (l *Logger) LogTool(tool string, input, output any, duration time.Duration)
 	entry := ToolLogEntry{
 		Timestamp: time.Now(),
 		Tool:      tool,
-		Input:     input,
-		Output:    output,
+		Input:     l.redactor.RedactValue(input),
+		Output:    l.redactor.RedactValue(output),
 		Duration:  duration.String(),
 	}
 	return l.appendJSON("tool_log.jsonl", entry)
@@ -92,8 +95,8 @@ func (l *Logger) LogTool(tool string, input, output any, duration time.Duration)
 func (l *Logger) LogLLM(req, resp any, model string, duration time.Duration, promptTokens, completionTokens int) error {
 	entry := LLMLogEntry{
 		Timestamp:        time.Now(),
-		Request:          req,
-		Response:         resp,
+		Request:          l.redactor.RedactValue(req),
+		Response:         l.redactor.RedactValue(resp),
 		Model:            model,
 		Duration:         duration.String(),
 		PromptTokens:     promptTokens,

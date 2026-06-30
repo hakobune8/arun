@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kazyamaz200/agentos/internal/llm"
@@ -147,6 +148,51 @@ func TestRuntime_RunSavesExecutionArtifactsOnFailure(t *testing.T) {
 	}
 	if data, err := os.ReadFile(filepath.Join(runDir, "lint.log")); err != nil || string(data) != "lint failed" {
 		t.Fatalf("lint.log = %q, err=%v", data, err)
+	}
+}
+
+func TestRuntime_RunRedactsExecutionArtifacts(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("AGENTOS_HOME", home)
+
+	prof := profile.DefaultProfile()
+	ws := sandbox.NewWorkspace(t.TempDir())
+	agt := &mockAgent{
+		plan: &Plan{Summary: "test"},
+		executeResult: &ExecutionResult{
+			Diff:    "+token: ghp_123456789012345678901234567890123456\n",
+			TestLog: "Cookie: agentos_session=signed-session-value",
+		},
+		executeErr: fmt.Errorf("validation failed"),
+	}
+	rt := NewRuntime(llm.NewMockLLMClient(nil), &prof, ws, &Config{}, agt)
+
+	err := rt.Run(context.Background(), &task.Task{
+		ID:         "redacted-artifacts",
+		Repo:       ws.RootDir(),
+		BaseBranch: "main",
+		Branch:     "agent/redacted-artifacts",
+		Title:      "redacted artifacts",
+	})
+	if err == nil {
+		t.Fatal("expected run error")
+	}
+
+	runDir := filepath.Join(home, "runs", "redacted-artifacts")
+	for _, name := range []string{"diff.patch", "test.log"} {
+		data, err := os.ReadFile(filepath.Join(runDir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(data)
+		for _, leaked := range []string{
+			"ghp_123456789012345678901234567890123456",
+			"signed-session-value",
+		} {
+			if strings.Contains(text, leaked) {
+				t.Fatalf("%s leaked %q: %s", name, leaked, text)
+			}
+		}
 	}
 }
 

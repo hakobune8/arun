@@ -22,6 +22,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/kazyamaz200/agentos/internal/safety"
 )
 
 // RunStatus represents the current phase of an agent run.
@@ -54,18 +56,21 @@ type RunRecord struct {
 // RunStore persists and loads RunRecord data as JSON in a specified
 // directory.
 type RunStore struct {
-	runDir string
+	runDir   string
+	redactor *safety.Redactor
 }
 
 // NewRunStore returns a RunStore that stores records in runDir.
 func NewRunStore(runDir string) *RunStore {
-	return &RunStore{runDir: runDir}
+	return &RunStore{runDir: runDir, redactor: safety.NewRedactor()}
 }
 
 // Save writes the run record as run_state.json inside the store directory.
 func (s *RunStore) Save(record *RunRecord) error {
 	path := filepath.Join(s.runDir, "run_state.json")
-	data, err := json.MarshalIndent(record, "", "  ")
+	clean := *record
+	clean.Error = s.redactor.RedactString(clean.Error)
+	data, err := json.MarshalIndent(&clean, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal run record: %w", err)
 	}

@@ -138,6 +138,37 @@ func TestLogger_LogLLM(t *testing.T) {
 	}
 }
 
+func TestLogger_RedactsSecrets(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	logger := NewLogger(dir)
+
+	err := logger.LogTool(
+		"shell",
+		map[string]string{"command": "curl -H 'Authorization: Bearer ghp_123456789012345678901234567890123456'"},
+		"Cookie: agentos_session=signed-session-value",
+		time.Millisecond,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(dir, "tool_log.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(content)
+	for _, leaked := range []string{
+		"ghp_123456789012345678901234567890123456",
+		"signed-session-value",
+	} {
+		if strings.Contains(text, leaked) {
+			t.Fatalf("log leaked %q: %s", leaked, text)
+		}
+	}
+}
+
 func TestLogger_AppendsToExistingFile(t *testing.T) {
 	t.Parallel()
 

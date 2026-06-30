@@ -26,6 +26,7 @@ import (
 	"github.com/kazyamaz200/agentos/internal/llm"
 	"github.com/kazyamaz200/agentos/internal/profile"
 	"github.com/kazyamaz200/agentos/internal/runtime"
+	"github.com/kazyamaz200/agentos/internal/safety"
 	"github.com/kazyamaz200/agentos/internal/sandbox"
 	"github.com/kazyamaz200/agentos/internal/task"
 )
@@ -572,6 +573,7 @@ func subtaskProfile(agentName string) profile.Profile {
 
 // MergeResults combines subtask results into a formatted report.
 func (o *Orchestrator) MergeResults(results []SubtaskResult) string {
+	redactor := safety.NewRedactor()
 	var b strings.Builder
 	b.WriteString("# Multi-Agent Execution Results\n\n")
 	for _, r := range results {
@@ -581,10 +583,10 @@ func (o *Orchestrator) MergeResults(results []SubtaskResult) string {
 		}
 		b.WriteString(fmt.Sprintf("## [%s] %s\n", status, r.SubtaskID))
 		if r.Output != "" {
-			b.WriteString(fmt.Sprintf("%s\n", r.Output))
+			b.WriteString(fmt.Sprintf("%s\n", redactor.RedactString(r.Output)))
 		}
 		if r.Error != "" {
-			b.WriteString(fmt.Sprintf("Error: %s\n", r.Error))
+			b.WriteString(fmt.Sprintf("Error: %s\n", redactor.RedactString(r.Error)))
 		}
 		b.WriteString("\n")
 	}
