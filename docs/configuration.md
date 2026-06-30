@@ -143,6 +143,48 @@ GitHub login uses OAuth `read:user` to identify the UI user. Repository cloning
 and GitHub API access use server-side GitHub App or token credentials; user
 scoped repository credentials are a later auth-aware extension.
 
+### Artifact Language and Templates
+
+The Web UI can set an output language per orchestration. Repositories can also
+define defaults in `.agentos/config.yaml`; explicit Web UI choices override
+repository defaults.
+
+Supported built-in languages are:
+
+- `en` for English
+- `ja` for Japanese
+
+Repository templates use Go `text/template` syntax. Available fields include
+`RunID`, `Repository`, `BaseBranch`, `TargetBranch`, `PRBase`, `Strategy`,
+`Agents`, `Task`, `Summary`, and `IssueURL`.
+
+Example `.agentos/config.yaml`:
+
+```yaml
+outputLanguage: ja
+templates:
+  issue:
+    body: |
+      AgentOS Orchestrate により作成されました。
+
+      - Run: `{{.RunID}}`
+      - Repository: `{{.Repository}}`
+      - Target branch: `{{.TargetBranch}}`
+
+      ## タスク
+
+      {{.Task}}
+  pullRequest:
+    body: |
+      AgentOS Orchestrate により作成されました。
+
+      {{if .IssueURL}}Tracking issue: {{.IssueURL}}
+
+      {{end}}## 概要
+
+      {{.Summary}}
+```
+
 ---
 
 ## Agent Templates

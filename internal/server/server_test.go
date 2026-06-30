@@ -622,6 +622,9 @@ func TestPrepareOrchestrationGitHub_Defaults(t *testing.T) {
 	if got.PRBase != "main" || !got.CreateIssue || !got.CreatePullRequest {
 		t.Fatalf("github state = %+v", got)
 	}
+	if got.IssueTemplate != "default" || got.PRTemplate != "default" {
+		t.Fatalf("templates = %q/%q, want default/default", got.IssueTemplate, got.PRTemplate)
+	}
 }
 
 func TestPrepareOrchestrationGitHub_RejectsNonGitHubRepo(t *testing.T) {
@@ -642,18 +645,21 @@ func TestOrchestrationRecordStore_PreservesGitHubArtifacts(t *testing.T) {
 	t.Setenv("AGENTOS_HOME", shortTestDir(t))
 	now := time.Now().UTC().Truncate(time.Second)
 	record := &orchestrationRecord{
-		ID:         "run-0123456789abcdef",
-		Repo:       "owner/repo",
-		BaseBranch: "main",
-		Task:       "test",
-		Agents:     []string{"go-backend"},
-		Strategy:   "parallel",
-		Status:     "completed",
+		ID:             "run-0123456789abcdef",
+		Repo:           "owner/repo",
+		BaseBranch:     "main",
+		Task:           "test",
+		Agents:         []string{"go-backend"},
+		Strategy:       "parallel",
+		OutputLanguage: "ja",
+		Status:         "completed",
 		GitHub: &orchestrationGitHubState{
 			Repo:              "owner/repo",
 			BranchName:        "agentos/run-0123456789abcdef",
+			IssueTemplate:     "repository",
 			IssueURL:          "https://github.com/owner/repo/issues/1",
 			IssueNumber:       1,
+			PRTemplate:        "repository",
 			PullRequestURL:    "https://github.com/owner/repo/pull/2",
 			PullRequestNumber: 2,
 		},
@@ -669,6 +675,91 @@ func TestOrchestrationRecordStore_PreservesGitHubArtifacts(t *testing.T) {
 	}
 	if got.GitHub == nil || got.GitHub.IssueNumber != 1 || got.GitHub.PullRequestNumber != 2 {
 		t.Fatalf("GitHub = %+v", got.GitHub)
+	}
+	if got.OutputLanguage != "ja" || got.GitHub.IssueTemplate != "repository" || got.GitHub.PRTemplate != "repository" {
+		t.Fatalf("language/templates = %q/%q/%q", got.OutputLanguage, got.GitHub.IssueTemplate, got.GitHub.PRTemplate)
+	}
+}
+
+func TestArtifactTemplates_DefaultEnglishAndJapanese(t *testing.T) {
+	record := &orchestrationRecord{
+		ID:         "run-0123456789abcdef",
+		Repo:       "owner/repo",
+		BaseBranch: "main",
+		Task:       "Implement feature",
+		Agents:     []string{"go-backend", "reviewer"},
+		Strategy:   "sequential",
+		GitHub: &orchestrationGitHubState{
+			Repo:          "owner/repo",
+			BranchName:    "agentos/run-0123456789abcdef",
+			IssueTemplate: "default",
+			PRTemplate:    "default",
+			PRBase:        "main",
+		},
+		Summary: "Done",
+	}
+	issue := orchestrationIssueBody(record)
+	if !strings.Contains(issue, "## Task") || !strings.Contains(issue, "Implement feature") {
+		t.Fatalf("english issue body = %q", issue)
+	}
+	pr := orchestrationPRBody(record)
+	if !strings.Contains(pr, "## Summary") || !strings.Contains(pr, "Done") {
+		t.Fatalf("english PR body = %q", pr)
+	}
+
+	record.OutputLanguage = "ja"
+	issue = orchestrationIssueBody(record)
+	if !strings.Contains(issue, "## タスク") || !strings.Contains(issue, "AgentOS Orchestrate により作成されました") {
+		t.Fatalf("japanese issue body = %q", issue)
+	}
+	pr = orchestrationPRBody(record)
+	if !strings.Contains(pr, "## 概要") || !strings.Contains(pr, "Done") {
+		t.Fatalf("japanese PR body = %q", pr)
+	}
+}
+
+func TestArtifactTemplates_RepositoryConfigFallback(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".agentos"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".agentos", "config.yaml"), []byte(`outputLanguage: ja
+templates:
+  issue:
+    body: |
+      Repo issue for {{.RunID}}
+      Task={{.Task}}
+  pullRequest:
+    body: |
+      Repo PR for {{.RunID}}
+      Summary={{.Summary}}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	req := &orchestrateRequest{Repo: "owner/repo", Task: "Task text", GitHub: &orchestrateGitHubRequest{CreateIssue: true, CreatePullRequest: true}}
+	cfg := loadArtifactConfig(repo)
+	applyArtifactConfig(req, cfg)
+	if req.OutputLanguage != "ja" || req.GitHub.IssueTemplate != "repository" || req.GitHub.PRTemplate != "repository" {
+		t.Fatalf("request after config = %+v github=%+v", req, req.GitHub)
+	}
+
+	record := &orchestrationRecord{
+		ID:             "run-0123456789abcdef",
+		RepoPath:       repo,
+		Task:           "Task text",
+		OutputLanguage: req.OutputLanguage,
+		GitHub: &orchestrationGitHubState{
+			Repo:          "owner/repo",
+			IssueTemplate: req.GitHub.IssueTemplate,
+			PRTemplate:    req.GitHub.PRTemplate,
+		},
+		Summary: "Summary text",
+	}
+	if body := orchestrationIssueBody(record); !strings.Contains(body, "Repo issue for run-0123456789abcdef") || !strings.Contains(body, "Task=Task text") {
+		t.Fatalf("repository issue body = %q", body)
+	}
+	if body := orchestrationPRBody(record); !strings.Contains(body, "Repo PR for run-0123456789abcdef") || !strings.Contains(body, "Summary=Summary text") {
+		t.Fatalf("repository PR body = %q", body)
 	}
 }
 

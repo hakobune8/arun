@@ -15,6 +15,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"embed"
@@ -35,6 +36,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	"github.com/kazyamaz200/agentos/internal/agent"
@@ -50,6 +52,7 @@ import (
 	"github.com/kazyamaz200/agentos/internal/search"
 	"github.com/kazyamaz200/agentos/internal/task"
 	"github.com/kazyamaz200/agentos/internal/vector"
+	"gopkg.in/yaml.v3"
 )
 
 //go:embed static
@@ -457,13 +460,14 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 // --- Orchestrate ---
 
 type orchestrateRequest struct {
-	Agents     []string                  `json:"agents"`
-	Repo       string                    `json:"repo"`
-	BaseBranch string                    `json:"baseBranch"`
-	Task       string                    `json:"task"`
-	Strategy   string                    `json:"strategy"`
-	LLMPreset  string                    `json:"llmPreset"`
-	GitHub     *orchestrateGitHubRequest `json:"github,omitempty"`
+	Agents         []string                  `json:"agents"`
+	Repo           string                    `json:"repo"`
+	BaseBranch     string                    `json:"baseBranch"`
+	Task           string                    `json:"task"`
+	Strategy       string                    `json:"strategy"`
+	LLMPreset      string                    `json:"llmPreset"`
+	OutputLanguage string                    `json:"outputLanguage,omitempty"`
+	GitHub         *orchestrateGitHubRequest `json:"github,omitempty"`
 }
 
 type orchestrateGitHubRequest struct {
@@ -473,28 +477,31 @@ type orchestrateGitHubRequest struct {
 	PRBase            string `json:"prBase"`
 	IssueTitle        string `json:"issueTitle"`
 	PRTitle           string `json:"prTitle"`
+	IssueTemplate     string `json:"issueTemplate,omitempty"`
+	PRTemplate        string `json:"prTemplate,omitempty"`
 }
 
 type orchestrationRecord struct {
-	ID         string                       `json:"id"`
-	Actor      string                       `json:"actor,omitempty"`
-	Repo       string                       `json:"repo"`
-	RepoPath   string                       `json:"repoPath,omitempty"`
-	BaseBranch string                       `json:"baseBranch"`
-	Task       string                       `json:"task"`
-	Agents     []string                     `json:"agents"`
-	Strategy   string                       `json:"strategy"`
-	LLMPreset  string                       `json:"llmPreset"`
-	Status     string                       `json:"status"`
-	Error      string                       `json:"error,omitempty"`
-	Plan       *orchestrator.TaskPlan       `json:"plan,omitempty"`
-	Subtasks   []orchestrationSubtaskState  `json:"subtasks,omitempty"`
-	Results    []orchestrator.SubtaskResult `json:"results,omitempty"`
-	Events     []orchestrationEvent         `json:"events,omitempty"`
-	Summary    string                       `json:"summary,omitempty"`
-	GitHub     *orchestrationGitHubState    `json:"github,omitempty"`
-	CreatedAt  time.Time                    `json:"createdAt"`
-	UpdatedAt  time.Time                    `json:"updatedAt"`
+	ID             string                       `json:"id"`
+	Actor          string                       `json:"actor,omitempty"`
+	Repo           string                       `json:"repo"`
+	RepoPath       string                       `json:"repoPath,omitempty"`
+	BaseBranch     string                       `json:"baseBranch"`
+	Task           string                       `json:"task"`
+	Agents         []string                     `json:"agents"`
+	Strategy       string                       `json:"strategy"`
+	LLMPreset      string                       `json:"llmPreset"`
+	OutputLanguage string                       `json:"outputLanguage,omitempty"`
+	Status         string                       `json:"status"`
+	Error          string                       `json:"error,omitempty"`
+	Plan           *orchestrator.TaskPlan       `json:"plan,omitempty"`
+	Subtasks       []orchestrationSubtaskState  `json:"subtasks,omitempty"`
+	Results        []orchestrator.SubtaskResult `json:"results,omitempty"`
+	Events         []orchestrationEvent         `json:"events,omitempty"`
+	Summary        string                       `json:"summary,omitempty"`
+	GitHub         *orchestrationGitHubState    `json:"github,omitempty"`
+	CreatedAt      time.Time                    `json:"createdAt"`
+	UpdatedAt      time.Time                    `json:"updatedAt"`
 }
 
 type orchestrationEvent struct {
@@ -508,9 +515,11 @@ type orchestrationGitHubState struct {
 	Repo              string `json:"repo"`
 	BranchName        string `json:"branchName,omitempty"`
 	IssueTitle        string `json:"issueTitle,omitempty"`
+	IssueTemplate     string `json:"issueTemplate,omitempty"`
 	IssueURL          string `json:"issueUrl,omitempty"`
 	IssueNumber       int    `json:"issueNumber,omitempty"`
 	PRTitle           string `json:"prTitle,omitempty"`
+	PRTemplate        string `json:"prTemplate,omitempty"`
 	PRBase            string `json:"prBase,omitempty"`
 	PullRequestURL    string `json:"pullRequestUrl,omitempty"`
 	PullRequestNumber int    `json:"pullRequestNumber,omitempty"`
@@ -583,6 +592,8 @@ func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	artifactConfig := loadArtifactConfig(repoPath)
+	applyArtifactConfig(&req, artifactConfig)
 
 	agents := make(map[string]runtime.Agent)
 	for _, name := range req.Agents {
@@ -603,19 +614,20 @@ func (s *Server) handleOrchestrate(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	record := &orchestrationRecord{
-		ID:         id,
-		Actor:      actorLogin(user),
-		Repo:       req.Repo,
-		RepoPath:   repoPath,
-		BaseBranch: req.BaseBranch,
-		Task:       req.Task,
-		Agents:     req.Agents,
-		Strategy:   req.Strategy,
-		LLMPreset:  presetID,
-		Status:     "planning",
-		GitHub:     githubState,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		ID:             id,
+		Actor:          actorLogin(user),
+		Repo:           req.Repo,
+		RepoPath:       repoPath,
+		BaseBranch:     req.BaseBranch,
+		Task:           req.Task,
+		Agents:         req.Agents,
+		Strategy:       req.Strategy,
+		LLMPreset:      presetID,
+		OutputLanguage: normalizeOutputLanguage(req.OutputLanguage),
+		Status:         "planning",
+		GitHub:         githubState,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 	appendOrchestrationEvent(record, "created", "", "Orchestration created")
 	if record.Repo == "" {
@@ -1249,12 +1261,16 @@ func prepareOrchestrationGitHub(id string, req *orchestrateRequest) (*orchestrat
 	if prTitle == "" {
 		prTitle = strings.TrimSpace(req.Task)
 	}
+	issueTemplate := normalizeArtifactTemplateID(req.GitHub.IssueTemplate)
+	prTemplate := normalizeArtifactTemplateID(req.GitHub.PRTemplate)
 
 	return &orchestrationGitHubState{
 		Repo:              full,
 		BranchName:        branch,
 		IssueTitle:        issueTitle,
+		IssueTemplate:     issueTemplate,
 		PRTitle:           prTitle,
+		PRTemplate:        prTemplate,
 		PRBase:            prBase,
 		CreateIssue:       req.GitHub.CreateIssue,
 		CreatePullRequest: req.GitHub.CreatePullRequest,
@@ -1367,36 +1383,208 @@ func (s *Server) auditGitHubArtifact(record *orchestrationRecord, action string,
 	})
 }
 
+type artifactConfig struct {
+	OutputLanguage string `yaml:"outputLanguage"`
+	Templates      struct {
+		Issue struct {
+			Body string `yaml:"body"`
+		} `yaml:"issue"`
+		PullRequest struct {
+			Body string `yaml:"body"`
+		} `yaml:"pullRequest"`
+	} `yaml:"templates"`
+}
+
+type artifactTemplateData struct {
+	RunID        string
+	Repository   string
+	BaseBranch   string
+	TargetBranch string
+	PRBase       string
+	Strategy     string
+	Agents       string
+	Task         string
+	Summary      string
+	IssueURL     string
+}
+
+func loadArtifactConfig(repoPath string) artifactConfig {
+	var cfg artifactConfig
+	if repoPath == "" {
+		return cfg
+	}
+	raw, err := os.ReadFile(filepath.Join(repoPath, ".agentos", "config.yaml"))
+	if err != nil {
+		return cfg
+	}
+	if err := yaml.Unmarshal(raw, &cfg); err != nil {
+		slog.Warn("parse .agentos/config.yaml failed", "repoPath", repoPath, "error", err)
+	}
+	cfg.OutputLanguage = normalizeOutputLanguage(cfg.OutputLanguage)
+	return cfg
+}
+
+func applyArtifactConfig(req *orchestrateRequest, cfg artifactConfig) {
+	if req == nil {
+		return
+	}
+	if normalizeOutputLanguage(req.OutputLanguage) == "" {
+		req.OutputLanguage = cfg.OutputLanguage
+	}
+	req.OutputLanguage = normalizeOutputLanguage(req.OutputLanguage)
+	if req.GitHub == nil {
+		return
+	}
+	if strings.TrimSpace(req.GitHub.IssueTemplate) == "" && cfg.Templates.Issue.Body != "" {
+		req.GitHub.IssueTemplate = "repository"
+	}
+	if strings.TrimSpace(req.GitHub.PRTemplate) == "" && cfg.Templates.PullRequest.Body != "" {
+		req.GitHub.PRTemplate = "repository"
+	}
+}
+
+func normalizeOutputLanguage(language string) string {
+	switch strings.ToLower(strings.TrimSpace(language)) {
+	case "", "default":
+		return ""
+	case "ja", "japanese", "日本語":
+		return "ja"
+	case "en", "english":
+		return "en"
+	default:
+		return ""
+	}
+}
+
+func artifactLanguage(record *orchestrationRecord) string {
+	if record == nil {
+		return "en"
+	}
+	if language := normalizeOutputLanguage(record.OutputLanguage); language != "" {
+		return language
+	}
+	return "en"
+}
+
+func normalizeArtifactTemplateID(id string) string {
+	switch strings.ToLower(strings.TrimSpace(id)) {
+	case "", "default":
+		return "default"
+	case "repository", "repo":
+		return "repository"
+	default:
+		return "default"
+	}
+}
+
 func orchestrationIssueBody(record *orchestrationRecord) string {
-	var b strings.Builder
-	b.WriteString("Created by AgentOS Orchestrate.\n\n")
-	b.WriteString(fmt.Sprintf("- Run: `%s`\n", record.ID))
-	b.WriteString(fmt.Sprintf("- Repository: `%s`\n", record.GitHub.Repo))
-	b.WriteString(fmt.Sprintf("- Base branch: `%s`\n", record.BaseBranch))
-	b.WriteString(fmt.Sprintf("- Target branch: `%s`\n", record.GitHub.BranchName))
-	b.WriteString(fmt.Sprintf("- Strategy: `%s`\n", record.Strategy))
-	b.WriteString(fmt.Sprintf("- Agents: `%s`\n\n", strings.Join(record.Agents, ", ")))
-	b.WriteString("## Task\n\n")
-	b.WriteString(record.Task)
-	b.WriteString("\n")
-	return safety.NewRedactor().RedactString(b.String())
+	return renderArtifactBody(record, "issue")
 }
 
 func orchestrationPRBody(record *orchestrationRecord) string {
-	var b strings.Builder
-	b.WriteString("Created by AgentOS Orchestrate.\n\n")
-	if record.GitHub.IssueURL != "" {
-		b.WriteString(fmt.Sprintf("Tracking issue: %s\n\n", record.GitHub.IssueURL))
+	return renderArtifactBody(record, "pull_request")
+}
+
+func renderArtifactBody(record *orchestrationRecord, artifact string) string {
+	if record == nil {
+		return ""
 	}
-	b.WriteString(fmt.Sprintf("- Run: `%s`\n", record.ID))
-	b.WriteString(fmt.Sprintf("- Base branch: `%s`\n", record.GitHub.PRBase))
-	b.WriteString(fmt.Sprintf("- Agents: `%s`\n\n", strings.Join(record.Agents, ", ")))
-	if record.Summary != "" {
-		b.WriteString("## Summary\n\n")
-		b.WriteString(record.Summary)
-		b.WriteString("\n")
+	body := artifactTemplate(record, artifact)
+	data := artifactTemplateData{
+		RunID:        record.ID,
+		Repository:   "",
+		BaseBranch:   record.BaseBranch,
+		TargetBranch: "",
+		PRBase:       "",
+		Strategy:     record.Strategy,
+		Agents:       strings.Join(record.Agents, ", "),
+		Task:         record.Task,
+		Summary:      record.Summary,
+		IssueURL:     "",
 	}
-	return safety.NewRedactor().RedactString(b.String())
+	if record.GitHub != nil {
+		data.Repository = record.GitHub.Repo
+		data.TargetBranch = record.GitHub.BranchName
+		data.PRBase = record.GitHub.PRBase
+		data.IssueURL = record.GitHub.IssueURL
+	}
+	rendered, err := renderTextTemplate(body, &data)
+	if err != nil {
+		slog.Warn("render artifact template failed", "artifact", artifact, "run", record.ID, "error", err)
+		rendered, _ = renderTextTemplate(defaultArtifactTemplate(artifact, artifactLanguage(record)), &data)
+	}
+	return safety.NewRedactor().RedactString(rendered)
+}
+
+func artifactTemplate(record *orchestrationRecord, artifact string) string {
+	language := artifactLanguage(record)
+	templateID := "default"
+	if record != nil && record.GitHub != nil {
+		if artifact == "issue" {
+			templateID = normalizeArtifactTemplateID(record.GitHub.IssueTemplate)
+		} else {
+			templateID = normalizeArtifactTemplateID(record.GitHub.PRTemplate)
+		}
+	}
+	if templateID == "repository" && record != nil {
+		cfg := loadArtifactConfig(record.RepoPath)
+		if artifact == "issue" && cfg.Templates.Issue.Body != "" {
+			return cfg.Templates.Issue.Body
+		}
+		if artifact == "pull_request" && cfg.Templates.PullRequest.Body != "" {
+			return cfg.Templates.PullRequest.Body
+		}
+	}
+	return defaultArtifactTemplate(artifact, language)
+}
+
+func defaultArtifactTemplate(artifact, language string) string {
+	if artifact == "issue" {
+		if language == "ja" {
+			return "AgentOS Orchestrate により作成されました。\n\n" +
+				"- Run: `{{.RunID}}`\n" +
+				"- Repository: `{{.Repository}}`\n" +
+				"- Base branch: `{{.BaseBranch}}`\n" +
+				"- Target branch: `{{.TargetBranch}}`\n" +
+				"- Strategy: `{{.Strategy}}`\n" +
+				"- Agents: `{{.Agents}}`\n\n" +
+				"## タスク\n\n{{.Task}}\n"
+		}
+		return "Created by AgentOS Orchestrate.\n\n" +
+			"- Run: `{{.RunID}}`\n" +
+			"- Repository: `{{.Repository}}`\n" +
+			"- Base branch: `{{.BaseBranch}}`\n" +
+			"- Target branch: `{{.TargetBranch}}`\n" +
+			"- Strategy: `{{.Strategy}}`\n" +
+			"- Agents: `{{.Agents}}`\n\n" +
+			"## Task\n\n{{.Task}}\n"
+	}
+	if language == "ja" {
+		return "AgentOS Orchestrate により作成されました。\n\n" +
+			"{{if .IssueURL}}Tracking issue: {{.IssueURL}}\n\n{{end}}" +
+			"- Run: `{{.RunID}}`\n" +
+			"- Base branch: `{{.PRBase}}`\n" +
+			"- Agents: `{{.Agents}}`\n\n" +
+			"{{if .Summary}}## 概要\n\n{{.Summary}}\n{{end}}"
+	}
+	return "Created by AgentOS Orchestrate.\n\n" +
+		"{{if .IssueURL}}Tracking issue: {{.IssueURL}}\n\n{{end}}" +
+		"- Run: `{{.RunID}}`\n" +
+		"- Base branch: `{{.PRBase}}`\n" +
+		"- Agents: `{{.Agents}}`\n\n" +
+		"{{if .Summary}}## Summary\n\n{{.Summary}}\n{{end}}"
+}
+
+func renderTextTemplate(body string, data *artifactTemplateData) (string, error) {
+	tpl, err := template.New("artifact").Option("missingkey=zero").Parse(body)
+	if err != nil {
+		return "", err
+	}
+	var out bytes.Buffer
+	if err := tpl.Execute(&out, data); err != nil {
+		return "", err
+	}
+	return out.String(), nil
 }
 
 func githubRepoForAPI(repo string) (owner, name, full string, ok bool) {

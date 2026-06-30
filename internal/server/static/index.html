@@ -171,6 +171,14 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
             <p id="orchLLMPresetMeta" class="muted" style="margin-top:4px"></p>
           </div>
           <div class="form-group">
+            <label>Output Language</label>
+            <select id="orchOutputLanguage">
+              <option value="">Repository default / English</option>
+              <option value="en">English</option>
+              <option value="ja">Japanese</option>
+            </select>
+          </div>
+          <div class="form-group">
             <label>Task Description</label>
             <textarea id="orchTask" placeholder="Describe what the agents should accomplish..." required></textarea>
           </div>
@@ -185,6 +193,8 @@ pre{background:#0d1117;padding:12px;border-radius:6px;overflow:auto;font-size:12
               <input type="text" id="orchPRBase" placeholder="PR base branch">
               <input type="text" id="orchIssueTitle" placeholder="Issue title">
               <input type="text" id="orchPRTitle" placeholder="PR title">
+              <select id="orchIssueTemplate"><option value="">Auto Issue Template</option><option value="default">Built-in Issue Template</option><option value="repository">Repository Issue Template</option></select>
+              <select id="orchPRTemplate"><option value="">Auto PR Template</option><option value="default">Built-in PR Template</option><option value="repository">Repository PR Template</option></select>
             </div>
           </div>
           <button type="submit" class="btn">Start Orchestration</button>
@@ -397,13 +407,16 @@ async function submitOrchestrate(e) {
         task: document.getElementById('orchTask').value,
         strategy: document.getElementById('orchStrategy').value,
         llmPreset: document.getElementById('orchLLMPreset').value,
+        outputLanguage: document.getElementById('orchOutputLanguage').value,
         github: {
           createIssue: document.getElementById('orchCreateIssue').checked,
           createPullRequest: document.getElementById('orchCreatePR').checked,
           branchName: document.getElementById('orchBranchName').value.trim(),
           prBase: document.getElementById('orchPRBase').value.trim(),
           issueTitle: document.getElementById('orchIssueTitle').value.trim(),
-          prTitle: document.getElementById('orchPRTitle').value.trim()
+          prTitle: document.getElementById('orchPRTitle').value.trim(),
+          issueTemplate: document.getElementById('orchIssueTemplate').value,
+          prTemplate: document.getElementById('orchPRTemplate').value
         }
       })
     });
@@ -496,7 +509,7 @@ function renderOrchestrationDetail() {
   div.innerHTML =
     '<div class="card">' +
     '<div class="detail-header"><div><h2>' + escape(r.id) + ' ' + statusSpan(r.status) + '</h2>' +
-    '<div class="detail-meta"><span class="repo-pill">' + escape(r.repo || '-') + '</span><span class="repo-pill">' + escape(r.baseBranch || '-') + '</span><span class="repo-pill">' + escape(r.strategy || '-') + '</span><span class="repo-pill">' + escape(r.llmPreset || '-') + '</span></div></div>' +
+    '<div class="detail-meta"><span class="repo-pill">' + escape(r.repo || '-') + '</span><span class="repo-pill">' + escape(r.baseBranch || '-') + '</span><span class="repo-pill">' + escape(r.strategy || '-') + '</span><span class="repo-pill">' + escape(r.llmPreset || '-') + '</span><span class="repo-pill">' + escape(r.outputLanguage || 'en') + '</span></div></div>' +
     '<div class="actions">' + ((r.status === 'planning' || r.status === 'running') ? '<button class="btn btn-danger" onclick="cancelCurrentOrchestration()">Cancel</button>' : '') + '<button class="btn btn-secondary" onclick="refreshCurrentOrchestration()">Refresh</button></div></div>' +
     '<p class="muted" style="margin-top:12px">' + escape(r.task || '') + '</p>' +
     renderGitHubArtifacts(r.github) +
