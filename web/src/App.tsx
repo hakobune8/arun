@@ -113,6 +113,16 @@ function shortText(value: unknown, size = 120) {
   return text.length > size ? `${text.slice(0, size - 1)}...` : text
 }
 
+function readableTask(value: unknown) {
+  return String(value ?? '')
+    .replace(/\s+(Source issue:)/g, '\n$1')
+    .replace(/\s+(Source PR:)/g, '\n$1')
+    .replace(/\s+(Issue body:)/g, '\n$1')
+    .replace(/\s+(PR body:)/g, '\n$1')
+    .replace(/\s+(Labels?:)/g, '\n$1')
+    .trim()
+}
+
 function formatTime(value?: string) {
   if (!value || value === '0001-01-01T00:00:00Z') return '-'
   const date = new Date(value)
@@ -634,10 +644,18 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
               <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.createPullRequest} onChange={(e) => update({ createPullRequest: e.target.checked })} />Create PR</label>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <input className={inputClass} value={form.branchName} onChange={(e) => update({ branchName: e.target.value })} placeholder="agentos/run-id" />
-              <input className={inputClass} value={form.prBase} onChange={(e) => update({ prBase: e.target.value })} placeholder="PR base branch" />
-              <input className={inputClass} value={form.issueTitle} onChange={(e) => update({ issueTitle: e.target.value })} placeholder="Issue title" />
-              <input className={inputClass} value={form.prTitle} onChange={(e) => update({ prTitle: e.target.value })} placeholder="PR title" />
+              <Field label="Branch name (optional)">
+                <input className={inputClass} value={form.branchName} onChange={(e) => update({ branchName: e.target.value })} placeholder="agentos/<run-id>" />
+              </Field>
+              <Field label="PR base branch">
+                <input className={inputClass} value={form.prBase} onChange={(e) => update({ prBase: e.target.value })} placeholder="main" />
+              </Field>
+              <Field label="Issue title">
+                <input className={inputClass} value={form.issueTitle} onChange={(e) => update({ issueTitle: e.target.value })} placeholder="Issue title" />
+              </Field>
+              <Field label="PR title">
+                <input className={inputClass} value={form.prTitle} onChange={(e) => update({ prTitle: e.target.value })} placeholder="PR title" />
+              </Field>
             </div>
           </div>
         </Panel>
@@ -708,7 +726,7 @@ function OrchestrationDetail({ current, selectedID, tab, setTab, refresh }: { cu
             <IconButton tone="secondary" icon={<RefreshCw className="size-4" />} onClick={refresh}>Refresh</IconButton>
           </div>
         </div>
-        <p className="mt-3 break-words text-sm text-soft">{current.task}</p>
+        <pre className="mt-3 whitespace-pre-wrap break-words font-sans text-sm leading-6 text-soft">{readableTask(current.task)}</pre>
         {current.error ? <p className="mt-3 break-words text-sm text-red-os">{current.error}</p> : null}
       </Panel>
       <Panel className="p-2">
@@ -992,14 +1010,26 @@ function AgentsPage({ agents, reload }: { agents: AgentInfo[]; reload: () => voi
 }
 
 function AuditPage({ audit, reload }: { audit: Json[]; reload: () => void }) {
+  const thClass = 'px-3 py-2 font-semibold'
+  const tdClass = 'px-3 py-3'
+
   return (
     <Panel>
       <div className="mb-4 flex items-center justify-between gap-3"><h1 className="text-lg font-semibold text-ink">Audit</h1><IconButton tone="secondary" icon={<RefreshCw className="size-4" />} onClick={reload}>Refresh</IconButton></div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] text-left text-sm">
-          <thead className="text-xs text-soft"><tr><th className="py-2">Time</th><th>Actor</th><th>Action</th><th>Outcome</th><th>Target</th><th>Run</th><th>Message</th></tr></thead>
+        <table className="w-full min-w-[1040px] table-fixed text-left text-sm">
+          <colgroup>
+            <col className="w-[8.5rem]" />
+            <col className="w-[9rem]" />
+            <col className="w-[13rem]" />
+            <col className="w-[7.5rem]" />
+            <col className="w-[15rem]" />
+            <col className="w-[9rem]" />
+            <col />
+          </colgroup>
+          <thead className="text-xs text-soft"><tr><th className={thClass}>Time</th><th className={thClass}>Actor</th><th className={thClass}>Action</th><th className={thClass}>Outcome</th><th className={thClass}>Target</th><th className={thClass}>Run</th><th className={thClass}>Message</th></tr></thead>
           <tbody className="divide-y divide-line">
-            {audit.map((e, idx) => <tr key={`${e.timestamp}-${idx}`} className="align-top"><td className="py-2 text-soft">{formatTime(e.timestamp)}</td><td>{e.actor ?? '-'}</td><td className="break-words">{e.action ?? '-'}</td><td><Status value={e.outcome} /></td><td className="break-words">{shortText(e.target ?? e.repo ?? '-', 48)}</td><td className="break-all">{e.runId ?? '-'}</td><td className="break-words">{shortText(e.message, 100)}</td></tr>)}
+            {audit.map((e, idx) => <tr key={`${e.timestamp}-${idx}`} className="align-top"><td className={cx(tdClass, 'text-soft')}>{formatTime(e.timestamp)}</td><td className={cx(tdClass, 'break-all')}>{e.actor ?? '-'}</td><td className={cx(tdClass, 'break-all')}>{e.action ?? '-'}</td><td className={tdClass}><Status value={e.outcome} /></td><td className={cx(tdClass, 'break-words')}>{shortText(e.target ?? e.repo ?? '-', 64)}</td><td className={cx(tdClass, 'break-all')} title={String(e.runId ?? '-')}>{shortText(e.runId ?? '-', 22)}</td><td className={cx(tdClass, 'break-words')}>{shortText(e.message, 140)}</td></tr>)}
           </tbody>
         </table>
       </div>
