@@ -3,6 +3,7 @@ import type { ButtonHTMLAttributes, Dispatch, FormEvent, ReactNode, SetStateActi
 import {
   Activity,
   Archive,
+  Bell,
   Bot,
   Boxes,
   CalendarClock,
@@ -97,11 +98,27 @@ type Schedule = {
   outputLanguage?: string
   schedule?: Json
   concurrencyPolicy?: string
+  notification?: Json
   nextRunAt?: string
   lastRunAt?: string
   lastRunId?: string
   lastRunStatus?: string
   executions?: Json[]
+}
+
+type NotificationRecord = {
+  id: string
+  scheduleId?: string
+  runId?: string
+  trigger?: string
+  title?: string
+  message?: string
+  status?: string
+  repo?: string
+  runUrl?: string
+  destinations?: string[]
+  deliveries?: Json[]
+  createdAt?: string
 }
 
 type ScheduleTemplate = {
@@ -163,6 +180,10 @@ const defaultScheduleForm = {
   createPullRequest: false,
   issueTemplate: '',
   prTemplate: '',
+  notifyEnabled: true,
+  notifyTriggers: 'failed, quality_gate_failed, manual_intervention',
+  notifyDestinations: 'inbox',
+  webhookUrl: '',
 }
 
 async function api<T = any>(path: string, init?: RequestInit): Promise<T> {
@@ -293,6 +314,7 @@ function App() {
   const [records, setRecords] = useState<Orchestration[]>([])
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [scheduleTemplates, setScheduleTemplates] = useState<ScheduleTemplate[]>([])
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([])
   const [selectedID, setSelectedID] = useState('')
   const [current, setCurrent] = useState<Orchestration | null>(null)
   const [audit, setAudit] = useState<Json[]>([])
@@ -312,7 +334,7 @@ function App() {
 
   useEffect(() => {
     if (!canUseApp) return
-    void Promise.all([loadAgents(), loadRepositories(), loadLLM(), loadRecords(), loadSchedules(), loadScheduleTemplates()])
+    void Promise.all([loadAgents(), loadRepositories(), loadLLM(), loadRecords(), loadSchedules(), loadScheduleTemplates(), loadNotifications()])
   }, [canUseApp])
 
   useEffect(() => {
@@ -376,6 +398,11 @@ function App() {
     setScheduleTemplates(data)
   }
 
+  async function loadNotifications() {
+    const data = await api<NotificationRecord[]>('/api/notifications')
+    setNotifications(data)
+  }
+
   async function refreshCurrent(id = selectedID) {
     if (!id) return
     const data = await api<Orchestration>(`/api/orchestrates/${encodeURIComponent(id)}`)
@@ -393,7 +420,7 @@ function App() {
     if (next === 'agents') void loadAgents()
     if (next === 'audit') void loadAudit()
     if (next === 'orchestrates') void loadRecords()
-    if (next === 'schedules') void Promise.all([loadSchedules(), loadScheduleTemplates()])
+    if (next === 'schedules') void Promise.all([loadSchedules(), loadScheduleTemplates(), loadNotifications()])
   }
 
   if (session.authRequired && !session.authenticated) {
@@ -490,7 +517,8 @@ function App() {
         {page === 'schedules' ? (
           <SchedulesPage
             schedules={schedules}
-            reload={() => void loadSchedules()}
+            notifications={notifications}
+            reload={() => void Promise.all([loadSchedules(), loadNotifications()])}
             form={scheduleForm}
             setForm={setScheduleForm}
             templates={scheduleTemplates}
@@ -587,6 +615,12 @@ function App() {
             issueTemplate: scheduleForm.issueTemplate,
             prTemplate: scheduleForm.prTemplate,
           },
+          notification: {
+            enabled: scheduleForm.notifyEnabled,
+            triggers: scheduleForm.notifyTriggers.split(',').map((item) => item.trim()).filter(Boolean),
+            destinations: scheduleForm.notifyDestinations.split(',').map((item) => item.trim()).filter(Boolean),
+            webhookUrl: scheduleForm.webhookUrl.trim(),
+          },
         }),
       })
       setScheduleStatus(`Created: ${created.id}`)
@@ -617,6 +651,7 @@ function BottomNav({ active, icon, children, onClick }: { active: boolean; icon:
 
 function SchedulesPage(props: {
   schedules: Schedule[]
+  notifications: NotificationRecord[]
   reload: () => void
   form: typeof defaultScheduleForm
   setForm: Dispatch<SetStateAction<typeof defaultScheduleForm>>
@@ -734,6 +769,40 @@ function SchedulesPage(props: {
             ))}
           </div>
         </Panel>
+        <Panel className="p-0">
+          <div className="flex items-center justify-between gap-3 border-b border-line p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-ink"><Bell className="size-4 text-cyan-os" /> Notifications</div>
+            <IconButton tone="secondary" icon={<RefreshCw className="size-4" />} onClick={props.reload}>Refresh</IconButton>
+          </div>
+          <div className="divide-y divide-line">
+            {props.notifications.length === 0 ? <div className="p-4 text-sm text-soft">No notifications.</div> : null}
+            {props.notifications.slice(0, 12).map((notification) => (
+              <div key={notification.id} className="grid gap-2 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <h2 className="break-words text-sm font-semibold text-ink">{notification.title || notification.id}</h2>
+                    <p className="text-xs text-soft">{formatTime(notification.createdAt)}</p>
+                  </div>
+                  <Status value={notification.trigger} />
+                </div>
+                <p className="break-words text-sm text-soft">{shortText(notification.message, 260)}</p>
+                <div className="flex flex-wrap gap-2">
+                  <Tag>{notification.repo || '-'}</Tag>
+                  <Tag>{notification.status || '-'}</Tag>
+                  {(notification.destinations ?? []).map((destination) => <Tag key={destination}>{destination}</Tag>)}
+                  {notification.runUrl ? <a className="text-xs text-cyan-os hover:underline" href={notification.runUrl}>Run</a> : null}
+                </div>
+                {(notification.deliveries ?? []).length ? (
+                  <div className="flex flex-wrap gap-2 text-xs text-soft">
+                    {(notification.deliveries ?? []).map((delivery, index) => (
+                      <span key={`${delivery.destination}-${index}`}>{delivery.destination}: {delivery.status}{delivery.attempts ? ` (${delivery.attempts})` : ''}</span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </Panel>
       </div>
 
       <Panel>
@@ -807,6 +876,18 @@ function SchedulesPage(props: {
           <Field label="Concurrency">
             <select className={inputClass} value={form.concurrencyPolicy} onChange={(e) => update({ concurrencyPolicy: e.target.value })}><option value="forbid">Forbid overlap</option><option value="allow">Allow overlap</option></select>
           </Field>
+          <div className="grid gap-3 rounded-os border border-line bg-void p-3">
+            <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.notifyEnabled} onChange={(e) => update({ notifyEnabled: e.target.checked })} />Notifications</label>
+            <Field label="Notification Triggers">
+              <input className={inputClass} value={form.notifyTriggers} onChange={(e) => update({ notifyTriggers: e.target.value })} placeholder="completed, failed, quality_gate_failed" />
+            </Field>
+            <Field label="Notification Destinations">
+              <input className={inputClass} value={form.notifyDestinations} onChange={(e) => update({ notifyDestinations: e.target.value })} placeholder="inbox, webhook, github_issue" />
+            </Field>
+            <Field label="Webhook URL">
+              <input className={inputClass} value={form.webhookUrl} onChange={(e) => update({ webhookUrl: e.target.value })} placeholder="https://example.com/agentos-hook" />
+            </Field>
+          </div>
           <div className="grid gap-2">
             <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.createIssue} onChange={(e) => update({ createIssue: e.target.checked })} />Create Issue</label>
             <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.createPullRequest} onChange={(e) => update({ createPullRequest: e.target.checked })} />Create PR</label>

@@ -118,6 +118,7 @@ func NewServer(port int) *Server {
 	mux.HandleFunc("/api/agents/repository", s.handleRepositoryAgents)
 	mux.HandleFunc("/api/settings/llm", s.handleLLMSettings)
 	mux.HandleFunc("/api/audit", s.handleAudit)
+	mux.HandleFunc("/api/notifications", s.handleNotifications)
 	mux.HandleFunc("/api/runs", s.handleRuns)
 	mux.HandleFunc("/api/runs/", s.handleRunDetail)
 	mux.HandleFunc("/api/search", s.handleSearch)
@@ -1071,6 +1072,7 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 		}
 		s.auditOrchestrationOutcome(record, auditOutcomeFailure, record.Error)
 		s.postSourceIssueFinalComment(record)
+		s.notifyScheduledRun(record)
 		return
 	}
 	if s.stopCanceledOrchestration(record, "Orchestration canceled") {
@@ -1128,6 +1130,7 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 		}
 		s.auditOrchestrationOutcome(record, auditOutcomeFailure, record.Error)
 		s.postSourceIssueFinalComment(record)
+		s.notifyScheduledRun(record)
 		return
 	}
 
@@ -1157,6 +1160,7 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 	s.createPullRequestForOrchestration(record)
 	s.postSourceIssueFinalComment(record)
 	s.closeSourceIssueIfPolicyAllows(record)
+	s.notifyScheduledRun(record)
 	if err := saveOrchestrationRecord(record); err != nil {
 		slog.Warn("save orchestration failed", "id", record.ID, "error", err)
 	}
@@ -1351,6 +1355,7 @@ func (s *Server) stopCanceledOrchestration(record *orchestrationRecord, message 
 	if latest, err := readOrchestrationRecord(record.ID); err == nil && latest.Status == "canceled" {
 		s.auditOrchestrationOutcome(latest, auditOutcomeFailure, latest.Error)
 		s.postSourceIssueFinalComment(latest)
+		s.notifyScheduledRun(latest)
 		return true
 	}
 	record.Status = "canceled"
@@ -1362,6 +1367,7 @@ func (s *Server) stopCanceledOrchestration(record *orchestrationRecord, message 
 	}
 	s.auditOrchestrationOutcome(record, auditOutcomeFailure, record.Error)
 	s.postSourceIssueFinalComment(record)
+	s.notifyScheduledRun(record)
 	return true
 }
 

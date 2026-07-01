@@ -86,8 +86,10 @@ type scheduleRetryPolicy struct {
 }
 
 type scheduleNotification struct {
-	Enabled bool   `json:"enabled,omitempty"`
-	Target  string `json:"target,omitempty"`
+	Enabled      bool     `json:"enabled,omitempty"`
+	Triggers     []string `json:"triggers,omitempty"`
+	Destinations []string `json:"destinations,omitempty"`
+	WebhookURL   string   `json:"webhookUrl,omitempty"`
 }
 
 type scheduleExecution struct {
@@ -337,6 +339,7 @@ func (s *Server) triggerSchedule(schedule *scheduleDefinition, now time.Time, re
 			schedule.NextRunAt = next
 		}
 		_ = saveSchedule(schedule)
+		s.notifyScheduleExecution(schedule, &execution)
 		return &execution, nil
 	}
 	req := schedule.orchestrateRequest()
@@ -351,6 +354,7 @@ func (s *Server) triggerSchedule(schedule *scheduleDefinition, now time.Time, re
 		schedule.LastRunStatus = execution.Status
 		schedule.UpdatedAt = now
 		_ = saveSchedule(schedule)
+		s.notifyScheduleExecution(schedule, &execution)
 		return &execution, err
 	}
 	execution := schedule.newExecution(now, "started", reason, "")
@@ -368,6 +372,7 @@ func (s *Server) triggerSchedule(schedule *scheduleDefinition, now time.Time, re
 	if err := saveSchedule(schedule); err != nil {
 		return &execution, err
 	}
+	s.notifyScheduleExecution(schedule, &execution)
 	return &execution, nil
 }
 
@@ -408,6 +413,8 @@ func prepareSchedule(schedule *scheduleDefinition, now time.Time) error {
 	if schedule.Strategy != "sequential" && schedule.Strategy != "parallel" {
 		return fmt.Errorf("strategy must be sequential or parallel")
 	}
+	schedule.Notification.Triggers = normalizedNotificationTriggers(schedule.Notification.Triggers)
+	schedule.Notification.Destinations = normalizedNotificationDestinations(schedule.Notification.Destinations)
 	if _, err := scheduleLocation(schedule); err != nil {
 		return err
 	}

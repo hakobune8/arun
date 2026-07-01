@@ -222,6 +222,7 @@ PUT /api/schedules/{id}
 POST /api/schedules/{id}/pause
 POST /api/schedules/{id}/resume
 POST /api/schedules/{id}/run
+GET /api/notifications
 ```
 
 Schedules define recurring Orchestrate jobs. They persist under
@@ -251,6 +252,12 @@ Create or update body:
     "timezone": "Asia/Tokyo"
   },
   "concurrencyPolicy": "forbid",
+  "notification": {
+    "enabled": true,
+    "triggers": ["failed", "quality_gate_failed", "manual_intervention"],
+    "destinations": ["inbox", "webhook"],
+    "webhookUrl": "https://example.com/agentos-hook"
+  },
   "github": {
     "createIssue": false,
     "createPullRequest": false
@@ -284,6 +291,12 @@ For interval schedules, use:
 `concurrencyPolicy` is `forbid` by default and skips a due execution when the
 previous schedule run is still planning or running. `POST /run` manually starts
 the same saved configuration and records the execution in schedule history.
+
+Schedule notifications can target `inbox`, `webhook`, `github_issue`, and
+`github_pr`. Supported triggers are `started`, `completed`, `failed`,
+`skipped`, `pr_created`, `quality_gate_failed`, and `manual_intervention`.
+`GET /api/notifications` returns the newest notification history with delivery
+status, retry count, destination, run link, and redacted error messages.
 
 ---
 

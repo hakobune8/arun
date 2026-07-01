@@ -16,6 +16,8 @@
 - Added built-in scheduled maintenance and reporting workflow templates for
   failed-run reports, repository health, security triage, dependency updates,
   release readiness, and stale memory/guideline checks.
+- Added scheduled orchestration outcome notifications with inbox history,
+  webhook delivery retries, and optional GitHub Issue or PR comments.
 
 ### Fixed
 - Fixed multi-arch Docker image builds by running the frontend build on the
