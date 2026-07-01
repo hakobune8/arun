@@ -59,6 +59,38 @@ The live smoke checks cover:
 - storage auth boundary, where unauthenticated `/api/storage` should return
   `401` when production auth is required
 
-Authenticated workflows, real GitHub writes, and Kubernetes rollout checks
-remain environment verification steps for PRs and releases. They are not part
-of the default CI eval suite.
+## Authenticated Web UI E2E
+
+Authenticated browser checks are a separate opt-in layer on top of live smoke.
+They require Playwright dependencies from `web/` and explicit session material:
+
+```sh
+AGENTOS_EVAL_AUTH_COOKIE='agentos_session=<signed-session-cookie>' \
+agentos evals \
+  --auth-e2e \
+  --live-url https://agentos.nakanoshima.hakobune8.com \
+  --format markdown \
+  --output .agentos/evals/auth-webui-report.md
+```
+
+Alternatively, provide a Playwright storage state file:
+
+```sh
+AGENTOS_EVAL_AUTH_STORAGE_STATE=/secure/path/storage-state.json \
+agentos evals --auth-e2e --live-url https://agentos.example.com
+```
+
+The authenticated Web UI E2E covers:
+
+- `/api/auth/session` returns an authenticated session
+- desktop navigation across Orchestrate, Schedules, Storage, Agents, and Audit
+- mobile bottom navigation across Run, Sched, Storage, Agents, and Audit
+- horizontal overflow and bottom navigation label overlap checks
+
+Session cookies and storage state paths are only read from environment
+configuration. They are not printed in eval reports. Set
+`AGENTOS_EVAL_AUTH_E2E_OUT` to capture optional desktop and mobile screenshots
+outside the repository.
+
+Real GitHub writes and Kubernetes rollout checks remain separate v1.4.x
+operational scenarios. They are not part of the default CI eval suite.

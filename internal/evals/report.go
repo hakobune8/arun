@@ -65,6 +65,28 @@ func Markdown(report *Report) string {
 		}
 		fmt.Fprintf(&b, "\n")
 	}
+	fmt.Fprintf(&b, "\n## Scenario Checks\n\n")
+	for i := range report.ScenarioRuns {
+		scenario := &report.ScenarioRuns[i]
+		if len(scenario.Checks) == 0 {
+			continue
+		}
+		fmt.Fprintf(&b, "### %s\n\n", scenario.Name)
+		fmt.Fprintf(&b, "| Page | Action | Result | Duration | Failure |\n")
+		fmt.Fprintf(&b, "|---|---|---:|---:|---|\n")
+		for _, check := range scenario.Checks {
+			result := "pass"
+			if !check.Passed {
+				result = "fail"
+			}
+			failure := check.Failure
+			if failure == "" {
+				failure = "-"
+			}
+			fmt.Fprintf(&b, "| `%s` | `%s` | `%s` | `%dms` | %s |\n", check.Page, check.Action, result, check.DurationMS, failure)
+		}
+		fmt.Fprintf(&b, "\n")
+	}
 	return b.String()
 }
 

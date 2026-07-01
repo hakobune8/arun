@@ -25,6 +25,8 @@ smoke checks are opt-in with `agentos evals --live --live-url <url>`.
 
 ### Expected Results
 - [ ] Header shows "AgentOS" and the authenticated GitHub user when auth is enabled
+- [ ] `agentos evals --auth-e2e --live-url <url>` can run with an explicit
+  `AGENTOS_EVAL_AUTH_COOKIE` or `AGENTOS_EVAL_AUTH_STORAGE_STATE`
 - [ ] Main navigation exposes Orchestrate, Agents, and Audit
 - [ ] Orchestrate has New, List, and Detail segments
 - [ ] New orchestration starts with Repository, then Task, then Agents

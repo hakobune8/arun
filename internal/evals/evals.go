@@ -63,10 +63,11 @@ type Scenario struct {
 
 // Options controls a suite run.
 type Options struct {
-	ScenarioIDs []string
-	WorkDir     string
-	IncludeLive bool
-	LiveURL     string
+	ScenarioIDs    []string
+	WorkDir        string
+	IncludeLive    bool
+	LiveURL        string
+	IncludeAuthE2E bool
 }
 
 // Report summarizes one eval suite run.
@@ -99,6 +100,7 @@ type ScenarioResult struct {
 	FailureReasons []string           `json:"failureReasons,omitempty"`
 	Artifacts      map[string]string  `json:"artifacts,omitempty"`
 	QualityGates   []QualityGateCheck `json:"qualityGates,omitempty"`
+	Checks         []ScenarioCheck    `json:"checks,omitempty"`
 }
 
 // CoverageArea summarizes functional scenario coverage by area.
@@ -119,6 +121,15 @@ type FileCheck struct {
 type QualityGateCheck struct {
 	SubtaskID string `json:"subtaskId"`
 	Passed    bool   `json:"passed"`
+}
+
+// ScenarioCheck reports one non-file scenario assertion.
+type ScenarioCheck struct {
+	Page       string `json:"page,omitempty"`
+	Action     string `json:"action"`
+	Passed     bool   `json:"passed"`
+	DurationMS int64  `json:"durationMs,omitempty"`
+	Failure    string `json:"failure,omitempty"`
 }
 
 // DefaultScenarios returns the built-in deterministic v1.4 scenario suite.
@@ -201,12 +212,27 @@ func LiveScenarios() []Scenario {
 	}}
 }
 
+// AuthenticatedWebUIScenarios returns opt-in checks that require browser auth.
+func AuthenticatedWebUIScenarios() []Scenario {
+	return []Scenario{{
+		ID:             "authenticated-webui-e2e",
+		Name:           "Authenticated Web UI E2E",
+		Category:       "live-auth",
+		Mode:           ModePlan,
+		FunctionalArea: []string{"live-smoke", "authenticated-webui", "web-navigation", "mobile-layout", "auth-boundary"},
+		Live:           true,
+	}}
+}
+
 // Run executes the selected deterministic eval scenarios.
 func Run(ctx context.Context, opts Options) (*Report, error) {
 	started := time.Now().UTC()
 	scenarios := filterScenarios(DefaultScenarios(), opts.ScenarioIDs)
 	if opts.IncludeLive {
 		scenarios = append(scenarios, filterScenarios(LiveScenarios(), opts.ScenarioIDs)...)
+	}
+	if opts.IncludeAuthE2E {
+		scenarios = append(scenarios, filterScenarios(AuthenticatedWebUIScenarios(), opts.ScenarioIDs)...)
 	}
 	if len(scenarios) == 0 {
 		return nil, fmt.Errorf("no eval scenarios selected")
@@ -336,6 +362,9 @@ func runScenario(ctx context.Context, workDir string, scenario *Scenario, opts O
 }
 
 func runLiveScenario(ctx context.Context, scenario *Scenario, liveURL string, result *ScenarioResult) *ScenarioResult {
+	if scenario.ID == "authenticated-webui-e2e" {
+		return runAuthenticatedWebUIScenario(ctx, liveURL, result)
+	}
 	base := strings.TrimRight(strings.TrimSpace(liveURL), "/")
 	if base == "" {
 		base = strings.TrimRight(os.Getenv("AGENTOS_EVAL_LIVE_URL"), "/")
@@ -377,6 +406,103 @@ func runLiveScenario(ctx context.Context, scenario *Scenario, liveURL string, re
 	}
 	result.Artifacts = map[string]string{"url": base, "js": js, "css": css}
 	return result
+}
+
+type authE2EResult struct {
+	Checks    []ScenarioCheck   `json:"checks"`
+	Artifacts map[string]string `json:"artifacts,omitempty"`
+}
+
+func runAuthenticatedWebUIScenario(ctx context.Context, liveURL string, result *ScenarioResult) *ScenarioResult {
+	base := strings.TrimRight(strings.TrimSpace(liveURL), "/")
+	if base == "" {
+		base = strings.TrimRight(os.Getenv("AGENTOS_EVAL_LIVE_URL"), "/")
+	}
+	if base == "" {
+		result.FailureReasons = append(result.FailureReasons, "live URL is required via --live-url or AGENTOS_EVAL_LIVE_URL")
+		return result
+	}
+	script, err := findAuthE2EScript()
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, err.Error())
+		return result
+	}
+	if !authE2EConfigured() {
+		result.FailureReasons = append(result.FailureReasons, "authenticated session material is required via AGENTOS_EVAL_AUTH_STORAGE_STATE or AGENTOS_EVAL_AUTH_COOKIE")
+		return result
+	}
+	cmd := exec.CommandContext(ctx, "node", script)
+	cmd.Env = append(os.Environ(), "AGENTOS_EVAL_LIVE_URL="+base)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		out := sanitizeAuthE2EOutput(strings.TrimSpace(stdout.String() + "\n" + stderr.String()))
+		if out == "" {
+			out = err.Error()
+		}
+		result.FailureReasons = append(result.FailureReasons, "authenticated Web UI E2E: "+out)
+		return result
+	}
+	var e2e authE2EResult
+	if err := json.Unmarshal(stdout.Bytes(), &e2e); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "authenticated Web UI E2E report: "+err.Error())
+		return result
+	}
+	for _, check := range e2e.Checks {
+		result.Checks = append(result.Checks, check)
+		if !check.Passed {
+			result.FailureReasons = append(result.FailureReasons, fmt.Sprintf("%s/%s: %s", check.Page, check.Action, check.Failure))
+		}
+	}
+	result.Artifacts = e2e.Artifacts
+	if result.Artifacts == nil {
+		result.Artifacts = map[string]string{}
+	}
+	result.Artifacts["url"] = base
+	result.Artifacts["script"] = script
+	return result
+}
+
+func authE2EConfigured() bool {
+	return strings.TrimSpace(os.Getenv("AGENTOS_EVAL_AUTH_STORAGE_STATE")) != "" ||
+		strings.TrimSpace(os.Getenv("AGENTOS_EVAL_AUTH_COOKIE")) != ""
+}
+
+func findAuthE2EScript() (string, error) {
+	if script := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_AUTH_E2E_SCRIPT")); script != "" {
+		if _, err := os.Stat(script); err != nil {
+			return "", fmt.Errorf("authenticated Web UI E2E script %q: %w", script, err)
+		}
+		return script, nil
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	for {
+		candidate := filepath.Join(wd, "web", "scripts", "auth-e2e.mjs")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+		parent := filepath.Dir(wd)
+		if parent == wd {
+			break
+		}
+		wd = parent
+	}
+	return "", fmt.Errorf("authenticated Web UI E2E script not found; set AGENTOS_EVAL_AUTH_E2E_SCRIPT")
+}
+
+func sanitizeAuthE2EOutput(out string) string {
+	for _, key := range []string{"AGENTOS_EVAL_AUTH_COOKIE"} {
+		value := os.Getenv(key)
+		if value != "" {
+			out = strings.ReplaceAll(out, value, "[redacted]")
+		}
+	}
+	return out
 }
 
 func getText(ctx context.Context, client *http.Client, url string) (string, error) {

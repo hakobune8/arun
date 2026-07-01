@@ -45,6 +45,7 @@ var (
 	evalsWorkDir   string
 	evalsLive      bool
 	evalsLiveURL   string
+	evalsAuthE2E   bool
 )
 
 func init() {
@@ -55,6 +56,7 @@ func init() {
 	evalsCmd.Flags().StringVar(&evalsWorkDir, "work-dir", "", "Directory for temporary eval repositories")
 	evalsCmd.Flags().BoolVar(&evalsLive, "live", false, "Include opt-in live deployment smoke checks")
 	evalsCmd.Flags().StringVar(&evalsLiveURL, "live-url", "", "Base URL for live smoke checks; defaults to AGENTOS_EVAL_LIVE_URL")
+	evalsCmd.Flags().BoolVar(&evalsAuthE2E, "auth-e2e", false, "Include opt-in authenticated Web UI browser E2E checks")
 }
 
 func runEvals(ctx context.Context) error {
@@ -70,10 +72,11 @@ func runEvals(ctx context.Context) error {
 		output = evals.DefaultOutputPath(format)
 	}
 	report, err := evals.Run(ctx, evals.Options{
-		ScenarioIDs: splitComma(evalsScenarios),
-		WorkDir:     evalsWorkDir,
-		IncludeLive: evalsLive,
-		LiveURL:     evalsLiveURL,
+		ScenarioIDs:    splitComma(evalsScenarios),
+		WorkDir:        evalsWorkDir,
+		IncludeLive:    evalsLive,
+		LiveURL:        evalsLiveURL,
+		IncludeAuthE2E: evalsAuthE2E,
 	})
 	if err != nil {
 		return err
