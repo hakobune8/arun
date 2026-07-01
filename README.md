@@ -260,7 +260,7 @@ publish a new immutable chart release.
 ### v1.4 — Governance Scale & Evals
 - [x] Governance execution limits, quotas, and cost controls
 - [x] Storage retention, archival, and cleanup policies
-- [ ] Orchestration regression and scenario evaluation suite
+- [x] Orchestration regression and scenario evaluation suite
 
 ### v1.3 — Scheduled Operations & Reporting
 - [x] Built-in Docker, Helm, and Kubernetes operations agents

@@ -3,6 +3,11 @@
 This guide provides step-by-step instructions for testing all features
 of the AgentOS Web UI at `https://agentos.nakanoshima.hakobune8.com`.
 
+For release regression checks, see the repeatable orchestration eval suite in
+[Orchestration Evals](orchestration-evals.md). The default evals run without
+external secrets and report functional coverage by scenario. Live deployment
+smoke checks are opt-in with `agentos evals --live --live-url <url>`.
+
 ## Prerequisites
 
 - Access to `https://agentos.nakanoshima.hakobune8.com`
