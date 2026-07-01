@@ -71,8 +71,12 @@ For example, `go-backend` prefers idiomatic standard-library Go for small
 services and adopts existing `cmd/`, `internal/`, `pkg/`, `api/`, router, or
 middleware layouts when they already exist. `ci-fixer` prefers conventional
 GitHub Actions patterns such as `actions/checkout`, `actions/setup-go`, Go
-caching, `go test`, and `go vet`. `docs` follows existing README and `docs/`
-style, and `reviewer` flags over-engineered or convention-breaking changes.
+caching, `go test`, and `go vet`. `analyst` separates evidence from
+inference when investigating logs, artifacts, GitHub context, and repository
+history, while `reporter` turns findings into structured Markdown reports
+that follow requested language and template controls. `docs` follows existing
+README and `docs/` style, and `reviewer` flags over-engineered or
+convention-breaking changes.
 
 ## Loading
 
@@ -91,3 +95,5 @@ See `definitions/` directory:
 - `release-manager.yaml`
 - `dependency-updater.yaml`
 - `qa.yaml`
+- `analyst.yaml`
+- `reporter.yaml`

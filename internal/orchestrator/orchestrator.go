@@ -308,6 +308,12 @@ func enrichSubtasks(plan *TaskPlan, parentTask string) {
 		case "qa":
 			plan.Subtasks[i].Description = appendContext(plan.Subtasks[i].Description, parentTask,
 				"Concrete qa requirements: inspect existing test layout and verification docs; add focused regression, scenario, or smoke coverage for changed behavior; document manual verification steps when automation is incomplete; keep go test ./... passing.")
+		case "analyst":
+			plan.Subtasks[i].Description = appendContext(plan.Subtasks[i].Description, parentTask,
+				"Concrete analyst requirements: inspect available run records, artifacts, logs, GitHub context, repository files, memory, and guidelines; cite source provenance for each finding; separate observed facts from inferences; redact obvious secrets and keep log excerpts short.")
+		case "reporter":
+			plan.Subtasks[i].Description = appendContext(plan.Subtasks[i].Description, parentTask,
+				"Concrete reporter requirements: turn findings into a structured Markdown report using the requested output language and templates when provided; include summary, scope, evidence, findings, recommendations, risks, and open questions; avoid overstating uncertain evidence.")
 		default:
 			plan.Subtasks[i].Description = appendContext(plan.Subtasks[i].Description, parentTask, "")
 		}
@@ -379,6 +385,9 @@ func (o *Orchestrator) fallbackPlan(taskDesc string) *TaskPlan {
 	case hasAny("frontend", "react", "tailwind", "css", "browser", "responsive", "vite", "next.js", "nextjs", "vue", "nuxt", "svelte", "component", "page", "layout", "accessibility"):
 		addNext("frontend", fmt.Sprintf("Implement the frontend or UI change requested by the parent task using the repository's existing frontend conventions. Inspect package.json, framework config, routing, components, styling, and state management first; keep controls responsive and accessible. Detect and run available package scripts such as lint, typecheck, test, and build when present. Parent task:\n\n%s", taskDesc), nil)
 		addNext("qa", fmt.Sprintf("Add or run focused frontend validation for the requested UI change. Prefer existing npm, pnpm, yarn, or bun scripts, browser smoke checks, responsive checks, and manual verification notes when automation is incomplete. Parent task:\n\n%s", taskDesc), depsFor("frontend"))
+	case hasAny("analyze", "investigate", "investigation", "root cause", "rca", "logs", "artifacts", "run history", "failure pattern", "trend", "report", "summary", "release readiness", "repository health", "incident"):
+		addNext("analyst", fmt.Sprintf("Investigate the requested repository or operations question. Inspect available run records, artifacts, logs, GitHub issues or PRs, checks, repository files, memory, and guidelines; cite provenance and distinguish observed facts from inferences. Parent task:\n\n%s", taskDesc), nil)
+		addNext("reporter", fmt.Sprintf("Create a structured Markdown report from the investigation findings. Include summary, scope, evidence, findings, root cause or likely causes, impact, recommendations, risks, and open questions; use requested language or templates when available. Parent task:\n\n%s", taskDesc), depsFor("analyst"))
 	case hasAny("docker", "helm", "kubernetes", "k8s", "ingress", "container", "cluster", "deployment", "chart"):
 		addNext("release-manager", fmt.Sprintf("Handle the deployment or ops-oriented change requested by the parent task. Inspect Dockerfile, compose files, Helm charts, Kubernetes manifests, ingress, deployment, values, and rollback conventions before editing. Parent task:\n\n%s", taskDesc), nil)
 		addNext("security", fmt.Sprintf("Review container, Helm, Kubernetes, secret, permission, and ingress security implications for the requested ops change. Add tests or manual verification notes where useful. Parent task:\n\n%s", taskDesc), depsFor("release-manager"))
@@ -403,10 +412,13 @@ func (o *Orchestrator) fallbackPlan(taskDesc string) *TaskPlan {
 	if hasAny("release", "changelog", "version", "release notes", "rollback") {
 		addNext("release-manager", fmt.Sprintf("Prepare release artifacts requested by the parent task. Inspect changelog, versioning, Helm chart, deployment, and rollback conventions before editing release files. Parent task:\n\n%s", taskDesc), depsFor("go-backend", "ci-fixer", "qa"))
 	}
-	if !hasAny("docs", "documentation", "readme", "guide", "manual") {
+	if hasAny("report", "summary", "stakeholder", "incident report", "release readiness", "repository health") {
+		addNext("reporter", fmt.Sprintf("Prepare or refine the requested report or stakeholder summary. Follow requested output language and template controls when available, and keep facts, inferences, risks, recommendations, and open questions distinct. Parent task:\n\n%s", taskDesc), depsFor("analyst", "security", "qa", "release-manager"))
+	}
+	if !hasAny("docs", "documentation", "readme", "guide", "manual", "report", "summary") {
 		addNext("docs", fmt.Sprintf("Update relevant documentation for the requested changes when user-visible behavior, commands, deployment, or configuration changed. Parent task:\n\n%s", taskDesc), depsFor("go-backend", "release-manager"))
 	}
-	addNext("reviewer", fmt.Sprintf("Review the final diff for correctness, tests, security, maintainability, release readiness, routing fit, and convention preservation. Flag over-engineered or convention-breaking changes with severity and file references. Parent task:\n\n%s", taskDesc), depsFor("go-backend", "frontend", "docs", "ci-fixer", "security", "release-manager", "dependency-updater", "qa"))
+	addNext("reviewer", fmt.Sprintf("Review the final diff for correctness, tests, security, maintainability, release readiness, routing fit, and convention preservation. Flag over-engineered or convention-breaking changes with severity and file references. Parent task:\n\n%s", taskDesc), depsFor("go-backend", "frontend", "docs", "ci-fixer", "security", "release-manager", "dependency-updater", "qa", "analyst", "reporter"))
 
 	if len(subtasks) == 0 {
 		for i := range o.agentDefs {
@@ -532,6 +544,29 @@ func builtInAgentInfo(name, fallbackDescription string) AgentMetadata {
 			"Record manual verification steps when behavior cannot be fully automated.",
 		}
 		info.OutputExpectations = []string{"New or updated tests fail without the intended behavior and pass with it.", "go test ./... passes when Go code or tests are in scope.", "Manual verification notes include concrete commands, URLs, or scenarios."}
+	case "analyst":
+		info.Description = "Analyst agent for log, run, artifact, GitHub, and repository-context investigations"
+		info.Domains = []string{"analysis", "investigation", "logs", "artifacts", "github", "observability", "root-cause"}
+		info.TriggerKeywords = []string{"analyze", "investigate", "investigation", "root cause", "rca", "logs", "artifacts", "run history", "failure pattern", "trend", "evidence", "findings"}
+		info.TriggerFiles = []string{"logs/", "artifacts/", ".github/workflows/", "README.md", "docs/", "CHANGELOG.md", ".agentos/"}
+		info.ArchitectureGuidance = []string{
+			"Gather evidence from run records, artifacts, logs, GitHub issues or PRs, repository files, memory, and guidelines before drawing conclusions.",
+			"Separate observed facts from inferences, include confidence level, and call out missing or unavailable sources explicitly.",
+			"Redact obvious secrets and keep log excerpts short while preserving enough provenance to verify each finding.",
+		}
+		info.OutputExpectations = []string{"Investigation output includes summary, scope, evidence, findings, root cause or likely causes, impact, recommendations, and open questions.", "Each finding cites source provenance such as run IDs, file paths, issue or PR numbers, timestamps, or short log excerpts.", "No-data cases state which sources were checked and what could not be determined."}
+	case "reporter":
+		info.Description = "Reporter agent for Markdown reports, stakeholder summaries, and GitHub-ready updates"
+		info.Domains = []string{"reporting", "markdown", "incident-report", "release-readiness", "repository-health", "stakeholder-summary"}
+		info.TriggerKeywords = []string{"report", "summary", "summarize", "stakeholder", "incident report", "release readiness", "repository health", "findings", "recommendations", "write-up"}
+		info.TriggerFiles = []string{"README.md", "docs/", "CHANGELOG.md", "reports/", ".agentos/"}
+		info.RecommendedAfter = []string{"analyst", "security", "qa", "release-manager"}
+		info.ArchitectureGuidance = []string{
+			"Use the requested output language and repository templates when provided, preserving existing Markdown and documentation conventions.",
+			"Convert analyst findings into audience-appropriate reports without overstating uncertain evidence.",
+			"Prepare GitHub issue or PR comment text only when enabled by the orchestration settings.",
+		}
+		info.OutputExpectations = []string{"Reports include summary, scope, evidence, findings, recommendations, risks, and open questions.", "Incident reports include timeline, impact, detection, root cause, mitigation, and prevention when those facts are available.", "Repository health and release readiness reports distinguish blockers, risks, validation status, and recommended next actions."}
 	}
 	return info
 }

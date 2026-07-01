@@ -33,7 +33,7 @@ helm install agentos agentos/agentos \
 - **Review & Retry** — Automated code review with retry on test/lint failure
 - **GitHub Automation** — Issue-triggered runs, PR creation, source issue comments, close policies, and approval gates
 - **GitHub App Tokens** — Installation-token support for repository write operations
-- **Specialized Built-In Agents** — Backend, frontend, CI, docs, security, release, dependency, QA, and review workflows
+- **Specialized Built-In Agents** — Backend, frontend, CI, docs, security, release, dependency, QA, analyst, reporter, and review workflows
 - **Repository Agents** — Load safe custom agent profiles from `.agentos/agents/*.yaml`
 - **Scenario Templates** — Apply built-in and repository `.agentos/scenarios/*.yaml` orchestration templates
 - **Vector Search** — Local (JSON) or Qdrant vector store for semantic search
@@ -264,7 +264,7 @@ publish a new immutable chart release.
 
 ### v1.3 — Scheduled Operations & Reporting
 - [ ] Built-in Docker, Helm, and Kubernetes operations agents
-- [ ] Analyst and reporter agents for investigation workflows
+- [x] Analyst and reporter agents for investigation workflows
 - [ ] Log and data sources for investigation agents
 - [ ] Recurring orchestration jobs
 - [ ] Built-in maintenance and reporting workflow templates

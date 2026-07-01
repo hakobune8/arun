@@ -256,5 +256,56 @@ func DefaultRegistry() *Registry {
 		return NewBaseAgent("qa", llmClient)
 	})
 
+	r.MustRegister(&Info{
+		Name:          "analyst",
+		Description:   "Analyst agent — investigates logs, runs, artifacts, GitHub context, and repository evidence to identify findings and next actions",
+		Version:       "1.0.0",
+		Author:        "AgentOS",
+		RequiredTools: []string{"read_file", "search", "shell", "git"},
+		Domains:       []string{"analysis", "investigation", "logs", "artifacts", "github", "observability", "root-cause"},
+		TriggerKeywords: []string{
+			"analyze", "investigate", "investigation", "root cause", "rca", "logs", "artifacts", "run history", "failure pattern", "trend", "evidence", "findings",
+		},
+		TriggerFiles: []string{"logs/", "artifacts/", ".github/workflows/", "README.md", "docs/", "CHANGELOG.md", ".agentos/"},
+		ArchitectureGuidance: []string{
+			"Gather evidence from run records, artifacts, logs, GitHub issues or PRs, repository files, memory, and guidelines before drawing conclusions.",
+			"Separate observed facts from inferences, include confidence level, and call out missing or unavailable sources explicitly.",
+			"Redact obvious secrets and keep log excerpts short while preserving enough provenance to verify each finding.",
+		},
+		OutputExpectations: []string{
+			"Investigation output includes summary, scope, evidence, findings, root cause or likely causes, impact, recommendations, and open questions.",
+			"Each finding cites source provenance such as run IDs, file paths, issue or PR numbers, timestamps, or short log excerpts.",
+			"No-data cases state which sources were checked and what could not be determined.",
+		},
+	}, func(llmClient llm.LLMClient) runtime.Agent {
+		return NewBaseAgent("analyst", llmClient)
+	})
+
+	r.MustRegister(&Info{
+		Name:          "reporter",
+		Description:   "Reporter agent — turns findings into structured Markdown reports, stakeholder summaries, and optional GitHub-ready updates",
+		Version:       "1.0.0",
+		Author:        "AgentOS",
+		RequiredTools: []string{"read_file", "write_file", "search", "git"},
+		Domains:       []string{"reporting", "markdown", "incident-report", "release-readiness", "repository-health", "stakeholder-summary"},
+		TriggerKeywords: []string{
+			"report", "summary", "summarize", "stakeholder", "incident report", "release readiness", "repository health", "findings", "recommendations", "write-up",
+		},
+		TriggerFiles:     []string{"README.md", "docs/", "CHANGELOG.md", "reports/", ".agentos/"},
+		RecommendedAfter: []string{"analyst", "security", "qa", "release-manager"},
+		ArchitectureGuidance: []string{
+			"Use the requested output language and repository templates when provided, preserving existing Markdown and documentation conventions.",
+			"Convert analyst findings into audience-appropriate reports without overstating uncertain evidence.",
+			"Prepare GitHub issue or PR comment text only when enabled by the orchestration settings.",
+		},
+		OutputExpectations: []string{
+			"Reports include summary, scope, evidence, findings, recommendations, risks, and open questions.",
+			"Incident reports include timeline, impact, detection, root cause, mitigation, and prevention when those facts are available.",
+			"Repository health and release readiness reports distinguish blockers, risks, validation status, and recommended next actions.",
+		},
+	}, func(llmClient llm.LLMClient) runtime.Agent {
+		return NewBaseAgent("reporter", llmClient)
+	})
+
 	return r
 }

@@ -154,7 +154,7 @@ func TestServer_AgentsEndpoint_ReturnsList(t *testing.T) {
 	s := NewServer(0)
 	w := serveRequest(s, "GET", "/api/agents", nil)
 	assertStatus(t, w.Code, http.StatusOK)
-	assertArrayLen(t, w.Body.Bytes(), 9)
+	assertArrayLen(t, w.Body.Bytes(), 11)
 }
 
 func TestServer_AgentsEndpoint_GoBackendExists(t *testing.T) {

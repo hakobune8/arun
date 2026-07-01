@@ -1,0 +1,29 @@
+apiVersion: agentos.io/v1
+kind: Agent
+metadata:
+  name: analyst
+  labels:
+    role: analyst
+spec:
+  llm:
+    model: coder
+    temperature: 0.2
+    maxTokens: 8192
+  tools:
+    allow:
+      - read_file
+      - search
+      - shell
+      - git
+  limits:
+    maxRetries: 1
+    maxIterations: 6
+  guidance:
+    architecture:
+      - Gather evidence from run records, artifacts, logs, GitHub issues or PRs, repository files, memory, and guidelines before drawing conclusions.
+      - Separate observed facts from inferences, include confidence level, and call out missing or unavailable sources explicitly.
+      - Redact obvious secrets and keep log excerpts short while preserving enough provenance to verify each finding.
+    outputExpectations:
+      - Investigation output includes summary, scope, evidence, findings, root cause or likely causes, impact, recommendations, and open questions.
+      - Each finding cites source provenance such as run IDs, file paths, issue or PR numbers, timestamps, or short log excerpts.
+      - No-data cases state which sources were checked and what could not be determined.

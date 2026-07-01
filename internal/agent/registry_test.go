@@ -16,6 +16,8 @@ func TestDefaultRegistryIncludesExpandedBuiltIns(t *testing.T) {
 		"release-manager",
 		"dependency-updater",
 		"qa",
+		"analyst",
+		"reporter",
 	} {
 		if !reg.Has(name) {
 			t.Fatalf("DefaultRegistry missing %q", name)
@@ -23,8 +25,8 @@ func TestDefaultRegistryIncludesExpandedBuiltIns(t *testing.T) {
 	}
 
 	infos := reg.List()
-	if len(infos) != 9 {
-		t.Fatalf("got %d built-in agents, want 9", len(infos))
+	if len(infos) != 11 {
+		t.Fatalf("got %d built-in agents, want 11", len(infos))
 	}
 	for i := range infos {
 		if infos[i].Description == "" {
