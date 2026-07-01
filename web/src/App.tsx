@@ -586,8 +586,8 @@ function App() {
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-void/95 px-2 py-2 backdrop-blur md:hidden">
-        <BottomNav active={page === 'orchestrates'} icon={<ClipboardList className="size-5" />} onClick={() => navTo('orchestrates')}>Orchestrate</BottomNav>
-        <BottomNav active={page === 'schedules'} icon={<CalendarClock className="size-5" />} onClick={() => navTo('schedules')}>Schedules</BottomNav>
+        <BottomNav active={page === 'orchestrates'} icon={<ClipboardList className="size-5" />} onClick={() => navTo('orchestrates')}>Run</BottomNav>
+        <BottomNav active={page === 'schedules'} icon={<CalendarClock className="size-5" />} onClick={() => navTo('schedules')}>Sched</BottomNav>
         <BottomNav active={page === 'storage'} icon={<Database className="size-5" />} onClick={() => navTo('storage')}>Storage</BottomNav>
         <BottomNav active={page === 'agents'} icon={<Bot className="size-5" />} onClick={() => navTo('agents')}>Agents</BottomNav>
         <BottomNav active={page === 'audit'} icon={<History className="size-5" />} onClick={() => navTo('audit')}>Audit</BottomNav>
@@ -713,9 +713,9 @@ function NavButton({ active, icon, children, onClick }: { active: boolean; icon:
 
 function BottomNav({ active, icon, children, onClick }: { active: boolean; icon: ReactNode; children: ReactNode; onClick: () => void }) {
   return (
-    <button className={cx('grid justify-items-center gap-1 rounded-os py-1.5 text-[11px]', active ? 'bg-panel-2 text-cyan-os' : 'text-soft')} onClick={onClick} type="button">
+    <button className={cx('grid min-w-0 justify-items-center gap-1 rounded-os px-1 py-1.5 text-[10px] leading-none', active ? 'bg-panel-2 text-cyan-os' : 'text-soft')} onClick={onClick} type="button">
       {icon}
-      {children}
+      <span className="block max-w-full truncate">{children}</span>
     </button>
   )
 }
@@ -1594,14 +1594,21 @@ function formatBytes(value: unknown) {
 function StoragePage({ storage, status, setStatus, reload }: { storage: StorageState; status: string; setStatus: (value: string) => void; reload: () => void }) {
   const [policy, setPolicy] = useState(defaultStoragePolicy)
   const [preview, setPreview] = useState<Json | null>(null)
+  const [cleanupBusy, setCleanupBusy] = useState<'preview' | 'cleanup' | ''>('')
   const usage = storage.usage ?? {}
+  const cleanupItems = preview?.items ?? []
+  const selectedCount = Number(preview?.summary?.selected ?? 0)
+  const canCleanup = preview?.dryRun === true && selectedCount > 0
 
   useEffect(() => {
     const next = { ...defaultStoragePolicy, ...(storage.policy ?? {}) }
     setPolicy({ ...next, keepLastOrchestrations: String(next.keepLastOrchestrations ?? defaultStoragePolicy.keepLastOrchestrations) })
   }, [storage.policy])
 
-  const update = (patch: Partial<typeof defaultStoragePolicy>) => setPolicy((current) => ({ ...current, ...patch }))
+  const update = (patch: Partial<typeof defaultStoragePolicy>) => {
+    setPreview(null)
+    setPolicy((current) => ({ ...current, ...patch }))
+  }
   const policyPayload = () => ({
     repo: policy.repo.trim(),
     baseBranch: policy.baseBranch.trim() || 'main',
@@ -1628,14 +1635,22 @@ function StoragePage({ storage, status, setStatus, reload }: { storage: StorageS
   }
 
   async function cleanup(dryRun: boolean) {
+    if (!dryRun && !canCleanup) {
+      setStatus('Preview first. No cleanup target is selected yet.')
+      return
+    }
     setStatus(dryRun ? 'Previewing...' : 'Cleaning...')
+    setCleanupBusy(dryRun ? 'preview' : 'cleanup')
     try {
       const result = await api<Json>('/api/storage/cleanup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dryRun, policy: policyPayload() }) })
       setPreview(result)
-      setStatus(dryRun ? `Preview: ${result.summary?.selected ?? 0} selected.` : `Cleanup: ${result.summary?.archived ?? 0} archived, ${result.summary?.deleted ?? 0} deleted.`)
+      const selected = Number(result.summary?.selected ?? 0)
+      setStatus(dryRun ? (selected > 0 ? `Preview ready: ${selected} cleanup targets.` : 'Preview complete: no cleanup targets.') : `Cleanup complete: ${result.summary?.archived ?? 0} archived, ${result.summary?.deleted ?? 0} deleted.`)
       reload()
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
+    } finally {
+      setCleanupBusy('')
     }
   }
 
@@ -1662,8 +1677,8 @@ function StoragePage({ storage, status, setStatus, reload }: { storage: StorageS
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-ink">Cleanup Preview</h2>
             <div className="flex gap-2">
-              <IconButton tone="secondary" icon={<Search className="size-4" />} onClick={() => cleanup(true)}>Preview</IconButton>
-              <IconButton tone="danger" icon={<Archive className="size-4" />} onClick={() => cleanup(false)}>Clean Up</IconButton>
+              <IconButton tone="secondary" icon={<Search className="size-4" />} onClick={() => cleanup(true)} disabled={cleanupBusy !== ''}>{cleanupBusy === 'preview' ? 'Previewing...' : 'Preview'}</IconButton>
+              <IconButton tone="danger" icon={<Archive className="size-4" />} onClick={() => cleanup(false)} disabled={cleanupBusy !== '' || !canCleanup}>{cleanupBusy === 'cleanup' ? 'Cleaning...' : 'Clean Up'}</IconButton>
             </div>
           </div>
           {status ? <p className="mb-3 break-words text-sm text-soft">{status}</p> : null}
@@ -1673,23 +1688,27 @@ function StoragePage({ storage, status, setStatus, reload }: { storage: StorageS
             <StorageSummary label="Deleted" value={preview?.summary?.deleted} />
             <StorageSummary label="Skipped" value={preview?.summary?.skipped} />
           </div>
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[760px] table-fixed text-left text-sm">
-              <colgroup><col className="w-28" /><col className="w-32" /><col /><col className="w-24" /><col className="w-32" /></colgroup>
-              <thead className="text-xs text-soft"><tr><th className="px-3 py-2">Type</th><th className="px-3 py-2">Action</th><th className="px-3 py-2">Target</th><th className="px-3 py-2">Size</th><th className="px-3 py-2">Reason</th></tr></thead>
-              <tbody className="divide-y divide-line">
-                {(preview?.items ?? []).slice(0, 100).map((item: Json, idx: number) => (
-                  <tr key={`${item.type}-${item.id}-${idx}`} className="align-top">
-                    <td className="px-3 py-2"><Status value={item.type} /></td>
-                    <td className="px-3 py-2 text-soft">{item.skipped ? 'skip' : item.action}</td>
-                    <td className="break-words px-3 py-2 text-ink">{item.id || item.path || '-'}</td>
-                    <td className="px-3 py-2 text-soft">{formatBytes(item.bytes)}</td>
-                    <td className="break-words px-3 py-2 text-soft">{item.reason || '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {cleanupItems.length === 0 ? (
+            <div className="mt-4 rounded-os border border-line bg-void px-3 py-5 text-center text-sm text-soft">No cleanup targets</div>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[760px] table-fixed text-left text-sm">
+                <colgroup><col className="w-28" /><col className="w-32" /><col /><col className="w-24" /><col className="w-32" /></colgroup>
+                <thead className="text-xs text-soft"><tr><th className="px-3 py-2">Type</th><th className="px-3 py-2">Action</th><th className="px-3 py-2">Target</th><th className="px-3 py-2">Size</th><th className="px-3 py-2">Reason</th></tr></thead>
+                <tbody className="divide-y divide-line">
+                  {cleanupItems.slice(0, 100).map((item: Json, idx: number) => (
+                    <tr key={`${item.type}-${item.id}-${idx}`} className="align-top">
+                      <td className="px-3 py-2"><Status value={item.type} /></td>
+                      <td className="px-3 py-2 text-soft">{item.skipped ? 'skip' : item.action}</td>
+                      <td className="break-words px-3 py-2 text-ink">{item.id || item.path || '-'}</td>
+                      <td className="px-3 py-2 text-soft">{formatBytes(item.bytes)}</td>
+                      <td className="break-words px-3 py-2 text-soft">{item.reason || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Panel>
       </div>
 
