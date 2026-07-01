@@ -518,6 +518,106 @@ func TestServer_SearchEndpoint_RepositoryContext(t *testing.T) {
 	}
 }
 
+func TestRepositoryContextSearch_LiveGitHubSourcesRedactAndProvenance(t *testing.T) {
+	t.Setenv("AGENTOS_HOME", t.TempDir())
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/repos/owner/repo/issues":
+			_, _ = w.Write([]byte(`[{"number":7,"title":"Investigate failed run","body":"token=ghp_123456789012345678901234567890123456","state":"open","html_url":"https://github.com/owner/repo/issues/7","created_at":"2026-07-01T00:00:00Z"}]`))
+		case r.URL.Path == "/repos/owner/repo/pulls":
+			_, _ = w.Write([]byte(`[{"number":9,"title":"Fix report","state":"open","html_url":"https://github.com/owner/repo/pull/9","head":{"ref":"fix"},"base":{"ref":"main"}}]`))
+		case r.URL.Path == "/repos/owner/repo/commits/main/check-runs":
+			_, _ = w.Write([]byte(`{"check_runs":[{"id":11,"name":"lint","status":"completed","conclusion":"failure","html_url":"https://github.com/owner/repo/runs/11","output":{"title":"lint failed","summary":"secret=ghp_123456789012345678901234567890123456"}}]}`))
+		case r.URL.Path == "/repos/owner/repo/actions/runs":
+			_, _ = w.Write([]byte(`{"workflow_runs":[{"id":42,"name":"CI","display_title":"CI failure report","status":"completed","conclusion":"failure","html_url":"https://github.com/owner/repo/actions/runs/42","head_branch":"main","head_sha":"abc123","created_at":"2026-07-01T00:00:00Z","updated_at":"2026-07-01T00:01:00Z"}]}`))
+		case r.URL.Path == "/repos/owner/repo/actions/runs/42/logs":
+			_, _ = w.Write([]byte("build failed with github_token=ghp_123456789012345678901234567890123456\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer api.Close()
+	t.Setenv("GITHUB_API_URL", api.URL)
+
+	results, err := repositoryContextSearch(context.Background(), repositoryContextSearchQuery{
+		Repo:   "owner/repo",
+		Branch: "main",
+		Query:  "failed",
+		Source: "github",
+		Limit:  20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) < 3 {
+		t.Fatalf("results = %+v, want live GitHub issue/check/workflow evidence", results)
+	}
+	body, err := json.Marshal(results)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "ghp_123456789012345678901234567890123456") {
+		t.Fatalf("GitHub evidence leaked token: %s", string(body))
+	}
+	var sawIssue, sawCheck, sawWorkflow bool
+	for _, result := range results {
+		if result.Source != "github" || result.Repo != "owner/repo" || result.Branch != "main" || result.URL == "" {
+			t.Fatalf("bad provenance result: %+v", result)
+		}
+		switch result.Metadata["type"] {
+		case "issue":
+			sawIssue = true
+		case "check_run":
+			sawCheck = true
+		case "workflow_run":
+			sawWorkflow = true
+		}
+	}
+	if !sawIssue || !sawCheck || !sawWorkflow {
+		t.Fatalf("saw issue=%v check=%v workflow=%v in %+v", sawIssue, sawCheck, sawWorkflow, results)
+	}
+}
+
+func TestRepositoryContextSearch_KubernetesLogsRedact(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake kubectl shell script is POSIX-only")
+	}
+	t.Setenv("AGENTOS_HOME", t.TempDir())
+	dir := t.TempDir()
+	kubectl := filepath.Join(dir, "kubectl")
+	if err := os.WriteFile(kubectl, []byte("#!/bin/sh\necho 'agentos failed token=ghp_123456789012345678901234567890123456'\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(kubectl, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENTOS_KUBECTL", kubectl)
+	t.Setenv("AGENTOS_KUBECONFIG", filepath.Join(dir, "config"))
+	t.Setenv("AGENTOS_KUBERNETES_NAMESPACE", "agentos")
+	t.Setenv("AGENTOS_KUBERNETES_SELECTOR", "app.kubernetes.io/name=agentos")
+
+	results, err := repositoryContextSearch(context.Background(), repositoryContextSearchQuery{
+		Repo:   "owner/repo",
+		Branch: "main",
+		Query:  "failed",
+		Source: "kubernetes",
+		Limit:  20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Source != "kubernetes" {
+		t.Fatalf("results = %+v, want kubernetes logs", results)
+	}
+	if strings.Contains(results[0].Content, "ghp_123456789012345678901234567890123456") {
+		t.Fatalf("kubernetes logs leaked token: %+v", results[0])
+	}
+	if results[0].Metadata["namespace"] != "agentos" || results[0].Metadata["selector"] != "app.kubernetes.io/name=agentos" {
+		t.Fatalf("missing kubernetes provenance: %+v", results[0].Metadata)
+	}
+}
+
 // --- Runs ---
 
 func TestServer_RunsEndpoint_ReturnsEmptyList(t *testing.T) {

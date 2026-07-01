@@ -265,6 +265,36 @@ func TestClient_GetWorkflowRunLogs_Error(t *testing.T) {
 	}
 }
 
+func TestClient_ListWorkflowRuns(t *testing.T) {
+	t.Parallel()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/repos/owner/repo/actions/runs" {
+			t.Fatalf("path = %s, want actions runs", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("branch"); got != "main" {
+			t.Fatalf("branch = %q, want main", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"workflow_runs":[{"id":42,"name":"CI","display_title":"Build main","status":"completed","conclusion":"success","html_url":"https://github.com/owner/repo/actions/runs/42","head_branch":"main","head_sha":"abc123"}]}`))
+	}))
+	defer ts.Close()
+
+	c := &Client{
+		BaseURL:   ts.URL,
+		Token:     "test-token",
+		RepoOwner: "owner",
+		RepoName:  "repo",
+		http:      ts.Client(),
+	}
+	runs, err := c.ListWorkflowRuns("main")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(runs) != 1 || runs[0].ID != 42 || runs[0].DisplayTitle != "Build main" {
+		t.Fatalf("unexpected runs: %+v", runs)
+	}
+}
+
 func TestClient_CreatePR(t *testing.T) {
 	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -4,13 +4,16 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	agentosgh "github.com/kazyamaz200/agentos/internal/github"
 	"github.com/kazyamaz200/agentos/internal/guideline"
 	"github.com/kazyamaz200/agentos/internal/memory"
+	"github.com/kazyamaz200/agentos/internal/safety"
 )
 
 type repositoryContextSearchQuery struct {
@@ -73,6 +76,18 @@ func repositoryContextSearch(ctx context.Context, q repositoryContextSearchQuery
 		if err == nil {
 			results = append(results, code...)
 		}
+	}
+	if contextSourceExplicit(q.Source, "github") {
+		ghResults, err := repositoryContextLiveGitHub(q)
+		if err != nil {
+			results = append(results, repositoryContextSourceError(q, "github", err))
+		} else {
+			results = append(results, ghResults...)
+		}
+	}
+	if contextSourceExplicit(q.Source, "kubernetes") {
+		k8sResult := repositoryContextKubernetesLogs(ctx, q)
+		results = append(results, k8sResult)
 	}
 	sort.Slice(results, func(i, j int) bool {
 		if results[i].Score != results[j].Score {
@@ -284,6 +299,206 @@ func repositoryContextGitHubResults(q repositoryContextSearchQuery, record *orch
 	return results
 }
 
+func repositoryContextLiveGitHub(q repositoryContextSearchQuery) ([]repositoryContextSearchResult, error) {
+	parts := splitRepo(q.Repo)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("repo must be owner/name")
+	}
+	client := agentosgh.NewClient(parts[0], parts[1])
+	redactor := safety.NewRedactor()
+	var results []repositoryContextSearchResult
+
+	issues, err := client.ListIssues("all")
+	if err != nil {
+		results = append(results, repositoryContextSourceError(q, "github", err))
+	} else {
+		for i := range issues {
+			issue := issues[i]
+			content := redactor.RedactString(strings.TrimSpace(issue.Body))
+			title := fmt.Sprintf("#%d %s", issue.Number, issue.Title)
+			if score := contextScore(q.Query, title, content, issue.State); q.Query == "" || score > 0 {
+				created := issue.CreatedAt
+				results = append(results, repositoryContextSearchResult{
+					Source:    "github",
+					ID:        fmt.Sprintf("issue:%d", issue.Number),
+					Title:     title,
+					Content:   shortContext(content, 2000),
+					Repo:      q.Repo,
+					Branch:    q.Branch,
+					URL:       issue.HTMLURL,
+					Score:     score,
+					CreatedAt: &created,
+					UpdatedAt: &created,
+					Metadata: map[string]interface{}{
+						"type":   "issue",
+						"state":  issue.State,
+						"number": issue.Number,
+						"labels": issue.Labels,
+					},
+				})
+			}
+		}
+	}
+
+	prs, err := client.ListPRs("all")
+	if err != nil {
+		results = append(results, repositoryContextSourceError(q, "github", err))
+	} else {
+		for i := range prs {
+			pr := prs[i]
+			title := fmt.Sprintf("#%d %s", pr.Number, pr.Title)
+			content := redactor.RedactString(strings.TrimSpace(pr.Body + "\n" + pr.Head + " -> " + pr.Base))
+			if score := contextScore(q.Query, title, content, pr.State); q.Query == "" || score > 0 {
+				results = append(results, repositoryContextSearchResult{
+					Source:  "github",
+					ID:      fmt.Sprintf("pull:%d", pr.Number),
+					Title:   title,
+					Content: shortContext(content, 2000),
+					Repo:    q.Repo,
+					Branch:  q.Branch,
+					URL:     pr.HTMLURL,
+					Score:   score,
+					Metadata: map[string]interface{}{
+						"type":   "pull_request",
+						"state":  pr.State,
+						"number": pr.Number,
+						"head":   pr.Head,
+						"base":   pr.Base,
+					},
+				})
+			}
+		}
+	}
+
+	checks, err := client.GetCheckRuns(q.Branch)
+	if err != nil {
+		results = append(results, repositoryContextSourceError(q, "github", err))
+	} else {
+		for i := range checks {
+			check := checks[i]
+			content := redactor.RedactString(strings.TrimSpace(check.Output.Title + "\n" + check.Output.Summary + "\n" + check.Output.Text))
+			title := strings.TrimSpace(check.Name + " " + check.Conclusion)
+			if score := contextScore(q.Query, title, content, check.Status, check.Conclusion); q.Query == "" || score > 0 {
+				completed := check.CompletedAt
+				results = append(results, repositoryContextSearchResult{
+					Source:    "github",
+					ID:        fmt.Sprintf("check:%d", check.ID),
+					Title:     strings.TrimSpace(check.Name),
+					Content:   shortContext(content, 2000),
+					Repo:      q.Repo,
+					Branch:    q.Branch,
+					URL:       check.HTMLURL,
+					Score:     score,
+					UpdatedAt: &completed,
+					Metadata: map[string]interface{}{
+						"type":       "check_run",
+						"status":     check.Status,
+						"conclusion": check.Conclusion,
+					},
+				})
+			}
+		}
+	}
+
+	runs, err := client.ListWorkflowRuns(q.Branch)
+	if err != nil {
+		results = append(results, repositoryContextSourceError(q, "github", err))
+	} else {
+		results = append(results, repositoryContextWorkflowRunResults(q, client, redactor, runs)...)
+	}
+
+	return results, nil
+}
+
+func repositoryContextWorkflowRunResults(q repositoryContextSearchQuery, client *agentosgh.Client, redactor *safety.Redactor, runs []agentosgh.WorkflowRun) []repositoryContextSearchResult {
+	var results []repositoryContextSearchResult
+	for i := range runs {
+		run := runs[i]
+		title := strings.TrimSpace(run.DisplayTitle)
+		if title == "" {
+			title = run.Name
+		}
+		contentParts := []string{run.Status, run.Conclusion, run.HeadBranch, run.HeadSHA}
+		logs, err := client.GetWorkflowRunLogs(run.ID)
+		if err == nil {
+			contentParts = append(contentParts, redactor.RedactString(logs))
+		}
+		content := strings.TrimSpace(strings.Join(contentParts, "\n"))
+		if score := contextScore(q.Query, title, content); q.Query == "" || score > 0 {
+			created := run.CreatedAt
+			updated := run.UpdatedAt
+			results = append(results, repositoryContextSearchResult{
+				Source:    "github",
+				ID:        fmt.Sprintf("workflow-run:%d", run.ID),
+				Title:     title,
+				Content:   shortContext(content, 3000),
+				Repo:      q.Repo,
+				Branch:    q.Branch,
+				URL:       run.HTMLURL,
+				Score:     score,
+				CreatedAt: &created,
+				UpdatedAt: &updated,
+				Metadata: map[string]interface{}{
+					"type":       "workflow_run",
+					"status":     run.Status,
+					"conclusion": run.Conclusion,
+					"headSha":    run.HeadSHA,
+					"logStatus":  workflowLogStatus(err),
+				},
+			})
+		}
+	}
+	return results
+}
+
+func repositoryContextKubernetesLogs(ctx context.Context, q repositoryContextSearchQuery) repositoryContextSearchResult {
+	now := time.Now().UTC()
+	namespace := strings.TrimSpace(os.Getenv("AGENTOS_KUBERNETES_NAMESPACE"))
+	selector := strings.TrimSpace(os.Getenv("AGENTOS_KUBERNETES_SELECTOR"))
+	if namespace == "" || selector == "" {
+		return repositoryContextSourceError(q, "kubernetes", fmt.Errorf("AGENTOS_KUBERNETES_NAMESPACE and AGENTOS_KUBERNETES_SELECTOR are required"))
+	}
+
+	kubectl := strings.TrimSpace(os.Getenv("AGENTOS_KUBECTL"))
+	if kubectl == "" {
+		kubectl = "kubectl"
+	}
+	args := []string{}
+	if kubeconfig := strings.TrimSpace(os.Getenv("AGENTOS_KUBECONFIG")); kubeconfig != "" {
+		args = append(args, "--kubeconfig", kubeconfig)
+	}
+	if contextName := strings.TrimSpace(os.Getenv("AGENTOS_KUBERNETES_CONTEXT")); contextName != "" {
+		args = append(args, "--context", contextName)
+	}
+	args = append(args, "-n", namespace, "logs", "-l", selector, "--tail=200")
+	if container := strings.TrimSpace(os.Getenv("AGENTOS_KUBERNETES_CONTAINER")); container != "" {
+		args = append(args, "-c", container)
+	}
+
+	out, err := exec.CommandContext(ctx, kubectl, args...).CombinedOutput()
+	if err != nil {
+		return repositoryContextSourceError(q, "kubernetes", fmt.Errorf("kubectl logs failed: %s", strings.TrimSpace(string(out))))
+	}
+	content := safety.NewRedactor().RedactString(string(out))
+	score := contextScore(q.Query, namespace, selector, content)
+	return repositoryContextSearchResult{
+		Source:    "kubernetes",
+		ID:        "kubernetes:logs:" + namespace + ":" + selector,
+		Title:     "Kubernetes logs",
+		Content:   shortContext(content, 4000),
+		Repo:      q.Repo,
+		Branch:    q.Branch,
+		Score:     score,
+		CreatedAt: &now,
+		UpdatedAt: &now,
+		Metadata: map[string]interface{}{
+			"type":      "pod_logs",
+			"namespace": namespace,
+			"selector":  selector,
+		},
+	}
+}
+
 func repositoryContextCode(q repositoryContextSearchQuery) ([]repositoryContextSearchResult, error) {
 	repoPath, err := resolveOrchestrateRepo(q.Repo, q.Branch)
 	if err != nil {
@@ -341,6 +556,37 @@ func repositoryContextCode(q repositoryContextSearchQuery) ([]repositoryContextS
 func contextSourceAllowed(selected, source string) bool {
 	selected = strings.TrimSpace(selected)
 	return selected == "" || selected == "all" || selected == source || selected == source+"s"
+}
+
+func contextSourceExplicit(selected, source string) bool {
+	selected = strings.TrimSpace(selected)
+	return selected == source || selected == source+"s"
+}
+
+func repositoryContextSourceError(q repositoryContextSearchQuery, source string, err error) repositoryContextSearchResult {
+	now := time.Now().UTC()
+	return repositoryContextSearchResult{
+		Source:    source,
+		ID:        source + ":error",
+		Title:     source + " source unavailable",
+		Content:   safety.NewRedactor().RedactString(err.Error()),
+		Repo:      q.Repo,
+		Branch:    q.Branch,
+		Score:     0.1,
+		CreatedAt: &now,
+		UpdatedAt: &now,
+		Metadata: map[string]interface{}{
+			"type":  "source_error",
+			"error": true,
+		},
+	}
+}
+
+func workflowLogStatus(err error) string {
+	if err == nil {
+		return "included"
+	}
+	return "unavailable"
 }
 
 func contextScore(query string, values ...string) float64 {

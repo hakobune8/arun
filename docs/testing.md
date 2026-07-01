@@ -106,7 +106,7 @@ of the AgentOS Web UI at `https://agentos.nakanoshima.hakobune8.com`.
 4. Click **Search**
 
 ### Expected Results
-- [ ] Search results show matches with source label
+- [ ] Search results show matches with source label, including GitHub or Kubernetes evidence when those sources are selected and configured
 - [ ] Source filter limits results to memory, guidelines, or PRs
 - [ ] Empty results show "No results" message
 

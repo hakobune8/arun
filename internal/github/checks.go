@@ -14,7 +14,10 @@
 
 package github
 
-import "fmt"
+import (
+	"fmt"
+	"net/url"
+)
 
 // GetCheckRuns retrieves check runs for a given Git ref.
 func (c *Client) GetCheckRuns(ref string) ([]CheckRun, error) {
@@ -65,7 +68,7 @@ func (c *Client) GetCheckRunAnnotations(checkRunID int) (string, error) {
 }
 
 // GetWorkflowRunLogs retrieves the logs for a workflow run.
-func (c *Client) GetWorkflowRunLogs(runID int) (string, error) {
+func (c *Client) GetWorkflowRunLogs(runID int64) (string, error) {
 	path := fmt.Sprintf("/%s/actions/runs/%d/logs", c.RepoPath(), runID)
 
 	data, err := c.do("GET", path, nil)
@@ -74,4 +77,20 @@ func (c *Client) GetWorkflowRunLogs(runID int) (string, error) {
 	}
 
 	return string(data), nil
+}
+
+// ListWorkflowRuns retrieves recent GitHub Actions workflow runs for a branch.
+func (c *Client) ListWorkflowRuns(branch string) ([]WorkflowRun, error) {
+	path := fmt.Sprintf("/%s/actions/runs?per_page=20", c.RepoPath())
+	if branch != "" {
+		path += "&branch=" + url.QueryEscape(branch)
+	}
+
+	var resp struct {
+		WorkflowRuns []WorkflowRun `json:"workflow_runs"`
+	}
+	if err := c.doJSON("GET", path, nil, &resp); err != nil {
+		return nil, fmt.Errorf("list workflow runs: %w", err)
+	}
+	return resp.WorkflowRuns, nil
 }
