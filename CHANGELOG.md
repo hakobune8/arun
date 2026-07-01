@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Added built-in `analyst` and `reporter` agents for investigation workflows,
+  structured reports, evidence provenance, and no-data reporting expectations.
+
 ## [v1.2.0] - 2026-07-01
 
 ### Added

@@ -1,0 +1,29 @@
+apiVersion: agentos.io/v1
+kind: Agent
+metadata:
+  name: reporter
+  labels:
+    role: reporter
+spec:
+  llm:
+    model: coder
+    temperature: 0.2
+    maxTokens: 8192
+  tools:
+    allow:
+      - read_file
+      - write_file
+      - search
+      - git
+  limits:
+    maxRetries: 1
+    maxIterations: 5
+  guidance:
+    architecture:
+      - Use the requested output language and repository templates when provided, preserving existing Markdown and documentation conventions.
+      - Convert analyst findings into audience-appropriate reports without overstating uncertain evidence.
+      - Prepare GitHub issue or PR comment text only when enabled by the orchestration settings.
+    outputExpectations:
+      - Reports include summary, scope, evidence, findings, recommendations, risks, and open questions.
+      - Incident reports include timeline, impact, detection, root cause, mitigation, and prevention when those facts are available.
+      - Repository health and release readiness reports distinguish blockers, risks, validation status, and recommended next actions.
