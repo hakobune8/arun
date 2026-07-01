@@ -114,6 +114,11 @@ forbid` skips a due execution when the previous schedule run is still planning
 or running. Each orchestration started by a schedule records `scheduleId`, and
 the schedule history stores the linked run ID and latest run status.
 
+The same in-process scheduler also runs storage cleanup at startup and then
+periodically. Storage cleanup uses the Web UI/API policy, preserves audit logs,
+skips active runs, and skips GitHub-linked orchestration records unless the
+policy explicitly allows linked cleanup.
+
 Schedules can also enable outcome notifications. Notification triggers include
 started, completed, failed, skipped, PR-created, quality-gate-failed, and
 manual-intervention outcomes. Destinations include the Web UI notification

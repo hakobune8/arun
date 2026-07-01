@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/kazyamaz200/agentos/internal/agent"
+	"github.com/kazyamaz200/agentos/internal/apphome"
 	agentosgh "github.com/kazyamaz200/agentos/internal/github"
 	"github.com/kazyamaz200/agentos/internal/guideline"
 	"github.com/kazyamaz200/agentos/internal/memory"
@@ -1343,6 +1344,191 @@ func TestPrepareSchedule_NormalizesGovernanceLimits(t *testing.T) {
 	req := schedule.orchestrateRequest()
 	if req.Limits.MaxDuration != "5m" || req.Limits.MaxSubtasks != 2 || req.Limits.MaxConcurrentRepoRun != 1 {
 		t.Fatalf("request limits = %+v", req.Limits)
+	}
+}
+
+func TestStorageCleanup_ArchivesOldOrchestrationAndArtifacts(t *testing.T) {
+	home := shortTestDir(t)
+	t.Setenv("AGENTOS_HOME", home)
+	now := time.Now().UTC()
+	newRecord := &orchestrationRecord{
+		ID:         "run-1111111111111111",
+		Repo:       "owner/repo",
+		BaseBranch: "main",
+		Task:       "new",
+		Status:     "completed",
+		CreatedAt:  now.Add(-2 * time.Hour),
+		UpdatedAt:  now.Add(-90 * time.Minute),
+	}
+	oldRecord := &orchestrationRecord{
+		ID:         "run-2222222222222222",
+		Repo:       "owner/repo",
+		BaseBranch: "main",
+		Task:       "old",
+		Status:     "completed",
+		CreatedAt:  now.Add(-4 * time.Hour),
+		UpdatedAt:  now.Add(-3 * time.Hour),
+	}
+	if err := saveOrchestrationRecord(newRecord); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveOrchestrationRecord(oldRecord); err != nil {
+		t.Fatal(err)
+	}
+	runDir := filepath.Join(apphome.RunsDir(), oldRecord.ID+"-step-1")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runDir, "summary.md"), []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	oldTime := now.Add(-3 * time.Hour)
+	if err := os.Chtimes(runDir, oldTime, oldTime); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runStorageCleanup(context.Background(), storageCleanupRequest{
+		Policy: &storagePolicy{
+			OrchestrationRetention: "1h",
+			RunArtifactRetention:   "1h",
+			WorkspaceRetention:     "0",
+			MemoryRetention:        "0",
+			GuidelineRetention:     "0",
+			KeepLastOrchestrations: 1,
+			ArchiveBeforeDelete:    true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("runStorageCleanup() error = %v", err)
+	}
+	if result.Summary.Archived != 2 {
+		t.Fatalf("summary = %+v, want 2 archived", result.Summary)
+	}
+	if _, err := readOrchestrationRecord(oldRecord.ID); err == nil {
+		t.Fatal("old orchestration still exists")
+	}
+	if _, err := os.Stat(runDir); !os.IsNotExist(err) {
+		t.Fatalf("run artifacts stat error = %v, want not exist", err)
+	}
+	if count := entryCount(filepath.Join(home, "archive", "orchestrates")); count != 1 {
+		t.Fatalf("archived orchestrations = %d, want 1", count)
+	}
+	if count := dirEntryCount(filepath.Join(home, "archive", "runs")); count != 1 {
+		t.Fatalf("archived runs = %d, want 1", count)
+	}
+}
+
+func TestStorageCleanup_SkipsGitHubLinkedOrchestrationByDefault(t *testing.T) {
+	t.Setenv("AGENTOS_HOME", shortTestDir(t))
+	now := time.Now().UTC()
+	if err := saveOrchestrationRecord(&orchestrationRecord{
+		ID:         "run-1111111111111111",
+		Repo:       "owner/repo",
+		BaseBranch: "main",
+		Task:       "new",
+		Status:     "completed",
+		CreatedAt:  now.Add(-2 * time.Hour),
+		UpdatedAt:  now.Add(-90 * time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	linked := &orchestrationRecord{
+		ID:         "run-2222222222222222",
+		Repo:       "owner/repo",
+		BaseBranch: "main",
+		Task:       "linked",
+		Status:     "completed",
+		GitHub:     &orchestrationGitHubState{IssueURL: "https://github.com/owner/repo/issues/1"},
+		CreatedAt:  now.Add(-4 * time.Hour),
+		UpdatedAt:  now.Add(-3 * time.Hour),
+	}
+	if err := saveOrchestrationRecord(linked); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runStorageCleanup(context.Background(), storageCleanupRequest{
+		DryRun: true,
+		Policy: &storagePolicy{
+			OrchestrationRetention: "1h",
+			RunArtifactRetention:   "0",
+			WorkspaceRetention:     "0",
+			MemoryRetention:        "0",
+			GuidelineRetention:     "0",
+			KeepLastOrchestrations: 1,
+			ArchiveBeforeDelete:    true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("runStorageCleanup() error = %v", err)
+	}
+	if result.Summary.Skipped != 1 || len(result.Items) != 1 || !result.Items[0].Skipped {
+		t.Fatalf("result = %+v, want skipped linked record", result)
+	}
+	if !strings.Contains(result.Items[0].Reason, "GitHub-linked") {
+		t.Fatalf("reason = %q, want GitHub-linked", result.Items[0].Reason)
+	}
+}
+
+func entryCount(path string) int {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return 0
+	}
+	return len(entries)
+}
+
+func TestStorageCleanup_ArchivesOldRepositoryMemory(t *testing.T) {
+	t.Setenv("AGENTOS_HOME", shortTestDir(t))
+	old := time.Now().UTC().Add(-2 * time.Hour)
+	data, err := json.Marshal([]memory.RepositoryEntry{
+		{
+			ID:        "repo-mem-1",
+			Repo:      "owner/repo",
+			Branch:    "main",
+			Type:      "note",
+			Content:   "stale",
+			Status:    memory.RepositoryMemoryApproved,
+			CreatedAt: old,
+			UpdatedAt: old,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(repositoryMemoryPath(), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runStorageCleanup(context.Background(), storageCleanupRequest{
+		Policy: &storagePolicy{
+			Repo:                     "owner/repo",
+			BaseBranch:               "main",
+			OrchestrationRetention:   "0",
+			RunArtifactRetention:     "0",
+			WorkspaceRetention:       "0",
+			MemoryRetention:          "1h",
+			GuidelineRetention:       "0",
+			KeepLastOrchestrations:   1,
+			ArchiveBeforeDelete:      true,
+			AllowLinkedGitHubCleanup: false,
+		},
+	})
+	if err != nil {
+		t.Fatalf("runStorageCleanup() error = %v", err)
+	}
+	if result.Summary.Archived != 1 {
+		t.Fatalf("summary = %+v, want 1 archived", result.Summary)
+	}
+	store, err := repositoryMemoryStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, err := store.Get(context.Background(), "repo-mem-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry.Status != memory.RepositoryMemoryArchived {
+		t.Fatalf("Status = %q, want archived", entry.Status)
 	}
 }
 

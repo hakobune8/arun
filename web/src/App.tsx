@@ -140,7 +140,12 @@ type ScheduleTemplate = {
   requiredPermissions?: string[]
 }
 
-type PageName = 'orchestrates' | 'schedules' | 'agents' | 'audit'
+type StorageState = {
+  policy?: Json
+  usage?: Json
+}
+
+type PageName = 'orchestrates' | 'schedules' | 'storage' | 'agents' | 'audit'
 type OrchPanel = 'new' | 'list' | 'detail'
 type DetailTab = 'overview' | 'runs' | 'memory' | 'guidelines' | 'search' | 'github'
 
@@ -201,6 +206,19 @@ const defaultScheduleForm = {
   maxGitHubRequests: '',
   maxConcurrentRepoRuns: '1',
   maxConcurrentOrgRuns: '',
+}
+
+const defaultStoragePolicy = {
+  repo: '',
+  baseBranch: 'main',
+  orchestrationRetention: '720h0m0s',
+  runArtifactRetention: '336h0m0s',
+  workspaceRetention: '168h0m0s',
+  memoryRetention: '4320h0m0s',
+  guidelineRetention: '4320h0m0s',
+  keepLastOrchestrations: '100',
+  archiveBeforeDelete: true,
+  allowLinkedGitHubCleanup: false,
 }
 
 async function api<T = any>(path: string, init?: RequestInit): Promise<T> {
@@ -342,11 +360,13 @@ function App() {
   const [selectedID, setSelectedID] = useState('')
   const [current, setCurrent] = useState<Orchestration | null>(null)
   const [audit, setAudit] = useState<Json[]>([])
+  const [storage, setStorage] = useState<StorageState>({})
   const [form, setForm] = useState(defaultForm)
   const [scheduleForm, setScheduleForm] = useState(defaultScheduleForm)
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set())
   const [status, setStatus] = useState('')
   const [scheduleStatus, setScheduleStatus] = useState('')
+  const [storageStatus, setStorageStatus] = useState('')
 
   const canUseApp = !session.authRequired || session.authenticated
 
@@ -358,7 +378,7 @@ function App() {
 
   useEffect(() => {
     if (!canUseApp) return
-    void Promise.all([loadAgents(), loadRepositories(), loadLLM(), loadRecords(), loadSchedules(), loadScheduleTemplates(), loadNotifications()])
+    void Promise.all([loadAgents(), loadRepositories(), loadLLM(), loadRecords(), loadSchedules(), loadScheduleTemplates(), loadNotifications(), loadStorage()])
   }, [canUseApp])
 
   useEffect(() => {
@@ -427,6 +447,11 @@ function App() {
     setNotifications(data)
   }
 
+  async function loadStorage() {
+    const data = await api<StorageState>('/api/storage')
+    setStorage(data)
+  }
+
   async function refreshCurrent(id = selectedID) {
     if (!id) return
     const data = await api<Orchestration>(`/api/orchestrates/${encodeURIComponent(id)}`)
@@ -445,6 +470,7 @@ function App() {
     if (next === 'audit') void loadAudit()
     if (next === 'orchestrates') void loadRecords()
     if (next === 'schedules') void Promise.all([loadSchedules(), loadScheduleTemplates(), loadNotifications()])
+    if (next === 'storage') void loadStorage()
   }
 
   if (session.authRequired && !session.authenticated) {
@@ -489,6 +515,7 @@ function App() {
           <nav className="hidden gap-1 md:flex">
             <NavButton active={page === 'orchestrates'} icon={<ClipboardList className="size-4" />} onClick={() => navTo('orchestrates')}>Orchestrate</NavButton>
             <NavButton active={page === 'schedules'} icon={<CalendarClock className="size-4" />} onClick={() => navTo('schedules')}>Schedules</NavButton>
+            <NavButton active={page === 'storage'} icon={<Database className="size-4" />} onClick={() => navTo('storage')}>Storage</NavButton>
             <NavButton active={page === 'agents'} icon={<Bot className="size-4" />} onClick={() => navTo('agents')}>Agents</NavButton>
             <NavButton active={page === 'audit'} icon={<History className="size-4" />} onClick={() => navTo('audit')}>Audit</NavButton>
           </nav>
@@ -553,13 +580,15 @@ function App() {
             submit={submitSchedule}
           />
         ) : null}
+        {page === 'storage' ? <StoragePage storage={storage} status={storageStatus} setStatus={setStorageStatus} reload={() => void loadStorage()} /> : null}
         {page === 'agents' ? <AgentsPage agents={agents} reload={() => void loadAgents()} /> : null}
         {page === 'audit' ? <AuditPage audit={audit} reload={() => void loadAudit()} /> : null}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-line bg-void/95 px-2 py-2 backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-void/95 px-2 py-2 backdrop-blur md:hidden">
         <BottomNav active={page === 'orchestrates'} icon={<ClipboardList className="size-5" />} onClick={() => navTo('orchestrates')}>Orchestrate</BottomNav>
         <BottomNav active={page === 'schedules'} icon={<CalendarClock className="size-5" />} onClick={() => navTo('schedules')}>Schedules</BottomNav>
+        <BottomNav active={page === 'storage'} icon={<Database className="size-5" />} onClick={() => navTo('storage')}>Storage</BottomNav>
         <BottomNav active={page === 'agents'} icon={<Bot className="size-5" />} onClick={() => navTo('agents')}>Agents</BottomNav>
         <BottomNav active={page === 'audit'} icon={<History className="size-5" />} onClick={() => navTo('audit')}>Audit</BottomNav>
       </nav>
@@ -1547,6 +1576,165 @@ function GitHubTab({ record }: { record: Orchestration }) {
       </div>
     </Panel>
   )
+}
+
+function formatBytes(value: unknown) {
+  const bytes = Number(value ?? 0)
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let size = bytes
+  let unit = 0
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024
+    unit++
+  }
+  return `${size.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`
+}
+
+function StoragePage({ storage, status, setStatus, reload }: { storage: StorageState; status: string; setStatus: (value: string) => void; reload: () => void }) {
+  const [policy, setPolicy] = useState(defaultStoragePolicy)
+  const [preview, setPreview] = useState<Json | null>(null)
+  const usage = storage.usage ?? {}
+
+  useEffect(() => {
+    const next = { ...defaultStoragePolicy, ...(storage.policy ?? {}) }
+    setPolicy({ ...next, keepLastOrchestrations: String(next.keepLastOrchestrations ?? defaultStoragePolicy.keepLastOrchestrations) })
+  }, [storage.policy])
+
+  const update = (patch: Partial<typeof defaultStoragePolicy>) => setPolicy((current) => ({ ...current, ...patch }))
+  const policyPayload = () => ({
+    repo: policy.repo.trim(),
+    baseBranch: policy.baseBranch.trim() || 'main',
+    orchestrationRetention: policy.orchestrationRetention.trim(),
+    runArtifactRetention: policy.runArtifactRetention.trim(),
+    workspaceRetention: policy.workspaceRetention.trim(),
+    memoryRetention: policy.memoryRetention.trim(),
+    guidelineRetention: policy.guidelineRetention.trim(),
+    keepLastOrchestrations: numberOrUndefined(policy.keepLastOrchestrations),
+    archiveBeforeDelete: policy.archiveBeforeDelete,
+    allowLinkedGitHubCleanup: policy.allowLinkedGitHubCleanup,
+  })
+
+  async function savePolicy(event: FormEvent) {
+    event.preventDefault()
+    setStatus('Saving...')
+    try {
+      await api('/api/storage/policy', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(policyPayload()) })
+      setStatus('Saved.')
+      reload()
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function cleanup(dryRun: boolean) {
+    setStatus(dryRun ? 'Previewing...' : 'Cleaning...')
+    try {
+      const result = await api<Json>('/api/storage/cleanup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dryRun, policy: policyPayload() }) })
+      setPreview(result)
+      setStatus(dryRun ? `Preview: ${result.summary?.selected ?? 0} selected.` : `Cleanup: ${result.summary?.archived ?? 0} archived, ${result.summary?.deleted ?? 0} deleted.`)
+      reload()
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]">
+      <div className="grid gap-4">
+        <Panel>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h1 className="text-lg font-semibold text-ink">Storage</h1>
+            <IconButton tone="secondary" icon={<RefreshCw className="size-4" />} onClick={reload}>Refresh</IconButton>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StorageStat label="Home" value={usage.homeBytes} />
+            <StorageStat label="Orchestrations" value={usage.orchestrationBytes} count={usage.orchestrationCount} />
+            <StorageStat label="Runs" value={usage.runArtifactBytes} count={usage.runArtifactCount} />
+            <StorageStat label="Workspaces" value={usage.workspaceBytes} count={usage.workspaceCount} />
+            <StorageStat label="Archive" value={usage.archiveBytes} />
+            <StorageStat label="Audit" value={usage.auditBytes} />
+            <StorageStat label="Memory" value={usage.memoryBytes} count={usage.memoryCount} />
+            <StorageStat label="Guidelines" value={usage.guidelineBytes} count={usage.guidelineCount} />
+          </div>
+        </Panel>
+        <Panel>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-ink">Cleanup Preview</h2>
+            <div className="flex gap-2">
+              <IconButton tone="secondary" icon={<Search className="size-4" />} onClick={() => cleanup(true)}>Preview</IconButton>
+              <IconButton tone="danger" icon={<Archive className="size-4" />} onClick={() => cleanup(false)}>Clean Up</IconButton>
+            </div>
+          </div>
+          {status ? <p className="mb-3 break-words text-sm text-soft">{status}</p> : null}
+          <div className="grid gap-3 sm:grid-cols-4">
+            <StorageSummary label="Selected" value={preview?.summary?.selected} />
+            <StorageSummary label="Archived" value={preview?.summary?.archived} />
+            <StorageSummary label="Deleted" value={preview?.summary?.deleted} />
+            <StorageSummary label="Skipped" value={preview?.summary?.skipped} />
+          </div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[760px] table-fixed text-left text-sm">
+              <colgroup><col className="w-28" /><col className="w-32" /><col /><col className="w-24" /><col className="w-32" /></colgroup>
+              <thead className="text-xs text-soft"><tr><th className="px-3 py-2">Type</th><th className="px-3 py-2">Action</th><th className="px-3 py-2">Target</th><th className="px-3 py-2">Size</th><th className="px-3 py-2">Reason</th></tr></thead>
+              <tbody className="divide-y divide-line">
+                {(preview?.items ?? []).slice(0, 100).map((item: Json, idx: number) => (
+                  <tr key={`${item.type}-${item.id}-${idx}`} className="align-top">
+                    <td className="px-3 py-2"><Status value={item.type} /></td>
+                    <td className="px-3 py-2 text-soft">{item.skipped ? 'skip' : item.action}</td>
+                    <td className="break-words px-3 py-2 text-ink">{item.id || item.path || '-'}</td>
+                    <td className="px-3 py-2 text-soft">{formatBytes(item.bytes)}</td>
+                    <td className="break-words px-3 py-2 text-soft">{item.reason || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      </div>
+
+      <Panel>
+        <form className="grid gap-3" onSubmit={savePolicy}>
+          <div className="text-sm font-semibold text-ink">Policy</div>
+          <Field label="Repository">
+            <input className={inputClass} value={policy.repo} onChange={(e) => update({ repo: e.target.value })} placeholder="all repositories" />
+          </Field>
+          <Field label="Base Branch">
+            <input className={inputClass} value={policy.baseBranch} onChange={(e) => update({ baseBranch: e.target.value })} placeholder="main" />
+          </Field>
+          <Field label="Orchestration Retention">
+            <input className={inputClass} value={policy.orchestrationRetention} onChange={(e) => update({ orchestrationRetention: e.target.value })} placeholder="720h" />
+          </Field>
+          <Field label="Run Artifact Retention">
+            <input className={inputClass} value={policy.runArtifactRetention} onChange={(e) => update({ runArtifactRetention: e.target.value })} placeholder="336h" />
+          </Field>
+          <Field label="Workspace Retention">
+            <input className={inputClass} value={policy.workspaceRetention} onChange={(e) => update({ workspaceRetention: e.target.value })} placeholder="168h" />
+          </Field>
+          <Field label="Memory Retention">
+            <input className={inputClass} value={policy.memoryRetention} onChange={(e) => update({ memoryRetention: e.target.value })} placeholder="4320h" />
+          </Field>
+          <Field label="Guideline Retention">
+            <input className={inputClass} value={policy.guidelineRetention} onChange={(e) => update({ guidelineRetention: e.target.value })} placeholder="4320h" />
+          </Field>
+          <Field label="Keep Last Runs">
+            <input className={inputClass} inputMode="numeric" value={policy.keepLastOrchestrations} onChange={(e) => update({ keepLastOrchestrations: e.target.value })} placeholder="100" />
+          </Field>
+          <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={policy.archiveBeforeDelete} onChange={(e) => update({ archiveBeforeDelete: e.target.checked })} />Archive before delete</label>
+          <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={policy.allowLinkedGitHubCleanup} onChange={(e) => update({ allowLinkedGitHubCleanup: e.target.checked })} />Allow GitHub-linked cleanup</label>
+          <IconButton icon={<Check className="size-4" />}>Save Policy</IconButton>
+        </form>
+      </Panel>
+    </div>
+  )
+}
+
+function StorageStat({ label, value, count }: { label: string; value: unknown; count?: unknown }) {
+  return <div className="rounded-os border border-line bg-void p-3"><div className="text-xs text-soft">{label}</div><div className="text-lg font-semibold text-cyan-os">{formatBytes(value)}</div>{count !== undefined ? <div className="text-xs text-soft">{String(count)} items</div> : null}</div>
+}
+
+function StorageSummary({ label, value }: { label: string; value: unknown }) {
+  return <div className="rounded-os border border-line bg-void p-3 text-center"><div className="text-xl font-semibold text-ink">{Number(value ?? 0)}</div><div className="text-xs text-soft">{label}</div></div>
 }
 
 function ApprovalActions({ id, refresh }: { id: string; refresh: () => void }) {
