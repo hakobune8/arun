@@ -268,7 +268,7 @@ publish a new immutable chart release.
 - [x] Log and data sources for investigation agents
 - [x] Recurring orchestration jobs
 - [x] Built-in maintenance and reporting workflow templates
-- [ ] Outcome notifications for scheduled orchestrations
+- [x] Outcome notifications for scheduled orchestrations
 
 ### v1.2 — Agent Expansion & Repository Context
 - [x] Expanded built-in agent registry for broader repository workflows

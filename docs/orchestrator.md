@@ -95,6 +95,13 @@ forbid` skips a due execution when the previous schedule run is still planning
 or running. Each orchestration started by a schedule records `scheduleId`, and
 the schedule history stores the linked run ID and latest run status.
 
+Schedules can also enable outcome notifications. Notification triggers include
+started, completed, failed, skipped, PR-created, quality-gate-failed, and
+manual-intervention outcomes. Destinations include the Web UI notification
+inbox, webhook delivery with retry recording, and GitHub Issue or PR comments
+when the run created those artifacts. Notification history is stored under
+`AGENTOS_HOME/notifications` and is exposed by `/api/notifications`.
+
 ## Task Recommendations
 
 The Web UI can run a recommend-only pass before starting an orchestration. The

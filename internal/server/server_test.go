@@ -1592,6 +1592,7 @@ func TestServer_AuthRequiredProtectsWorkAPIs(t *testing.T) {
 		"/api/orchestrates",
 		"/api/schedules",
 		"/api/schedules/templates",
+		"/api/notifications",
 		"/api/audit",
 	}
 	for _, path := range protected {
@@ -1860,6 +1861,131 @@ func TestServer_RunDueSchedulesSkipsActiveForbidConcurrency(t *testing.T) {
 	}
 	if !reloaded.NextRunAt.After(now) {
 		t.Fatalf("next run = %s, want after %s", reloaded.NextRunAt, now)
+	}
+}
+
+func TestServer_ScheduledRunNotificationWebhookRetriesAndStoresHistory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("AGENTOS_HOME", home)
+	t.Setenv("AGENTOS_PUBLIC_URL", "https://agentos.example.com")
+	s := NewServer(0)
+
+	attempts := 0
+	hook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %s, want POST", r.Method)
+		}
+		var notification notificationRecord
+		if err := json.NewDecoder(r.Body).Decode(&notification); err != nil {
+			t.Fatalf("decode notification: %v", err)
+		}
+		if notification.Trigger != notificationTriggerFailed || notification.RunID != "run-3333333333333333" {
+			t.Fatalf("notification = %+v", notification)
+		}
+		if attempts < 3 {
+			http.Error(w, "temporary failure", http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer hook.Close()
+
+	schedule := &scheduleDefinition{
+		ID:                "schedule-2222222222222222",
+		Actor:             "system",
+		Name:              "Failure alerts",
+		Status:            scheduleStatusActive,
+		Repo:              "owner/repo",
+		BaseBranch:        "main",
+		Task:              "report",
+		Agents:            []string{"reporter"},
+		Strategy:          "sequential",
+		Schedule:          scheduleSpec{Type: "interval", Interval: "1h", Timezone: "UTC"},
+		ConcurrencyPolicy: schedulePolicyForbid,
+		Notification: scheduleNotification{
+			Enabled:      true,
+			Triggers:     []string{notificationTriggerFailed},
+			Destinations: []string{notificationDestinationInbox, notificationDestinationWebhook},
+			WebhookURL:   hook.URL,
+		},
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := saveSchedule(schedule); err != nil {
+		t.Fatal(err)
+	}
+	record := &orchestrationRecord{
+		ID:         "run-3333333333333333",
+		ScheduleID: schedule.ID,
+		Repo:       "owner/repo",
+		BaseBranch: "main",
+		Task:       "report",
+		Status:     "failed",
+		Error:      "execute: boom",
+		CreatedAt:  time.Now().UTC(),
+		UpdatedAt:  time.Now().UTC(),
+	}
+
+	s.notifyScheduledRun(record)
+
+	if attempts != 3 {
+		t.Fatalf("webhook attempts = %d, want 3", attempts)
+	}
+	notifications, err := listNotificationRecords(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notifications) != 1 {
+		t.Fatalf("notifications = %+v", notifications)
+	}
+	got := notifications[0]
+	if got.Trigger != notificationTriggerFailed || got.ScheduleID != schedule.ID || got.RunURL != "https://agentos.example.com/#orchestrates/run-3333333333333333" {
+		t.Fatalf("notification = %+v", got)
+	}
+	if len(got.Deliveries) != 2 || got.Deliveries[0].Status != notificationDeliverySuccess || got.Deliveries[1].Status != notificationDeliverySuccess || got.Deliveries[1].Attempts != 3 {
+		t.Fatalf("deliveries = %+v", got.Deliveries)
+	}
+
+	s.notifyScheduledRun(record)
+	notifications, err = listNotificationRecords(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notifications) != 1 {
+		t.Fatalf("duplicate notifications = %+v", notifications)
+	}
+}
+
+func TestServer_ScheduleNotificationFailureDeliveryHistory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("AGENTOS_HOME", home)
+	s := NewServer(0)
+
+	schedule := &scheduleDefinition{
+		ID:     "schedule-2222222222222222",
+		Name:   "Failure alerts",
+		Repo:   "owner/repo",
+		Status: scheduleStatusActive,
+		Notification: scheduleNotification{
+			Enabled:      true,
+			Triggers:     []string{notificationTriggerFailed},
+			Destinations: []string{notificationDestinationWebhook},
+		},
+	}
+	execution := schedule.newExecution(time.Now().UTC(), notificationTriggerFailed, "scheduled", "missing webhook")
+
+	s.notifyScheduleExecution(schedule, &execution)
+
+	notifications, err := listNotificationRecords(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notifications) != 1 {
+		t.Fatalf("notifications = %+v", notifications)
+	}
+	if len(notifications[0].Deliveries) != 1 || notifications[0].Deliveries[0].Status != notificationDeliveryFailure || !strings.Contains(notifications[0].Deliveries[0].Error, "webhook URL") {
+		t.Fatalf("deliveries = %+v", notifications[0].Deliveries)
 	}
 }
 
