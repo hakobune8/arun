@@ -1591,6 +1591,7 @@ func TestServer_AuthRequiredProtectsWorkAPIs(t *testing.T) {
 		"/api/github/issues?repo=owner/repo",
 		"/api/orchestrates",
 		"/api/schedules",
+		"/api/schedules/templates",
 		"/api/audit",
 	}
 	for _, path := range protected {
@@ -1706,6 +1707,7 @@ func TestServer_ScheduleCRUDPauseResume(t *testing.T) {
 		"repo":".",
 		"baseBranch":"main",
 		"task":"Create a repository health report",
+		"templateId":"weekly-repository-health-report",
 		"agents":["reporter"],
 		"strategy":"sequential",
 		"schedule":{"type":"interval","interval":"1h","timezone":"UTC"},
@@ -1719,6 +1721,9 @@ func TestServer_ScheduleCRUDPauseResume(t *testing.T) {
 	}
 	if !isValidScheduleID(created.ID) || created.Status != scheduleStatusActive || created.NextRunAt.IsZero() {
 		t.Fatalf("created schedule = %+v", created)
+	}
+	if created.TemplateID != "weekly-repository-health-report" {
+		t.Fatalf("TemplateID = %q", created.TemplateID)
 	}
 
 	w = serveRequest(s, "POST", "/api/schedules/"+created.ID+"/pause", nil)
@@ -1749,6 +1754,33 @@ func TestServer_ScheduleCRUDPauseResume(t *testing.T) {
 	}
 	if len(schedules) != 1 || schedules[0].ID != created.ID {
 		t.Fatalf("schedules = %+v", schedules)
+	}
+}
+
+func TestServer_ScheduleTemplates(t *testing.T) {
+	t.Setenv("AGENTOS_HOME", t.TempDir())
+	s := NewServer(0)
+
+	w := serveRequest(s, "GET", "/api/schedules/templates", nil)
+	assertStatus(t, w.Code, http.StatusOK)
+	var templates []scheduledWorkflowTemplate
+	if err := json.Unmarshal(w.Body.Bytes(), &templates); err != nil {
+		t.Fatal(err)
+	}
+	if len(templates) < 3 {
+		t.Fatalf("templates = %d, want at least 3", len(templates))
+	}
+	byID := map[string]scheduledWorkflowTemplate{}
+	for _, template := range templates {
+		byID[template.ID] = template
+		if len(template.Agents) == 0 || len(template.ExpectedOutputs) == 0 || template.Schedule.Type == "" {
+			t.Fatalf("incomplete template: %+v", template)
+		}
+	}
+	for _, id := range []string{"daily-failed-run-report", "weekly-repository-health-report", "weekly-security-triage"} {
+		if _, ok := byID[id]; !ok {
+			t.Fatalf("missing template %s in %+v", id, byID)
+		}
 	}
 }
 

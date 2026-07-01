@@ -47,6 +47,7 @@ const (
 type scheduleDefinition struct {
 	ID                string                     `json:"id"`
 	Actor             string                     `json:"actor,omitempty"`
+	TemplateID        string                     `json:"templateId,omitempty"`
 	Name              string                     `json:"name"`
 	Status            string                     `json:"status"`
 	Repo              string                     `json:"repo"`
@@ -96,6 +97,23 @@ type scheduleExecution struct {
 	Reason    string    `json:"reason,omitempty"`
 	Message   string    `json:"message,omitempty"`
 	StartedAt time.Time `json:"startedAt"`
+}
+
+type scheduledWorkflowTemplate struct {
+	ID                  string                   `json:"id"`
+	Name                string                   `json:"name"`
+	Description         string                   `json:"description"`
+	Category            string                   `json:"category"`
+	Task                string                   `json:"task"`
+	Agents              []string                 `json:"agents"`
+	Strategy            string                   `json:"strategy"`
+	Schedule            scheduleSpec             `json:"schedule"`
+	ConcurrencyPolicy   string                   `json:"concurrencyPolicy"`
+	OutputLanguage      string                   `json:"outputLanguage,omitempty"`
+	GitHub              orchestrateGitHubRequest `json:"github"`
+	ExpectedOutputs     []string                 `json:"expectedOutputs"`
+	RequiredPermissions []string                 `json:"requiredPermissions"`
+	Notes               []string                 `json:"notes,omitempty"`
 }
 
 func (s *Server) handleSchedules(w http.ResponseWriter, r *http.Request) {
@@ -153,6 +171,10 @@ func (s *Server) handleScheduleDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := strings.TrimPrefix(r.URL.Path, "/api/schedules/")
+	if strings.Trim(path, "/") == "templates" {
+		s.handleScheduleTemplates(w, r, user)
+		return
+	}
 	id, action, _ := strings.Cut(strings.Trim(path, "/"), "/")
 	if !isValidScheduleID(id) {
 		http.Error(w, "invalid schedule id", http.StatusBadRequest)
@@ -226,6 +248,17 @@ func (s *Server) handleScheduleDetail(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Server) handleScheduleTemplates(w http.ResponseWriter, r *http.Request, user *authUser) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "GET required", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireAutomationPermission(w, r, user, "schedules.templates.list", "schedules", "", "") {
+		return
+	}
+	_ = json.NewEncoder(w).Encode(builtInScheduledWorkflowTemplates(s.agentReg)) //nolint:errcheck // best-effort response
 }
 
 func (s *Server) startScheduler() {
@@ -347,6 +380,7 @@ func decodeSchedule(body io.Reader) (*scheduleDefinition, error) {
 }
 
 func prepareSchedule(schedule *scheduleDefinition, now time.Time) error {
+	schedule.TemplateID = strings.TrimSpace(schedule.TemplateID)
 	schedule.Name = strings.TrimSpace(schedule.Name)
 	schedule.Repo = strings.TrimSpace(schedule.Repo)
 	schedule.BaseBranch = defaultBaseBranch(schedule.BaseBranch)
@@ -383,6 +417,182 @@ func prepareSchedule(schedule *scheduleDefinition, now time.Time) error {
 	}
 	schedule.NextRunAt = next
 	return nil
+}
+
+func builtInScheduledWorkflowTemplates(registry *agent.Registry) []scheduledWorkflowTemplate {
+	templates := []scheduledWorkflowTemplate{
+		{
+			ID:                "daily-failed-run-report",
+			Name:              "Daily Failed-Run Report",
+			Description:       "Summarize failed or blocked orchestrations and identify recurring causes.",
+			Category:          "reporting",
+			Agents:            availableAgentNames(registry, "analyst", "reporter"),
+			Strategy:          "sequential",
+			Schedule:          scheduleSpec{Type: "cron", Cron: "0 9 * * *", Timezone: "UTC"},
+			ConcurrencyPolicy: schedulePolicyForbid,
+			GitHub: orchestrateGitHubRequest{
+				CreateIssue:   true,
+				IssueTitle:    "Daily AgentOS failed-run report",
+				IssueTemplate: "default",
+			},
+			ExpectedOutputs: []string{
+				"Markdown report with failed run IDs, status, and timeline evidence.",
+				"Root-cause grouping and concrete follow-up actions.",
+				"Comparison against previous repository memory or run history when available.",
+			},
+			RequiredPermissions: []string{"Read orchestration records", "Read repository context", "Create GitHub Issue when enabled"},
+			Task: `Create a daily failed-run report for {{repo}} on {{baseBranch}}.
+
+Use repository context search, orchestration history, run artifacts, and available GitHub evidence. Separate confirmed evidence from inference. Include:
+- failed, canceled, pending approval, or blocked runs since the last report
+- recurring failure causes and affected agents
+- source evidence links or run IDs
+- recommended owner actions
+- explicit no-data sections when no failed runs are found
+
+Produce a concise Markdown report in the requested output language.`,
+		},
+		{
+			ID:                "weekly-repository-health-report",
+			Name:              "Weekly Repository Health Report",
+			Description:       "Inspect repository health signals and produce a maintenance report.",
+			Category:          "reporting",
+			Agents:            availableAgentNames(registry, "analyst", "reporter"),
+			Strategy:          "sequential",
+			Schedule:          scheduleSpec{Type: "cron", Cron: "0 9 * * 1", Timezone: "UTC"},
+			ConcurrencyPolicy: schedulePolicyForbid,
+			GitHub: orchestrateGitHubRequest{
+				CreateIssue:   true,
+				IssueTitle:    "Weekly repository health report",
+				IssueTemplate: "default",
+			},
+			ExpectedOutputs: []string{
+				"Markdown health report covering CI, open issues/PRs, recent failures, stale context, and risks.",
+				"Evidence links to GitHub issues, PRs, checks, workflow runs, or run artifacts.",
+				"Prioritized maintenance recommendations.",
+			},
+			RequiredPermissions: []string{"Read GitHub issues and PRs", "Read workflow/check evidence", "Create GitHub Issue when enabled"},
+			Task: `Create a weekly repository health report for {{repo}} on {{baseBranch}}.
+
+Review live GitHub evidence, recent orchestration runs, repository memory, and guidelines. Cover CI health, stale issues or PRs, recurring quality gate failures, missing documentation, and operational risk. Include a previous-run comparison when history exists and state clearly when evidence is unavailable.
+
+Produce a structured Markdown report in the requested output language.`,
+		},
+		{
+			ID:                "weekly-security-triage",
+			Name:              "Weekly Security Triage",
+			Description:       "Review security-sensitive signals and produce a triage report.",
+			Category:          "security",
+			Agents:            availableAgentNames(registry, "security", "analyst", "reporter"),
+			Strategy:          "sequential",
+			Schedule:          scheduleSpec{Type: "cron", Cron: "0 10 * * 1", Timezone: "UTC"},
+			ConcurrencyPolicy: schedulePolicyForbid,
+			GitHub: orchestrateGitHubRequest{
+				CreateIssue:   true,
+				IssueTitle:    "Weekly security triage report",
+				IssueTemplate: "default",
+			},
+			ExpectedOutputs: []string{
+				"Markdown security triage report with evidence and severity notes.",
+				"Findings for dependency, auth, secret-handling, and workflow risks.",
+				"Recommended remediation issues or PR follow-ups.",
+			},
+			RequiredPermissions: []string{"Read repository code and security-relevant files", "Read GitHub evidence", "Create GitHub Issue when enabled"},
+			Task: `Create a weekly security triage report for {{repo}} on {{baseBranch}}.
+
+Review security-sensitive repository areas, recent GitHub issues/PRs/checks, dependency or workflow signals, and existing repository guidelines. Distinguish confirmed vulnerabilities from risk indicators. Include evidence links, severity, recommended next steps, and no-data sections for unavailable sources.
+
+Produce a structured Markdown report in the requested output language.`,
+		},
+		{
+			ID:                "weekly-dependency-update",
+			Name:              "Weekly Dependency Update",
+			Description:       "Prepare dependency updates with CI validation and review notes.",
+			Category:          "maintenance",
+			Agents:            availableAgentNames(registry, "dependency-updater", "ci-fixer", "reviewer"),
+			Strategy:          "sequential",
+			Schedule:          scheduleSpec{Type: "cron", Cron: "0 11 * * 1", Timezone: "UTC"},
+			ConcurrencyPolicy: schedulePolicyForbid,
+			GitHub: orchestrateGitHubRequest{
+				CreatePullRequest: true,
+				PRTitle:           "Weekly dependency maintenance",
+				PRTemplate:        "default",
+			},
+			ExpectedOutputs: []string{
+				"Dependency update diff or a no-update report.",
+				"CI and quality gate validation summary.",
+				"Pull request when update changes are produced and PR creation is enabled.",
+			},
+			RequiredPermissions: []string{"Read and update dependency manifests", "Run validation commands", "Create GitHub PR when enabled"},
+			Task: `Perform weekly dependency maintenance for {{repo}} on {{baseBranch}}.
+
+Inspect dependency manifests and lockfiles, propose conservative updates, run relevant validation, and summarize risk. If no update is appropriate, produce a no-change report with evidence. If updates are made, prepare PR-ready notes with validation results and rollback considerations.
+
+Use the requested output language for reports and GitHub artifacts.`,
+		},
+		{
+			ID:                "monthly-release-readiness",
+			Name:              "Monthly Release Readiness",
+			Description:       "Assess release readiness, blockers, and rollout risk.",
+			Category:          "release",
+			Agents:            availableAgentNames(registry, "release-manager", "analyst", "reporter"),
+			Strategy:          "sequential",
+			Schedule:          scheduleSpec{Type: "cron", Cron: "0 9 1 * *", Timezone: "UTC"},
+			ConcurrencyPolicy: schedulePolicyForbid,
+			GitHub: orchestrateGitHubRequest{
+				CreateIssue:   true,
+				IssueTitle:    "Monthly release readiness report",
+				IssueTemplate: "default",
+			},
+			ExpectedOutputs: []string{
+				"Markdown readiness report with blockers, completed work, and residual risk.",
+				"Release checklist, validation status, and rollout notes.",
+				"Evidence links to issues, PRs, checks, and recent orchestration records.",
+			},
+			RequiredPermissions: []string{"Read release notes and changelog", "Read GitHub issues/PRs/checks", "Create GitHub Issue when enabled"},
+			Task: `Create a monthly release readiness report for {{repo}} on {{baseBranch}}.
+
+Review changelog, release notes, open issues, merged PRs, CI status, repository memory, and recent orchestration outcomes. Identify release blockers, validation gaps, documentation gaps, rollback risks, and recommended next actions. Include evidence links and previous-run comparison when available.
+
+Produce a structured Markdown report in the requested output language.`,
+		},
+		{
+			ID:                "memory-guideline-stale-check",
+			Name:              "Memory and Guideline Stale Check",
+			Description:       "Review repository memory and guidelines for stale or conflicting context.",
+			Category:          "maintenance",
+			Agents:            availableAgentNames(registry, "analyst", "reporter"),
+			Strategy:          "sequential",
+			Schedule:          scheduleSpec{Type: "cron", Cron: "0 9 * * 5", Timezone: "UTC"},
+			ConcurrencyPolicy: schedulePolicyForbid,
+			GitHub: orchestrateGitHubRequest{
+				CreateIssue:   true,
+				IssueTitle:    "Repository memory and guideline stale-context report",
+				IssueTemplate: "default",
+			},
+			ExpectedOutputs: []string{
+				"Markdown report listing stale, duplicated, or conflicting memory/guideline entries.",
+				"Evidence for why each item should be kept, archived, or updated.",
+				"Recommended cleanup actions.",
+			},
+			RequiredPermissions: []string{"Read repository memory and guidelines", "Read run history", "Create GitHub Issue when enabled"},
+			Task: `Review repository memory and guidelines for {{repo}} on {{baseBranch}}.
+
+Find stale, duplicated, overly broad, or conflicting entries by comparing repository context, recent run history, and current files. Do not archive automatically. Provide evidence and recommended cleanup actions, including no-data sections when no stale context is found.
+
+Produce a concise Markdown report in the requested output language.`,
+		},
+	}
+
+	filtered := templates[:0]
+	for i := range templates {
+		template := &templates[i]
+		if len(template.Agents) == 0 {
+			continue
+		}
+		filtered = append(filtered, *template)
+	}
+	return filtered
 }
 
 func scheduleShortText(value string, size int) string {

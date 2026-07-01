@@ -104,6 +104,22 @@ type Schedule = {
   executions?: Json[]
 }
 
+type ScheduleTemplate = {
+  id: string
+  name: string
+  description?: string
+  category?: string
+  task?: string
+  agents?: string[]
+  strategy?: string
+  schedule?: Json
+  concurrencyPolicy?: string
+  outputLanguage?: string
+  github?: Json
+  expectedOutputs?: string[]
+  requiredPermissions?: string[]
+}
+
 type PageName = 'orchestrates' | 'schedules' | 'agents' | 'audit'
 type OrchPanel = 'new' | 'list' | 'detail'
 type DetailTab = 'overview' | 'runs' | 'memory' | 'guidelines' | 'search' | 'github'
@@ -129,6 +145,7 @@ const defaultForm = {
 }
 
 const defaultScheduleForm = {
+  templateId: '',
   name: '',
   repo: '',
   baseBranch: 'main',
@@ -144,6 +161,8 @@ const defaultScheduleForm = {
   concurrencyPolicy: 'forbid',
   createIssue: false,
   createPullRequest: false,
+  issueTemplate: '',
+  prTemplate: '',
 }
 
 async function api<T = any>(path: string, init?: RequestInit): Promise<T> {
@@ -273,6 +292,7 @@ function App() {
   const [llm, setLLM] = useState<Json>({ defaultPreset: '', presets: [] })
   const [records, setRecords] = useState<Orchestration[]>([])
   const [schedules, setSchedules] = useState<Schedule[]>([])
+  const [scheduleTemplates, setScheduleTemplates] = useState<ScheduleTemplate[]>([])
   const [selectedID, setSelectedID] = useState('')
   const [current, setCurrent] = useState<Orchestration | null>(null)
   const [audit, setAudit] = useState<Json[]>([])
@@ -292,7 +312,7 @@ function App() {
 
   useEffect(() => {
     if (!canUseApp) return
-    void Promise.all([loadAgents(), loadRepositories(), loadLLM(), loadRecords(), loadSchedules()])
+    void Promise.all([loadAgents(), loadRepositories(), loadLLM(), loadRecords(), loadSchedules(), loadScheduleTemplates()])
   }, [canUseApp])
 
   useEffect(() => {
@@ -351,6 +371,11 @@ function App() {
     setSchedules(data)
   }
 
+  async function loadScheduleTemplates() {
+    const data = await api<ScheduleTemplate[]>('/api/schedules/templates')
+    setScheduleTemplates(data)
+  }
+
   async function refreshCurrent(id = selectedID) {
     if (!id) return
     const data = await api<Orchestration>(`/api/orchestrates/${encodeURIComponent(id)}`)
@@ -368,7 +393,7 @@ function App() {
     if (next === 'agents') void loadAgents()
     if (next === 'audit') void loadAudit()
     if (next === 'orchestrates') void loadRecords()
-    if (next === 'schedules') void loadSchedules()
+    if (next === 'schedules') void Promise.all([loadSchedules(), loadScheduleTemplates()])
   }
 
   if (session.authRequired && !session.authenticated) {
@@ -468,6 +493,7 @@ function App() {
             reload={() => void loadSchedules()}
             form={scheduleForm}
             setForm={setScheduleForm}
+            templates={scheduleTemplates}
             repositories={repositories}
             llm={llm}
             status={scheduleStatus}
@@ -540,6 +566,7 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: scheduleForm.name,
+          templateId: scheduleForm.templateId,
           repo: scheduleForm.repo.trim(),
           baseBranch: scheduleForm.baseBranch.trim() || 'main',
           task: scheduleForm.task,
@@ -557,6 +584,8 @@ function App() {
           github: {
             createIssue: scheduleForm.createIssue,
             createPullRequest: scheduleForm.createPullRequest,
+            issueTemplate: scheduleForm.issueTemplate,
+            prTemplate: scheduleForm.prTemplate,
           },
         }),
       })
@@ -591,6 +620,7 @@ function SchedulesPage(props: {
   reload: () => void
   form: typeof defaultScheduleForm
   setForm: Dispatch<SetStateAction<typeof defaultScheduleForm>>
+  templates: ScheduleTemplate[]
   repositories: RepositorySummary[]
   llm: Json
   status: string
@@ -603,6 +633,31 @@ function SchedulesPage(props: {
   function selectRepository(repo: string) {
     const selected = props.repositories.find((item) => item.full_name === repo)
     update({ repo, baseBranch: selected?.default_branch || form.baseBranch || 'main' })
+  }
+
+  function applyTemplate(id: string) {
+    const template = props.templates.find((item) => item.id === id)
+    if (!template) {
+      update({ templateId: id })
+      return
+    }
+    update({
+      templateId: id,
+      name: template.name,
+      task: template.task ?? form.task,
+      agents: (template.agents ?? []).join(', '),
+      strategy: template.strategy ?? form.strategy,
+      outputLanguage: template.outputLanguage ?? form.outputLanguage,
+      scheduleType: template.schedule?.type ?? form.scheduleType,
+      interval: template.schedule?.interval ?? form.interval,
+      cron: template.schedule?.cron ?? form.cron,
+      timezone: template.schedule?.timezone ?? form.timezone,
+      concurrencyPolicy: template.concurrencyPolicy ?? form.concurrencyPolicy,
+      createIssue: Boolean(template.github?.createIssue),
+      createPullRequest: Boolean(template.github?.createPullRequest),
+      issueTemplate: template.github?.issueTemplate ?? form.issueTemplate,
+      prTemplate: template.github?.prTemplate ?? form.prTemplate,
+    })
   }
 
   async function scheduleAction(schedule: Schedule, action: 'pause' | 'resume' | 'run') {
@@ -620,6 +675,7 @@ function SchedulesPage(props: {
     ...props.repositories,
     ...(form.repo && !props.repositories.some((repo) => repo.full_name === form.repo) ? [{ full_name: form.repo, default_branch: form.baseBranch }] : []),
   ]
+  const selectedTemplate = props.templates.find((item) => item.id === form.templateId)
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]">
@@ -683,6 +739,19 @@ function SchedulesPage(props: {
       <Panel>
         <form className="grid gap-3" onSubmit={props.submit}>
           <div className="flex items-center gap-2 text-sm font-semibold text-ink"><Sparkles className="size-4 text-cyan-os" /> New Schedule</div>
+          <Field label="Template">
+            <select className={inputClass} value={form.templateId} onChange={(e) => applyTemplate(e.target.value)}>
+              <option value="">Custom schedule</option>
+              {props.templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+            </select>
+          </Field>
+          {selectedTemplate ? (
+            <div className="grid gap-2 rounded-os border border-line bg-void p-3 text-xs text-soft">
+              <div className="flex flex-wrap gap-2"><Tag>{selectedTemplate.category || 'template'}</Tag>{(selectedTemplate.agents ?? []).map((agent) => <Tag key={agent}>{agent}</Tag>)}</div>
+              <p className="break-words">{selectedTemplate.description}</p>
+              {(selectedTemplate.expectedOutputs ?? []).length ? <ul className="grid gap-1">{(selectedTemplate.expectedOutputs ?? []).map((item) => <li key={item} className="break-words">- {item}</li>)}</ul> : null}
+            </div>
+          ) : null}
           <Field label="Name">
             <input className={inputClass} value={form.name} onChange={(e) => update({ name: e.target.value })} placeholder="Weekly repository health report" />
           </Field>
@@ -711,6 +780,13 @@ function SchedulesPage(props: {
               </select>
             </Field>
           </div>
+          <Field label="Output Language">
+            <select className={inputClass} value={form.outputLanguage} onChange={(e) => update({ outputLanguage: e.target.value })}>
+              <option value="">Repository default / English</option>
+              <option value="en">English</option>
+              <option value="ja">Japanese</option>
+            </select>
+          </Field>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
             <Field label="Schedule">
               <select className={inputClass} value={form.scheduleType} onChange={(e) => update({ scheduleType: e.target.value })}><option value="interval">Interval</option><option value="cron">Cron</option></select>
@@ -734,6 +810,14 @@ function SchedulesPage(props: {
           <div className="grid gap-2">
             <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.createIssue} onChange={(e) => update({ createIssue: e.target.checked })} />Create Issue</label>
             <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.createPullRequest} onChange={(e) => update({ createPullRequest: e.target.checked })} />Create PR</label>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+            <Field label="Issue Template">
+              <select className={inputClass} value={form.issueTemplate} onChange={(e) => update({ issueTemplate: e.target.value })}><option value="">Default</option><option value="repository">Repository</option></select>
+            </Field>
+            <Field label="PR Template">
+              <select className={inputClass} value={form.prTemplate} onChange={(e) => update({ prTemplate: e.target.value })}><option value="">Default</option><option value="repository">Repository</option></select>
+            </Field>
           </div>
           <IconButton icon={<Check className="size-4" />}>Create Schedule</IconButton>
           {props.status ? <p className="break-words text-sm text-soft">{props.status}</p> : null}

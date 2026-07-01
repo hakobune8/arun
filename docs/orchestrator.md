@@ -79,6 +79,16 @@ orchestration jobs. A schedule stores the repository, base branch, task, agents,
 LLM preset, output controls, GitHub artifact settings, an interval or five-field
 cron expression, timezone, concurrency policy, and execution history.
 
+Built-in scheduled workflow templates are available from
+`/api/schedules/templates` and the Schedules page. Templates provide practical
+maintenance/reporting defaults such as daily failed-run reports, weekly
+repository health reports, weekly security triage, weekly dependency updates,
+monthly release readiness reports, and memory/guideline stale-context checks.
+Each template includes recommended agents, a schedule example, expected
+Markdown outputs, and permission notes. Users can still adjust the output
+language, Issue/PR creation settings, and repository/default artifact templates
+before saving the schedule.
+
 AgentOS starts due schedules in-process when the Web server is running. Missed
 runs after restart are checked on startup. By default, `concurrencyPolicy:
 forbid` skips a due execution when the previous schedule run is still planning

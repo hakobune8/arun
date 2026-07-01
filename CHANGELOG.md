@@ -13,6 +13,9 @@
 - Added recurring orchestration schedules with interval or cron timing,
   timezone-aware next-run calculation, pause/resume, run-now, execution
   history, and overlap prevention.
+- Added built-in scheduled maintenance and reporting workflow templates for
+  failed-run reports, repository health, security triage, dependency updates,
+  release readiness, and stale memory/guideline checks.
 
 ### Fixed
 - Fixed multi-arch Docker image builds by running the frontend build on the

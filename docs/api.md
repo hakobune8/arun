@@ -215,6 +215,7 @@ configured user token.
 
 ```
 GET /api/schedules
+GET /api/schedules/templates
 POST /api/schedules
 GET /api/schedules/{id}
 PUT /api/schedules/{id}
@@ -227,10 +228,15 @@ Schedules define recurring Orchestrate jobs. They persist under
 `AGENTOS_HOME/schedules`, store execution history, and link each started
 execution to an orchestration record through `scheduleId`.
 
+`GET /api/schedules/templates` returns built-in maintenance and reporting
+templates with recommended agents, schedule examples, expected Markdown
+outputs, and required permissions.
+
 Create or update body:
 
 ```json
 {
+  "templateId": "weekly-repository-health-report",
   "name": "Weekly repository health report",
   "repo": "owner/repo",
   "baseBranch": "main",
@@ -251,6 +257,17 @@ Create or update body:
   }
 }
 ```
+
+Built-in template IDs include:
+
+| ID | Recommended cadence | Agents | Output |
+|---|---|---|---|
+| `daily-failed-run-report` | `0 9 * * *` | `analyst`, `reporter` | Failed-run Markdown report and optional Issue |
+| `weekly-repository-health-report` | `0 9 * * 1` | `analyst`, `reporter` | Repository health Markdown report and optional Issue |
+| `weekly-security-triage` | `0 10 * * 1` | `security`, `analyst`, `reporter` | Security triage Markdown report and optional Issue |
+| `weekly-dependency-update` | `0 11 * * 1` | `dependency-updater`, `ci-fixer`, `reviewer` | Dependency update PR or no-change report |
+| `monthly-release-readiness` | `0 9 1 * *` | `release-manager`, `analyst`, `reporter` | Release readiness Markdown report and optional Issue |
+| `memory-guideline-stale-check` | `0 9 * * 5` | `analyst`, `reporter` | Stale-context Markdown report and cleanup recommendations |
 
 For interval schedules, use:
 
