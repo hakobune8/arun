@@ -77,6 +77,20 @@ type CheckSuite struct {
 	HeadSHA    string `json:"head_sha"`
 }
 
+// WorkflowRun represents a GitHub Actions workflow run.
+type WorkflowRun struct {
+	ID           int64     `json:"id"`
+	Name         string    `json:"name"`
+	DisplayTitle string    `json:"display_title"`
+	Status       string    `json:"status"`
+	Conclusion   string    `json:"conclusion"`
+	HTMLURL      string    `json:"html_url"`
+	HeadBranch   string    `json:"head_branch"`
+	HeadSHA      string    `json:"head_sha"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
 // Repo identifies a GitHub repository.
 type Repo struct {
 	Owner string

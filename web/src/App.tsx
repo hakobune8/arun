@@ -978,7 +978,7 @@ function SearchTab({ record }: { record: Orchestration }) {
       <form className="grid gap-3 sm:grid-cols-[1fr_12rem_auto]" onSubmit={search}>
         <input className={inputClass} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search repository context" />
         <select className={inputClass} value={source} onChange={(e) => setSource(e.target.value)}>
-          <option value="">All Sources</option><option value="memory">Memory</option><option value="guideline">Guidelines</option><option value="run">Runs</option><option value="artifact">Artifacts</option><option value="github">GitHub</option><option value="code">Code/files</option>
+          <option value="">All Sources</option><option value="memory">Memory</option><option value="guideline">Guidelines</option><option value="run">Runs</option><option value="artifact">Artifacts</option><option value="github">GitHub</option><option value="kubernetes">Kubernetes</option><option value="code">Code/files</option>
         </select>
         <IconButton icon={<Search className="size-4" />}>Search</IconButton>
       </form>

@@ -5,6 +5,11 @@
 ### Added
 - Added built-in `analyst` and `reporter` agents for investigation workflows,
   structured reports, evidence provenance, and no-data reporting expectations.
+- Added repository-scoped live GitHub evidence search for issues, pull
+  requests, checks, and workflow run logs with provenance metadata and secret
+  redaction.
+- Added explicit Kubernetes log evidence search through configured kubectl,
+  namespace, and label selector settings.
 
 ## [v1.2.0] - 2026-07-01
 

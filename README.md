@@ -265,7 +265,7 @@ publish a new immutable chart release.
 ### v1.3 — Scheduled Operations & Reporting
 - [ ] Built-in Docker, Helm, and Kubernetes operations agents
 - [x] Analyst and reporter agents for investigation workflows
-- [ ] Log and data sources for investigation agents
+- [x] Log and data sources for investigation agents
 - [ ] Recurring orchestration jobs
 - [ ] Built-in maintenance and reporting workflow templates
 - [ ] Outcome notifications for scheduled orchestrations
