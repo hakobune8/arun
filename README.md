@@ -210,6 +210,7 @@ pr_body.md        # Pull request body draft
 - [Pre-merge Verification](docs/pre-merge-verification.md) — PR image checks with registry and BuildKit
 - [Architecture](docs/architecture.md) — System architecture overview
 - [Configuration](docs/configuration.md) — LiteLLM, Qdrant, Docker, MCP, templates
+- [Upgrade to v1.4](docs/upgrade-v1.4.md) — Governance limits, storage retention, cleanup, and orchestration evals
 - [Upgrade to v1.3](docs/upgrade-v1.3.md) — Scheduled operations, reporting, notifications, and ops agents
 - [Profiles](docs/profiles.md) — Profile YAML schema reference
 - [Agent Definitions](docs/agent-definitions.md) — Versioned Agent YAML format (agentos.io/v1)
@@ -221,6 +222,7 @@ pr_body.md        # Pull request body draft
 - [Memory](docs/memory.md) — Pluggable memory backends (vector, JSON)
 - [Sandbox](docs/sandbox.md) — Execution isolation (local, Docker)
 - [Orchestrator](docs/orchestrator.md) — Multi-agent coordination
+- [Orchestration Evals](docs/orchestration-evals.md) — Deterministic and opt-in live scenario evaluation reports
 - [Embedding](docs/embedding.md) — LLM embedding service
 - [Search](docs/search.md) — Unified search across sources
 - [Guidelines](docs/guidelines.md) — Coding guidelines management
@@ -257,10 +259,26 @@ publish a new immutable chart release.
 
 ## Roadmap
 
-### v1.4 — Governance Scale & Evals
-- [x] Governance execution limits, quotas, and cost controls
-- [x] Storage retention, archival, and cleanup policies
-- [x] Orchestration regression and scenario evaluation suite
+### v1.5+ — Scale, Integrations, and Productization
+- [ ] Broaden operational evaluation matrices across repositories, clusters, and model presets
+- [ ] Promote proven LiteLLM presets and scenario suites into release gates
+- [ ] Continue hardening release automation, deployment safety, and rollback evidence capture
+
+### v1.4.x — Operational Flow Hardening
+- [ ] Authenticated Web UI E2E smoke coverage
+- [ ] Live GitHub issue and pull request workflow scenarios
+- [ ] Live Kubernetes rollout and rollback scenarios
+- [ ] Schedule execution to notification E2E scenarios
+- [ ] Storage cleanup dry-run and execution scenarios against realistic data
+- [ ] Real LLM orchestration smoke scenarios
+- [ ] Recommended LiteLLM preset tuning across common coding, review, reporting, and operations workflows
+- [ ] Three-sprint agile scrum simulation to evaluate planning, backlog refinement, sprint execution, review, and retrospective flows
+
+### v1.4.0 — Governance Scale & Evals
+- [x] Governance execution limits for duration, subtask count, retries, repository concurrency, organization concurrency, LLM token budgets, and GitHub request budgets
+- [x] Storage retention policy, usage reporting, dry-run cleanup, archive-before-delete, cleanup reports, and safe skips for active or GitHub-linked records
+- [x] Orchestration regression and scenario evaluation suite with deterministic coverage, functional coverage reports, JSON/Markdown output, and opt-in live smoke checks
+- [x] Mobile storage cleanup UX for preview-before-cleanup behavior and non-overlapping bottom navigation labels
 
 ### v1.3 — Scheduled Operations & Reporting
 - [x] Built-in Docker, Helm, and Kubernetes operations agents
@@ -270,7 +288,7 @@ publish a new immutable chart release.
 - [x] Built-in maintenance and reporting workflow templates
 - [x] Outcome notifications for scheduled orchestrations
 
-### Previous Release — Agent Expansion & Repository Context
+### v1.2 — Agent Expansion & Repository Context
 - [x] Expanded built-in agent registry for broader repository workflows
 - [x] Convention-aware built-in agent guidance and specialist routing
 - [x] Repository-defined custom agent profiles

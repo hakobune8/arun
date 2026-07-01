@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+## [v1.4.0] - 2026-07-02
+
+### Added
+- Added orchestration governance controls for maximum duration, subtasks,
+  retries, repository concurrency, organization concurrency, LLM token budgets,
+  and GitHub request budgets, with server-side enforcement for duration,
+  subtask count, and concurrency limits.
+- Added storage retention policies with usage reporting, dry-run cleanup,
+  execution history, archive-before-delete, and safe skips for active or
+  GitHub-linked orchestration records.
+- Added Web UI controls for storage usage, retention policy preview, cleanup
+  execution, and cleanup report review.
+- Added the `agentos evals` orchestration evaluation suite with deterministic
+  scenario coverage, functional coverage reporting, JSON/Markdown reports, and
+  opt-in live smoke checks for environments that provide credentials.
+
+### Fixed
+- Fixed mobile storage cleanup controls so cleanup requires a previewed
+  selection, reflects busy and empty states, and keeps the bottom navigation
+  labels from overlapping on narrow screens.
+
+### Notes
+- Live orchestration evals are intentionally opt-in. The default suite remains
+  secret-free and deterministic for CI.
+- Helm chart `version`, `appVersion`, and default `image.tag` are aligned to
+  `v1.4.0`.
+- v1.4.x follow-up work tracks authenticated Web UI E2E, live GitHub and
+  Kubernetes operational scenarios, schedule-to-notification coverage, real
+  LLM smoke coverage, LiteLLM preset tuning, and agile scrum simulation.
+
 ## [v1.3.0] - 2026-07-01
 
 ### Added
