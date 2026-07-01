@@ -1,6 +1,6 @@
 # Changelog
 
-## [v1.2.0] - Draft
+## [v1.2.0] - 2026-07-01
 
 ### Added
 - Expanded built-in agent registry for broader repository workflows, including
@@ -26,9 +26,9 @@
 - Frontend build, lint, and responsive smoke checks are part of CI and Docker
   image builds.
 
-### Pending
-- Built-in Docker, Helm, and Kubernetes operations agents are tracked in #193
-  and must be documented before the final v1.2.0 release notes are completed.
+### Deferred
+- Built-in Docker, Helm, and Kubernetes operations agents were moved to the
+  v1.3.0 milestone.
 
 ### Notes
 - GitHub-to-AgentOS webhook delivery is still not required for v1.2.0 unless a

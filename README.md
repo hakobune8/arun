@@ -211,7 +211,7 @@ pr_body.md        # Pull request body draft
 - [Configuration](docs/configuration.md) — LiteLLM, Qdrant, Docker, MCP, templates
 - [Upgrade to v1.0](docs/upgrade-v1.md) — Migration notes for v0.x users
 - [Upgrade to v1.1](docs/upgrade-v1.1.md) — GitHub automation, quality gates, and approval changes
-- [Upgrade to v1.2](docs/upgrade-v1.2.md) — Draft notes for agent expansion, repository context, and React Web UI migration
+- [Upgrade to v1.2](docs/upgrade-v1.2.md) — Agent expansion, repository context, and React Web UI migration
 - [Profiles](docs/profiles.md) — Profile YAML schema reference
 - [Agent Definitions](docs/agent-definitions.md) — Versioned Agent YAML format (agentos.io/v1)
 - [Repository Agents](docs/repository-agents.md) — Custom `.agentos/agents/*.yaml` profiles for target repositories
@@ -263,6 +263,7 @@ publish a new immutable chart release.
 - [ ] Orchestration regression and scenario evaluation suite
 
 ### v1.3 — Scheduled Operations & Reporting
+- [ ] Built-in Docker, Helm, and Kubernetes operations agents
 - [ ] Analyst and reporter agents for investigation workflows
 - [ ] Log and data sources for investigation agents
 - [ ] Recurring orchestration jobs
@@ -275,7 +276,6 @@ publish a new immutable chart release.
 - [x] Repository-defined custom agent profiles
 - [x] Reusable built-in and repository scenario templates
 - [x] Built-in frontend application agent
-- [ ] Built-in Docker, Helm, and Kubernetes operations agents
 - [x] Repository-scoped continuous improvement memory
 - [x] Repository-specific guideline management and retrieval
 - [x] Repository-scoped context discovery UX

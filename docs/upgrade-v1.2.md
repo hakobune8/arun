@@ -1,15 +1,14 @@
 # Upgrade To v1.2
 
-This draft guide summarizes the v1.2 Agent Expansion & Repository Context
-changes that are ready before the final Docker, Helm, and Kubernetes operations
-agent work in #193 lands.
+This guide summarizes the v1.2 Agent Expansion & Repository Context changes,
+including built-in and repository-defined agents, scenario templates,
+repository memory, guidelines, scoped search, and the React Web UI migration.
 
 ## Release Status
 
-v1.2.0 documentation is intentionally not final until #193 is closed. Before
-tagging v1.2.0, update this guide and the changelog with the final operations
-agent behavior, validation expectations, and any deployment examples introduced
-by that issue.
+Docker, Helm, and Kubernetes operations agents were deferred to the v1.3.0
+milestone. v1.2.0 focuses on agent expansion, repository context, GitHub-backed
+repository selection, and the Web UI migration.
 
 ## Agent Expansion
 
@@ -21,9 +20,7 @@ routing so work can be assigned to more appropriate specialists.
 
 Specialized built-ins now cover frontend application work, security review,
 release preparation, dependency updates, QA, documentation, CI fixes, backend
-implementation, and review. Docker, Helm, and Kubernetes operations agents are
-tracked separately in #193 and should be considered pending until that issue is
-closed.
+implementation, and review.
 
 ## Repository-Defined Agents
 
@@ -133,8 +130,6 @@ chart version.
 
 ## Final Release Checklist
 
-- Close #193 and document the final Docker, Helm, and Kubernetes operations
-  agents.
 - Confirm `CHANGELOG.md` v1.2.0 notes include every closed v1.2 milestone issue.
 - Verify README feature summaries match the final agent registry and Web UI.
 - Verify the README screenshot shows the current React/Tailwind Web UI rather
@@ -144,8 +139,6 @@ chart version.
   final release image tag.
 - Verify `docs/deployment.md` and README install examples either rely on the
   chart default image tag or explicitly reference the final v1.2.0 image tag.
-- Confirm this upgrade guide no longer contains draft-only wording before the
-  v1.2.0 tag is created.
 - Build and deploy the final v1.2.0 image, then run the documented health,
   Web UI asset, and repository picker checks.
 - Confirm the deployed image tag, chart version, GitHub release tag, and
