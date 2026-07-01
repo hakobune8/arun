@@ -92,6 +92,9 @@ jobs:
       - name: Test
         run: go test ./... -v -count=1 -coverprofile=coverage.out
 
+      - name: Orchestration eval suite
+        run: go test ./internal/evals -v -count=1
+
       - name: Upload coverage
         if: env.CODECOV_TOKEN != ''
         uses: codecov/codecov-action@v5
