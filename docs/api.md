@@ -316,6 +316,56 @@ status, retry count, destination, run link, and redacted error messages.
 
 ---
 
+### Storage Retention
+
+```
+GET /api/storage
+GET /api/storage/policy
+PUT /api/storage/policy
+POST /api/storage/cleanup
+```
+
+Storage APIs expose persisted retention policy, storage usage, dry-run cleanup
+preview, and manual cleanup execution. Audit logs are reported but preserved by
+cleanup.
+
+Policy body:
+
+```json
+{
+  "repo": "owner/repo",
+  "baseBranch": "main",
+  "orchestrationRetention": "720h",
+  "runArtifactRetention": "336h",
+  "workspaceRetention": "168h",
+  "memoryRetention": "4320h",
+  "guidelineRetention": "4320h",
+  "keepLastOrchestrations": 100,
+  "archiveBeforeDelete": true,
+  "allowLinkedGitHubCleanup": false
+}
+```
+
+`POST /api/storage/cleanup` accepts:
+
+```json
+{
+  "dryRun": true,
+  "policy": {
+    "orchestrationRetention": "720h",
+    "archiveBeforeDelete": true
+  }
+}
+```
+
+The cleanup response lists selected and skipped items. By default, active
+orchestrations and records with GitHub-linked Issues or PRs are skipped. Old
+orchestration records and run artifacts are moved under `AGENTOS_HOME/archive`
+when `archiveBeforeDelete` is true. Old repository memory and guidelines are
+marked `archived` rather than hard-deleted.
+
+---
+
 ## Authentication
 
 Authentication is optional. Local development can run without login. Production

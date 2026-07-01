@@ -46,6 +46,32 @@ concurrency, and organization concurrency. Token and GitHub request budgets are
 reported in run detail as governance metadata until provider/request clients
 expose reliable usage accounting.
 
+### Storage Retention
+
+Storage retention policy is persisted under `AGENTOS_HOME/storage/policy.json`
+and can be managed from the Web UI Storage page or `/api/storage/policy`.
+
+```json
+{
+  "repo": "",
+  "baseBranch": "main",
+  "orchestrationRetention": "720h0m0s",
+  "runArtifactRetention": "336h0m0s",
+  "workspaceRetention": "168h0m0s",
+  "memoryRetention": "4320h0m0s",
+  "guidelineRetention": "4320h0m0s",
+  "keepLastOrchestrations": 100,
+  "archiveBeforeDelete": true,
+  "allowLinkedGitHubCleanup": false
+}
+```
+
+Cleanup skips active orchestrations and, by default, orchestration records that
+are linked to GitHub Issues or PRs. When archive-before-delete is enabled, old
+orchestration records and run artifacts are moved under `AGENTOS_HOME/archive`.
+Repository memory and guidelines are marked `archived`; audit logs are kept
+separate and are not deleted by storage cleanup.
+
 ### Web UI Model Presets
 
 The Web UI never receives API key values. It reads public preset metadata from

@@ -42,6 +42,7 @@ helm install agentos agentos/agentos \
 - **Coding Guidelines** — YAML-defined guidelines with semantic search
 - **Repository Guidelines** — Branch-scoped rules loaded from repository files or the Web UI
 - **Past PR Search** — Search across previous runs and PRs
+- **Storage Retention** — Web UI/API policy, usage reporting, dry-run cleanup, archive-before-delete, and safe skips for active or GitHub-linked runs
 - **MCP Integration** — Connect to MCP servers for external tools
 - **Sandbox Interface** — Local execution today, Docker backend planned
 - **Web UI** — React/Tailwind dashboard for orchestration, agents, audit, GitHub, memory, guidelines, and repository context search
@@ -257,8 +258,8 @@ publish a new immutable chart release.
 ## Roadmap
 
 ### v1.4 — Governance Scale & Evals
-- [ ] Governance execution limits, quotas, and cost controls
-- [ ] Storage retention, archival, and cleanup policies
+- [x] Governance execution limits, quotas, and cost controls
+- [x] Storage retention, archival, and cleanup policies
 - [ ] Orchestration regression and scenario evaluation suite
 
 ### v1.3 — Scheduled Operations & Reporting

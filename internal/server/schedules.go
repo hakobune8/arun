@@ -287,14 +287,21 @@ func (s *Server) stopScheduler() {
 
 func (s *Server) schedulerLoop(ctx context.Context) {
 	s.runDueSchedules(time.Now().UTC(), "missed")
+	s.runAutomaticStorageCleanup("startup")
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
+	lastCleanup := time.Now().UTC()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
-			s.runDueSchedules(now.UTC(), "scheduled")
+			now = now.UTC()
+			s.runDueSchedules(now, "scheduled")
+			if now.Sub(lastCleanup) >= 6*time.Hour {
+				s.runAutomaticStorageCleanup("scheduled")
+				lastCleanup = now
+			}
 		}
 	}
 }
