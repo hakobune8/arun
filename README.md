@@ -33,14 +33,18 @@ helm install agentos agentos/agentos \
 - **Review & Retry** — Automated code review with retry on test/lint failure
 - **GitHub Automation** — Issue-triggered runs, PR creation, source issue comments, close policies, and approval gates
 - **GitHub App Tokens** — Installation-token support for repository write operations
-- **CI Fix Agent** — Automatic analysis and fix suggestions for CI failures
+- **Specialized Built-In Agents** — Backend, frontend, CI, docs, security, release, dependency, QA, and review workflows
+- **Repository Agents** — Load safe custom agent profiles from `.agentos/agents/*.yaml`
+- **Scenario Templates** — Apply built-in and repository `.agentos/scenarios/*.yaml` orchestration templates
 - **Vector Search** — Local (JSON) or Qdrant vector store for semantic search
 - **Agent Memory** — Persistent memory with vector-based retrieval
+- **Repository Memory** — Approved repository-scoped lessons reused during planning
 - **Coding Guidelines** — YAML-defined guidelines with semantic search
+- **Repository Guidelines** — Branch-scoped rules loaded from repository files or the Web UI
 - **Past PR Search** — Search across previous runs and PRs
 - **MCP Integration** — Connect to MCP servers for external tools
 - **Sandbox Interface** — Local execution today, Docker backend planned
-- **Web UI** — Built-in dashboard for runs, orchestration progress, logs, cancellation, recommendations, and approvals
+- **Web UI** — React/Tailwind dashboard for orchestration, agents, audit, GitHub, memory, guidelines, and repository context search
 - **Agent Factory** — Create agents dynamically from profile templates
 - **Multi-Agent Orchestration** — Coordinate multiple agents on complex tasks
 - **Quality Gates** — Validate expected outputs, tests, lint, diffs, and generated artifacts before completion
@@ -207,6 +211,7 @@ pr_body.md        # Pull request body draft
 - [Configuration](docs/configuration.md) — LiteLLM, Qdrant, Docker, MCP, templates
 - [Upgrade to v1.0](docs/upgrade-v1.md) — Migration notes for v0.x users
 - [Upgrade to v1.1](docs/upgrade-v1.1.md) — GitHub automation, quality gates, and approval changes
+- [Upgrade to v1.2](docs/upgrade-v1.2.md) — Agent expansion, repository context, and React Web UI migration
 - [Profiles](docs/profiles.md) — Profile YAML schema reference
 - [Agent Definitions](docs/agent-definitions.md) — Versioned Agent YAML format (agentos.io/v1)
 - [Repository Agents](docs/repository-agents.md) — Custom `.agentos/agents/*.yaml` profiles for target repositories
@@ -222,6 +227,7 @@ pr_body.md        # Pull request body draft
 - [Guidelines](docs/guidelines.md) — Coding guidelines management
 - [MCP](docs/mcp.md) — Model Context Protocol integration
 - [API](docs/api.md) — REST API reference for web UI
+- [React Web UI Migration](docs/webui-react-tailwind-migration.md) — v1.2 Web UI implementation notes
 
 ## Environment Variables
 
@@ -251,7 +257,39 @@ publish a new immutable chart release.
 
 ## Roadmap
 
-### v1.0 — Pre-release (RC)
+### v1.4 — Governance Scale & Evals
+- [ ] Governance execution limits, quotas, and cost controls
+- [ ] Storage retention, archival, and cleanup policies
+- [ ] Orchestration regression and scenario evaluation suite
+
+### v1.3 — Scheduled Operations & Reporting
+- [ ] Built-in Docker, Helm, and Kubernetes operations agents
+- [ ] Analyst and reporter agents for investigation workflows
+- [ ] Log and data sources for investigation agents
+- [ ] Recurring orchestration jobs
+- [ ] Built-in maintenance and reporting workflow templates
+- [ ] Outcome notifications for scheduled orchestrations
+
+### v1.2 — Agent Expansion & Repository Context
+- [x] Expanded built-in agent registry for broader repository workflows
+- [x] Convention-aware built-in agent guidance and specialist routing
+- [x] Repository-defined custom agent profiles
+- [x] Reusable built-in and repository scenario templates
+- [x] Built-in frontend application agent
+- [x] Repository-scoped continuous improvement memory
+- [x] Repository-specific guideline management and retrieval
+- [x] Repository-scoped context discovery UX
+- [x] React and Tailwind CSS Web UI migration
+
+### v1.1 — GitHub Automation & Run UX
+- [x] GitHub App installation tokens for repository write operations
+- [x] Issue-triggered orchestration and source issue comments
+- [x] Pull request creation from orchestration records
+- [x] Close policies, quality gates, and human approval controls
+- [x] RBAC checks, audit logging, and centralized secret redaction
+- [x] Live orchestration progress, timeline, cancellation, and recommendations
+
+### v1.0 — Foundation
 - [x] Runtime Agent interface (Plan, Execute, Review) with lifecycle hooks
 - [x] Standardized tool interface with Description, lifecycle, and validation
 - [x] Agent plugin registry with built-in agents (go-backend, frontend, reviewer, ci-fixer, docs, security, release-manager, dependency-updater, qa)

@@ -183,6 +183,34 @@ Orchestration detail responses include:
 
 ---
 
+### GitHub Repository Picker
+
+```
+GET /api/github/repositories
+```
+
+Returns repositories visible to the configured GitHub credentials. The Web UI
+uses this endpoint to populate the New Orchestrate repository selector. GitHub
+App installation repositories are preferred when installation credentials are
+configured; otherwise the server falls back to repositories visible to the
+configured user token.
+
+**Response** (200):
+```json
+[
+  {
+    "id": 1,
+    "name": "repo",
+    "full_name": "owner/repo",
+    "private": true,
+    "html_url": "https://github.com/owner/repo",
+    "default_branch": "main"
+  }
+]
+```
+
+---
+
 ## Authentication
 
 Authentication is optional. Local development can run without login. Production
@@ -198,7 +226,7 @@ GET /auth/logout
 
 When authentication is enabled, work-triggering APIs require a valid signed
 session cookie. Repository cloning and GitHub API operations still use the
-server-side `GITHUB_TOKEN` in v1.0.
+server-side GitHub token or GitHub App installation credentials.
 
 Issue-sourced orchestrations can require human approval before closing their
 source Issue:

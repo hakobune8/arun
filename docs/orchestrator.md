@@ -59,18 +59,18 @@ The Web UI is designed around remote repository orchestration in deployed
 environments:
 
 1. Open **Orchestrate**.
-2. Select one or more agents.
-3. Choose `Sequential` or `Parallel`.
-4. Enter a repository as `owner/repo` or
-   `https://github.com/owner/repo.git`.
-5. Enter the base branch, usually `main`.
-6. Describe the task and start orchestration.
+2. Select a GitHub repository from the repository picker.
+3. Confirm the base branch, usually the repository default branch or `main`.
+4. Describe the task or apply a scenario template.
+5. Load repository agents or ask AgentOS to suggest built-in specialists.
+6. Choose `Sequential` or `Parallel` and start orchestration.
 
 AgentOS clones each request into an isolated workspace under
 `AGENTOS_HOME/workspaces/orchestrate`. This keeps concurrent runs against
 different repositories from sharing a mutable checkout. Private GitHub
-repositories require GitHub App installation credentials or `GITHUB_TOKEN` in
-the AgentOS deployment environment.
+repositories require GitHub App installation credentials or a GitHub token in
+the AgentOS deployment environment. The repository picker uses authenticated
+GitHub repository listing and stores the selected repository as `owner/repo`.
 
 ## Task Recommendations
 

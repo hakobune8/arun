@@ -1,5 +1,41 @@
 # Changelog
 
+## [v1.2.0] - 2026-07-01
+
+### Added
+- Expanded built-in agent registry for broader repository workflows, including
+  frontend, security, release, dependency, QA, and convention-aware planning
+  guidance.
+- Repository-defined custom agent profiles through `.agentos/agents/*.yaml`.
+- Reusable scenario templates, including repository-defined
+  `.agentos/scenarios/*.yaml` templates.
+- Repository-scoped continuous improvement memory with approval before reuse.
+- Repository-specific guideline management and retrieval.
+- Repository-scoped context search across memory, guidelines, orchestration
+  runs, run artifacts, GitHub artifacts, and code/files.
+- React, TypeScript, Vite, and Tailwind CSS Web UI with mobile-first
+  orchestration, agent, audit, GitHub, memory, guideline, and search views.
+- GitHub repository picker API for authenticated Web UI repository selection.
+
+### Changed
+- Orchestration routing now uses stronger built-in agent metadata, repository
+  signals, scenario templates, and task recommendations when assigning
+  specialist agents.
+- The Web UI is served from built React assets instead of the legacy static
+  HTML implementation.
+- Frontend build, lint, and responsive smoke checks are part of CI and Docker
+  image builds.
+
+### Deferred
+- Built-in Docker, Helm, and Kubernetes operations agents were moved to the
+  v1.3.0 milestone.
+
+### Notes
+- GitHub-to-AgentOS webhook delivery is still not required for v1.2.0 unless a
+  later release task changes that before tagging.
+- The `on_pr_merge` close policy remains recorded for conservative follow-up;
+  automatic PR merge detection remains deferred.
+
 ## [v1.1] - 2026-06-30
 
 ### Added
