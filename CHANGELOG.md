@@ -10,6 +10,9 @@
   redaction.
 - Added explicit Kubernetes log evidence search through configured kubectl,
   namespace, and label selector settings.
+- Added recurring orchestration schedules with interval or cron timing,
+  timezone-aware next-run calculation, pause/resume, run-now, execution
+  history, and overlap prevention.
 
 ### Fixed
 - Fixed multi-arch Docker image builds by running the frontend build on the

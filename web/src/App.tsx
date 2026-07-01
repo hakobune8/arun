@@ -5,6 +5,7 @@ import {
   Archive,
   Bot,
   Boxes,
+  CalendarClock,
   Check,
   ChevronRight,
   CircleStop,
@@ -83,7 +84,27 @@ type Orchestration = {
   updatedAt?: string
 }
 
-type PageName = 'orchestrates' | 'agents' | 'audit'
+type Schedule = {
+  id: string
+  name?: string
+  status?: string
+  repo?: string
+  baseBranch?: string
+  task?: string
+  agents?: string[]
+  strategy?: string
+  llmPreset?: string
+  outputLanguage?: string
+  schedule?: Json
+  concurrencyPolicy?: string
+  nextRunAt?: string
+  lastRunAt?: string
+  lastRunId?: string
+  lastRunStatus?: string
+  executions?: Json[]
+}
+
+type PageName = 'orchestrates' | 'schedules' | 'agents' | 'audit'
 type OrchPanel = 'new' | 'list' | 'detail'
 type DetailTab = 'overview' | 'runs' | 'memory' | 'guidelines' | 'search' | 'github'
 
@@ -105,6 +126,24 @@ const defaultForm = {
   prTitle: '',
   issueTemplate: '',
   prTemplate: '',
+}
+
+const defaultScheduleForm = {
+  name: '',
+  repo: '',
+  baseBranch: 'main',
+  task: '',
+  agents: 'analyst, reporter',
+  strategy: 'sequential',
+  llmPreset: '',
+  outputLanguage: '',
+  scheduleType: 'interval',
+  interval: '24h',
+  cron: '0 9 * * 1',
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+  concurrencyPolicy: 'forbid',
+  createIssue: false,
+  createPullRequest: false,
 }
 
 async function api<T = any>(path: string, init?: RequestInit): Promise<T> {
@@ -233,12 +272,15 @@ function App() {
   const [templates, setTemplates] = useState<Json[]>([])
   const [llm, setLLM] = useState<Json>({ defaultPreset: '', presets: [] })
   const [records, setRecords] = useState<Orchestration[]>([])
+  const [schedules, setSchedules] = useState<Schedule[]>([])
   const [selectedID, setSelectedID] = useState('')
   const [current, setCurrent] = useState<Orchestration | null>(null)
   const [audit, setAudit] = useState<Json[]>([])
   const [form, setForm] = useState(defaultForm)
+  const [scheduleForm, setScheduleForm] = useState(defaultScheduleForm)
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set())
   const [status, setStatus] = useState('')
+  const [scheduleStatus, setScheduleStatus] = useState('')
 
   const canUseApp = !session.authRequired || session.authenticated
 
@@ -250,7 +292,7 @@ function App() {
 
   useEffect(() => {
     if (!canUseApp) return
-    void Promise.all([loadAgents(), loadRepositories(), loadLLM(), loadRecords()])
+    void Promise.all([loadAgents(), loadRepositories(), loadLLM(), loadRecords(), loadSchedules()])
   }, [canUseApp])
 
   useEffect(() => {
@@ -304,6 +346,11 @@ function App() {
     setRecords(data)
   }
 
+  async function loadSchedules() {
+    const data = await api<Schedule[]>('/api/schedules')
+    setSchedules(data)
+  }
+
   async function refreshCurrent(id = selectedID) {
     if (!id) return
     const data = await api<Orchestration>(`/api/orchestrates/${encodeURIComponent(id)}`)
@@ -321,6 +368,7 @@ function App() {
     if (next === 'agents') void loadAgents()
     if (next === 'audit') void loadAudit()
     if (next === 'orchestrates') void loadRecords()
+    if (next === 'schedules') void loadSchedules()
   }
 
   if (session.authRequired && !session.authenticated) {
@@ -364,6 +412,7 @@ function App() {
           </button>
           <nav className="hidden gap-1 md:flex">
             <NavButton active={page === 'orchestrates'} icon={<ClipboardList className="size-4" />} onClick={() => navTo('orchestrates')}>Orchestrate</NavButton>
+            <NavButton active={page === 'schedules'} icon={<CalendarClock className="size-4" />} onClick={() => navTo('schedules')}>Schedules</NavButton>
             <NavButton active={page === 'agents'} icon={<Bot className="size-4" />} onClick={() => navTo('agents')}>Agents</NavButton>
             <NavButton active={page === 'audit'} icon={<History className="size-4" />} onClick={() => navTo('audit')}>Audit</NavButton>
           </nav>
@@ -413,12 +462,26 @@ function App() {
             submit={submitOrchestration}
           />
         ) : null}
+        {page === 'schedules' ? (
+          <SchedulesPage
+            schedules={schedules}
+            reload={() => void loadSchedules()}
+            form={scheduleForm}
+            setForm={setScheduleForm}
+            repositories={repositories}
+            llm={llm}
+            status={scheduleStatus}
+            setStatus={setScheduleStatus}
+            submit={submitSchedule}
+          />
+        ) : null}
         {page === 'agents' ? <AgentsPage agents={agents} reload={() => void loadAgents()} /> : null}
         {page === 'audit' ? <AuditPage audit={audit} reload={() => void loadAudit()} /> : null}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-line bg-void/95 px-2 py-2 backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-line bg-void/95 px-2 py-2 backdrop-blur md:hidden">
         <BottomNav active={page === 'orchestrates'} icon={<ClipboardList className="size-5" />} onClick={() => navTo('orchestrates')}>Orchestrate</BottomNav>
+        <BottomNav active={page === 'schedules'} icon={<CalendarClock className="size-5" />} onClick={() => navTo('schedules')}>Schedules</BottomNav>
         <BottomNav active={page === 'agents'} icon={<Bot className="size-5" />} onClick={() => navTo('agents')}>Agents</BottomNav>
         <BottomNav active={page === 'audit'} icon={<History className="size-5" />} onClick={() => navTo('audit')}>Audit</BottomNav>
       </nav>
@@ -466,6 +529,43 @@ function App() {
       setStatus(error instanceof Error ? error.message : String(error))
     }
   }
+
+  async function submitSchedule(event: FormEvent) {
+    event.preventDefault()
+    setScheduleStatus('Creating...')
+    const agentNames = scheduleForm.agents.split(',').map((agent) => agent.trim()).filter(Boolean)
+    try {
+      const created = await api<Schedule>('/api/schedules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: scheduleForm.name,
+          repo: scheduleForm.repo.trim(),
+          baseBranch: scheduleForm.baseBranch.trim() || 'main',
+          task: scheduleForm.task,
+          agents: agentNames,
+          strategy: scheduleForm.strategy,
+          llmPreset: scheduleForm.llmPreset,
+          outputLanguage: scheduleForm.outputLanguage,
+          schedule: {
+            type: scheduleForm.scheduleType,
+            interval: scheduleForm.interval,
+            cron: scheduleForm.cron,
+            timezone: scheduleForm.timezone,
+          },
+          concurrencyPolicy: scheduleForm.concurrencyPolicy,
+          github: {
+            createIssue: scheduleForm.createIssue,
+            createPullRequest: scheduleForm.createPullRequest,
+          },
+        }),
+      })
+      setScheduleStatus(`Created: ${created.id}`)
+      await loadSchedules()
+    } catch (error) {
+      setScheduleStatus(error instanceof Error ? error.message : String(error))
+    }
+  }
 }
 
 function NavButton({ active, icon, children, onClick }: { active: boolean; icon: ReactNode; children: ReactNode; onClick: () => void }) {
@@ -483,6 +583,163 @@ function BottomNav({ active, icon, children, onClick }: { active: boolean; icon:
       {icon}
       {children}
     </button>
+  )
+}
+
+function SchedulesPage(props: {
+  schedules: Schedule[]
+  reload: () => void
+  form: typeof defaultScheduleForm
+  setForm: Dispatch<SetStateAction<typeof defaultScheduleForm>>
+  repositories: RepositorySummary[]
+  llm: Json
+  status: string
+  setStatus: (value: string) => void
+  submit: (event: FormEvent) => void
+}) {
+  const { form, setForm } = props
+  const update = (patch: Partial<typeof defaultScheduleForm>) => setForm((current) => ({ ...current, ...patch }))
+
+  function selectRepository(repo: string) {
+    const selected = props.repositories.find((item) => item.full_name === repo)
+    update({ repo, baseBranch: selected?.default_branch || form.baseBranch || 'main' })
+  }
+
+  async function scheduleAction(schedule: Schedule, action: 'pause' | 'resume' | 'run') {
+    props.setStatus(`${action}...`)
+    try {
+      await api(`/api/schedules/${encodeURIComponent(schedule.id)}/${action}`, { method: 'POST' })
+      props.setStatus(`${action} requested.`)
+      props.reload()
+    } catch (error) {
+      props.setStatus(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const repositoryOptions = [
+    ...props.repositories,
+    ...(form.repo && !props.repositories.some((repo) => repo.full_name === form.repo) ? [{ full_name: form.repo, default_branch: form.baseBranch }] : []),
+  ]
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]">
+      <div className="grid gap-4">
+        <Panel className="p-0">
+          <div className="flex items-center justify-between gap-3 border-b border-line p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-ink"><CalendarClock className="size-4 text-cyan-os" /> Schedules</div>
+            <IconButton tone="secondary" icon={<RefreshCw className="size-4" />} onClick={props.reload}>Refresh</IconButton>
+          </div>
+          <div className="divide-y divide-line">
+            {props.schedules.length === 0 ? <div className="p-4 text-sm text-soft">No schedules.</div> : null}
+            {props.schedules.map((schedule) => (
+              <div key={schedule.id} className="grid gap-3 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="mb-2 flex flex-wrap items-center gap-2"><h2 className="break-words text-sm font-semibold text-ink">{schedule.name || schedule.id}</h2><Status value={schedule.status} /></div>
+                    <p className="break-words text-sm text-soft">{shortText(schedule.task, 220)}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <IconButton tone="secondary" icon={<Play className="size-4" />} onClick={() => scheduleAction(schedule, 'run')}>Run Now</IconButton>
+                    {schedule.status === 'paused'
+                      ? <IconButton tone="secondary" icon={<Check className="size-4" />} onClick={() => scheduleAction(schedule, 'resume')}>Resume</IconButton>
+                      : <IconButton tone="secondary" icon={<CircleStop className="size-4" />} onClick={() => scheduleAction(schedule, 'pause')}>Pause</IconButton>}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Tag>{schedule.repo || '-'}</Tag>
+                  <Tag>{schedule.baseBranch || 'main'}</Tag>
+                  <Tag>{schedule.schedule?.type === 'cron' ? schedule.schedule?.cron : schedule.schedule?.interval}</Tag>
+                  <Tag>{schedule.schedule?.timezone || 'UTC'}</Tag>
+                  <Tag>{schedule.concurrencyPolicy || 'forbid'}</Tag>
+                </div>
+                <div className="grid gap-2 text-xs text-soft sm:grid-cols-3">
+                  <span>Next: {formatTime(schedule.nextRunAt)}</span>
+                  <span>Last: {formatTime(schedule.lastRunAt)}</span>
+                  <span>Status: {schedule.lastRunStatus || '-'}</span>
+                </div>
+                {(schedule.executions ?? []).length ? (
+                  <div className="overflow-x-auto rounded-os border border-line">
+                    <table className="w-full min-w-[620px] table-fixed text-left text-xs">
+                      <thead className="text-soft"><tr><th className="px-3 py-2">Time</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Reason</th><th className="px-3 py-2">Run</th></tr></thead>
+                      <tbody className="divide-y divide-line">
+                        {(schedule.executions ?? []).slice().reverse().slice(0, 5).map((execution) => (
+                          <tr key={execution.id}>
+                            <td className="px-3 py-2 text-soft">{formatTime(execution.startedAt)}</td>
+                            <td className="px-3 py-2"><Status value={execution.status} /></td>
+                            <td className="px-3 py-2 text-soft">{execution.reason || '-'}</td>
+                            <td className="px-3 py-2 break-all text-soft">{execution.runId || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      <Panel>
+        <form className="grid gap-3" onSubmit={props.submit}>
+          <div className="flex items-center gap-2 text-sm font-semibold text-ink"><Sparkles className="size-4 text-cyan-os" /> New Schedule</div>
+          <Field label="Name">
+            <input className={inputClass} value={form.name} onChange={(e) => update({ name: e.target.value })} placeholder="Weekly repository health report" />
+          </Field>
+          <Field label="Repository">
+            <select className={inputClass} required value={form.repo} onChange={(e) => selectRepository(e.target.value)}>
+              <option value="">{repositoryOptions.length ? 'Select repository' : 'No GitHub repositories available'}</option>
+              {repositoryOptions.map((repo) => <option key={repo.full_name} value={repo.full_name}>{repo.full_name}</option>)}
+            </select>
+          </Field>
+          <Field label="Base Branch">
+            <input className={inputClass} value={form.baseBranch} onChange={(e) => update({ baseBranch: e.target.value })} placeholder="main" />
+          </Field>
+          <Field label="Task">
+            <textarea className={textareaClass} required value={form.task} onChange={(e) => update({ task: e.target.value })} placeholder="Create a scheduled operations report." />
+          </Field>
+          <Field label="Agents">
+            <input className={inputClass} value={form.agents} onChange={(e) => update({ agents: e.target.value })} placeholder="analyst, reporter" />
+          </Field>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+            <Field label="Strategy">
+              <select className={inputClass} value={form.strategy} onChange={(e) => update({ strategy: e.target.value })}><option value="sequential">Sequential</option><option value="parallel">Parallel</option></select>
+            </Field>
+            <Field label="LLM Preset">
+              <select className={inputClass} value={form.llmPreset} onChange={(e) => update({ llmPreset: e.target.value })}>
+                {(props.llm.presets ?? []).length ? (props.llm.presets ?? []).map((p: Json) => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>) : <option value="">Default</option>}
+              </select>
+            </Field>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+            <Field label="Schedule">
+              <select className={inputClass} value={form.scheduleType} onChange={(e) => update({ scheduleType: e.target.value })}><option value="interval">Interval</option><option value="cron">Cron</option></select>
+            </Field>
+            {form.scheduleType === 'cron' ? (
+              <Field label="Cron">
+                <input className={inputClass} value={form.cron} onChange={(e) => update({ cron: e.target.value })} placeholder="0 9 * * 1" />
+              </Field>
+            ) : (
+              <Field label="Interval">
+                <input className={inputClass} value={form.interval} onChange={(e) => update({ interval: e.target.value })} placeholder="24h" />
+              </Field>
+            )}
+          </div>
+          <Field label="Timezone">
+            <input className={inputClass} value={form.timezone} onChange={(e) => update({ timezone: e.target.value })} placeholder="UTC" />
+          </Field>
+          <Field label="Concurrency">
+            <select className={inputClass} value={form.concurrencyPolicy} onChange={(e) => update({ concurrencyPolicy: e.target.value })}><option value="forbid">Forbid overlap</option><option value="allow">Allow overlap</option></select>
+          </Field>
+          <div className="grid gap-2">
+            <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.createIssue} onChange={(e) => update({ createIssue: e.target.checked })} />Create Issue</label>
+            <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.createPullRequest} onChange={(e) => update({ createPullRequest: e.target.checked })} />Create PR</label>
+          </div>
+          <IconButton icon={<Check className="size-4" />}>Create Schedule</IconButton>
+          {props.status ? <p className="break-words text-sm text-soft">{props.status}</p> : null}
+        </form>
+      </Panel>
+    </div>
   )
 }
 

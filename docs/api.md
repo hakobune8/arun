@@ -211,6 +211,65 @@ configured user token.
 
 ---
 
+### Schedules
+
+```
+GET /api/schedules
+POST /api/schedules
+GET /api/schedules/{id}
+PUT /api/schedules/{id}
+POST /api/schedules/{id}/pause
+POST /api/schedules/{id}/resume
+POST /api/schedules/{id}/run
+```
+
+Schedules define recurring Orchestrate jobs. They persist under
+`AGENTOS_HOME/schedules`, store execution history, and link each started
+execution to an orchestration record through `scheduleId`.
+
+Create or update body:
+
+```json
+{
+  "name": "Weekly repository health report",
+  "repo": "owner/repo",
+  "baseBranch": "main",
+  "task": "Create a repository health report.",
+  "agents": ["analyst", "reporter"],
+  "strategy": "sequential",
+  "llmPreset": "staips",
+  "outputLanguage": "ja",
+  "schedule": {
+    "type": "cron",
+    "cron": "0 9 * * 1",
+    "timezone": "Asia/Tokyo"
+  },
+  "concurrencyPolicy": "forbid",
+  "github": {
+    "createIssue": false,
+    "createPullRequest": false
+  }
+}
+```
+
+For interval schedules, use:
+
+```json
+{
+  "schedule": {
+    "type": "interval",
+    "interval": "24h",
+    "timezone": "UTC"
+  }
+}
+```
+
+`concurrencyPolicy` is `forbid` by default and skips a due execution when the
+previous schedule run is still planning or running. `POST /run` manually starts
+the same saved configuration and records the execution in schedule history.
+
+---
+
 ## Authentication
 
 Authentication is optional. Local development can run without login. Production

@@ -72,6 +72,19 @@ repositories require GitHub App installation credentials or a GitHub token in
 the AgentOS deployment environment. The repository picker uses authenticated
 GitHub repository listing and stores the selected repository as `owner/repo`.
 
+## Scheduled Runs
+
+The Web UI Schedules page and `/api/schedules` API can persist recurring
+orchestration jobs. A schedule stores the repository, base branch, task, agents,
+LLM preset, output controls, GitHub artifact settings, an interval or five-field
+cron expression, timezone, concurrency policy, and execution history.
+
+AgentOS starts due schedules in-process when the Web server is running. Missed
+runs after restart are checked on startup. By default, `concurrencyPolicy:
+forbid` skips a due execution when the previous schedule run is still planning
+or running. Each orchestration started by a schedule records `scheduleId`, and
+the schedule history stores the linked run ID and latest run status.
+
 ## Task Recommendations
 
 The Web UI can run a recommend-only pass before starting an orchestration. The

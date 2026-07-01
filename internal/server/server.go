@@ -69,18 +69,20 @@ var scenarioVariableNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,62
 
 // Server serves the AgentOS web UI and API endpoints.
 type Server struct {
-	port        int
-	server      *http.Server
-	search      *search.Service
-	agentReg    *agent.Registry
-	llmClient   llm.LLMClient
-	sandbox     sandbox.Sandbox
-	runtimeCfg  *runtime.Config
-	auth        authConfig
-	llmSettings llmSettings
-	activeMu    sync.Mutex
-	activeRuns  map[string]context.CancelFunc
-	canceledRun map[string]bool
+	port            int
+	server          *http.Server
+	search          *search.Service
+	agentReg        *agent.Registry
+	llmClient       llm.LLMClient
+	sandbox         sandbox.Sandbox
+	runtimeCfg      *runtime.Config
+	auth            authConfig
+	llmSettings     llmSettings
+	activeMu        sync.Mutex
+	activeRuns      map[string]context.CancelFunc
+	canceledRun     map[string]bool
+	schedulerMu     sync.Mutex
+	schedulerCancel context.CancelFunc
 }
 
 // NewServer creates a new Server listening on the given port.
@@ -131,6 +133,8 @@ func NewServer(port int) *Server {
 	mux.HandleFunc("/api/orchestrate", s.handleOrchestrate)
 	mux.HandleFunc("/api/orchestrates", s.handleOrchestrates)
 	mux.HandleFunc("/api/orchestrates/", s.handleOrchestrateDetail)
+	mux.HandleFunc("/api/schedules", s.handleSchedules)
+	mux.HandleFunc("/api/schedules/", s.handleScheduleDetail)
 
 	staticSub, err := fs.Sub(staticFS, "static")
 	if err == nil {
@@ -149,11 +153,13 @@ func NewServer(port int) *Server {
 // Start starts the HTTP server and blocks until Shutdown is called.
 func (s *Server) Start() error {
 	slog.Info("AgentOS Web UI starting", "port", s.port)
+	s.startScheduler()
 	return s.server.ListenAndServe()
 }
 
 // Shutdown gracefully shuts down the HTTP server.
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.stopScheduler()
 	return s.server.Shutdown(ctx)
 }
 
@@ -613,6 +619,12 @@ type orchestrateRequest struct {
 	GitHub         *orchestrateGitHubRequest  `json:"github,omitempty"`
 }
 
+type orchestrationStartOptions struct {
+	Source     *orchestrationSourceIssue
+	ScheduleID string
+	Actor      string
+}
+
 type orchestrateGitHubRequest struct {
 	CreateIssue       bool   `json:"createIssue"`
 	CreatePullRequest bool   `json:"createPullRequest"`
@@ -700,6 +712,7 @@ type orchestrationRecord struct {
 	Agents                   []string                               `json:"agents"`
 	CustomAgents             []agent.Definition                     `json:"customAgents,omitempty"`
 	Scenario                 *scenarioTemplateSelection             `json:"scenarioTemplate,omitempty"`
+	ScheduleID               string                                 `json:"scheduleId,omitempty"`
 	Strategy                 string                                 `json:"strategy"`
 	LLMPreset                string                                 `json:"llmPreset"`
 	OutputLanguage           string                                 `json:"outputLanguage,omitempty"`
@@ -881,9 +894,23 @@ func (s *Server) handleOrchestrateFromIssue(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) startOrchestration(w http.ResponseWriter, r *http.Request, user *authUser, req *orchestrateRequest, source *orchestrationSourceIssue) {
-	if req == nil {
-		http.Error(w, "request is required", http.StatusBadRequest)
+	if req != nil {
+		req.Repo = strings.TrimSpace(req.Repo)
+	}
+	if !s.requireAutomationPermission(w, r, user, "orchestrate.create", "orchestration", reqRepo(req), "") {
 		return
+	}
+	record, err := s.createOrchestration(req, orchestrationStartOptions{Source: source, Actor: actorLogin(user)})
+	if err != nil {
+		http.Error(w, err.Error(), orchestrationStartStatus(err))
+		return
+	}
+	_ = json.NewEncoder(w).Encode(record) //nolint:errcheck // best-effort response
+}
+
+func (s *Server) createOrchestration(req *orchestrateRequest, opts orchestrationStartOptions) (*orchestrationRecord, error) {
+	if req == nil {
+		return nil, fmt.Errorf("request is required")
 	}
 	req.Repo = strings.TrimSpace(req.Repo)
 	req.BaseBranch = defaultBaseBranch(req.BaseBranch)
@@ -892,28 +919,21 @@ func (s *Server) startOrchestration(w http.ResponseWriter, r *http.Request, user
 		req.Strategy = "sequential"
 	}
 	if req.Strategy != "sequential" && req.Strategy != "parallel" {
-		http.Error(w, "strategy must be sequential or parallel", http.StatusBadRequest)
-		return
+		return nil, fmt.Errorf("strategy must be sequential or parallel")
 	}
 
 	if len(req.Agents) == 0 || req.Task == "" {
-		http.Error(w, "agents and task are required", http.StatusBadRequest)
-		return
-	}
-	if !s.requireAutomationPermission(w, r, user, "orchestrate.create", "orchestration", req.Repo, "") {
-		return
+		return nil, fmt.Errorf("agents and task are required")
 	}
 
 	llmClient, presetID, err := s.llmClientForPreset(req.LLMPreset)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return nil, err
 	}
 
 	repoPath, err := resolveOrchestrateRepo(req.Repo, req.BaseBranch)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return nil, err
 	}
 	artifactConfig := loadArtifactConfig(repoPath)
 	applyArtifactConfig(req, artifactConfig)
@@ -922,8 +942,7 @@ func (s *Server) startOrchestration(w http.ResponseWriter, r *http.Request, user
 	agents := make(map[string]runtime.Agent)
 	customAgents, err := validateCustomAgentDefinitions(req.CustomAgents, s.agentReg)
 	if err != nil {
-		http.Error(w, "custom agents: "+err.Error(), http.StatusBadRequest)
-		return
+		return nil, fmt.Errorf("custom agents: %w", err)
 	}
 	customByName := make(map[string]agent.Definition, len(customAgents))
 	for i := range customAgents {
@@ -936,8 +955,7 @@ func (s *Server) startOrchestration(w http.ResponseWriter, r *http.Request, user
 		} else {
 			a, err := s.agentReg.Create(name, llmClient)
 			if err != nil {
-				http.Error(w, "lookup agent "+name+": "+err.Error(), http.StatusBadRequest)
-				return
+				return nil, fmt.Errorf("lookup agent %s: %w", name, err)
 			}
 			agents[name] = a
 		}
@@ -946,15 +964,18 @@ func (s *Server) startOrchestration(w http.ResponseWriter, r *http.Request, user
 	id := generateID()
 	githubState, err := prepareOrchestrationGitHub(id, req)
 	if err != nil {
-		http.Error(w, "github: "+err.Error(), http.StatusBadRequest)
-		return
+		return nil, fmt.Errorf("github: %w", err)
 	}
-	githubState = attachSourceIssue(githubState, source)
+	githubState = attachSourceIssue(githubState, opts.Source)
 
 	now := time.Now().UTC()
+	actor := strings.TrimSpace(opts.Actor)
+	if actor == "" {
+		actor = "system"
+	}
 	record := &orchestrationRecord{
 		ID:             id,
-		Actor:          actorLogin(user),
+		Actor:          actor,
 		Repo:           req.Repo,
 		RepoPath:       repoPath,
 		BaseBranch:     req.BaseBranch,
@@ -962,6 +983,7 @@ func (s *Server) startOrchestration(w http.ResponseWriter, r *http.Request, user
 		Agents:         req.Agents,
 		CustomAgents:   selectedCustomAgentDefinitions(req.Agents, customByName),
 		Scenario:       scenarioSelection,
+		ScheduleID:     opts.ScheduleID,
 		Strategy:       req.Strategy,
 		LLMPreset:      presetID,
 		OutputLanguage: normalizeOutputLanguage(req.OutputLanguage),
@@ -975,13 +997,29 @@ func (s *Server) startOrchestration(w http.ResponseWriter, r *http.Request, user
 		record.Repo = "."
 	}
 	if err := saveOrchestrationRecord(record); err != nil {
-		http.Error(w, "save orchestration: "+err.Error(), http.StatusInternalServerError)
-		return
+		return nil, fmt.Errorf("save orchestration: %w", err)
 	}
 
 	go s.runOrchestration(record, agents, llmClient)
 
-	_ = json.NewEncoder(w).Encode(record) //nolint:errcheck // best-effort response
+	return record, nil
+}
+
+func reqRepo(req *orchestrateRequest) string {
+	if req == nil {
+		return ""
+	}
+	return strings.TrimSpace(req.Repo)
+}
+
+func orchestrationStartStatus(err error) int {
+	if err == nil {
+		return http.StatusOK
+	}
+	if strings.HasPrefix(err.Error(), "save orchestration:") {
+		return http.StatusInternalServerError
+	}
+	return http.StatusBadRequest
 }
 
 func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string]runtime.Agent, llmClient llm.LLMClient) {

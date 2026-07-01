@@ -1590,6 +1590,7 @@ func TestServer_AuthRequiredProtectsWorkAPIs(t *testing.T) {
 		"/api/search?q=test",
 		"/api/github/issues?repo=owner/repo",
 		"/api/orchestrates",
+		"/api/schedules",
 		"/api/audit",
 	}
 	for _, path := range protected {
@@ -1692,6 +1693,141 @@ func TestServer_AuditEndpointReturnsEventsForAdmin(t *testing.T) {
 	}
 	if len(events) < 1 {
 		t.Fatal("expected audit events")
+	}
+}
+
+func TestServer_ScheduleCRUDPauseResume(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("AGENTOS_HOME", home)
+	s := NewServer(0)
+
+	body := []byte(`{
+		"name":"Nightly report",
+		"repo":".",
+		"baseBranch":"main",
+		"task":"Create a repository health report",
+		"agents":["reporter"],
+		"strategy":"sequential",
+		"schedule":{"type":"interval","interval":"1h","timezone":"UTC"},
+		"concurrencyPolicy":"forbid"
+	}`)
+	w := serveRequest(s, "POST", "/api/schedules", body)
+	assertStatus(t, w.Code, http.StatusOK)
+	var created scheduleDefinition
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if !isValidScheduleID(created.ID) || created.Status != scheduleStatusActive || created.NextRunAt.IsZero() {
+		t.Fatalf("created schedule = %+v", created)
+	}
+
+	w = serveRequest(s, "POST", "/api/schedules/"+created.ID+"/pause", nil)
+	assertStatus(t, w.Code, http.StatusOK)
+	var paused scheduleDefinition
+	if err := json.Unmarshal(w.Body.Bytes(), &paused); err != nil {
+		t.Fatal(err)
+	}
+	if paused.Status != scheduleStatusPaused {
+		t.Fatalf("paused status = %q", paused.Status)
+	}
+
+	w = serveRequest(s, "POST", "/api/schedules/"+created.ID+"/resume", nil)
+	assertStatus(t, w.Code, http.StatusOK)
+	var resumed scheduleDefinition
+	if err := json.Unmarshal(w.Body.Bytes(), &resumed); err != nil {
+		t.Fatal(err)
+	}
+	if resumed.Status != scheduleStatusActive || resumed.NextRunAt.IsZero() {
+		t.Fatalf("resumed schedule = %+v", resumed)
+	}
+
+	w = serveRequest(s, "GET", "/api/schedules", nil)
+	assertStatus(t, w.Code, http.StatusOK)
+	var schedules []scheduleDefinition
+	if err := json.Unmarshal(w.Body.Bytes(), &schedules); err != nil {
+		t.Fatal(err)
+	}
+	if len(schedules) != 1 || schedules[0].ID != created.ID {
+		t.Fatalf("schedules = %+v", schedules)
+	}
+}
+
+func TestScheduleNextRunCronTimezone(t *testing.T) {
+	t.Setenv("AGENTOS_HOME", t.TempDir())
+	schedule := &scheduleDefinition{
+		Name:      "weekday cron",
+		Repo:      ".",
+		Task:      "report",
+		Agents:    []string{"reporter"},
+		Strategy:  "sequential",
+		Schedule:  scheduleSpec{Type: "cron", Cron: "30 9 * * *", Timezone: "Asia/Tokyo"},
+		CreatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+		UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+		Status:    scheduleStatusActive,
+		NextRunAt: time.Time{},
+	}
+	next, err := nextScheduleRun(schedule, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2026, 7, 1, 0, 30, 0, 0, time.UTC)
+	if !next.Equal(want) {
+		t.Fatalf("next = %s, want %s", next, want)
+	}
+}
+
+func TestServer_RunDueSchedulesSkipsActiveForbidConcurrency(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("AGENTOS_HOME", home)
+	s := NewServer(0)
+
+	now := time.Date(2026, 7, 1, 1, 0, 0, 0, time.UTC)
+	activeRun := &orchestrationRecord{
+		ID:         "run-1111111111111111",
+		Actor:      "system",
+		Repo:       ".",
+		BaseBranch: "main",
+		Task:       "active",
+		Status:     "running",
+		CreatedAt:  now.Add(-time.Hour),
+		UpdatedAt:  now.Add(-time.Minute),
+	}
+	if err := saveOrchestrationRecord(activeRun); err != nil {
+		t.Fatal(err)
+	}
+	schedule := &scheduleDefinition{
+		ID:                "schedule-2222222222222222",
+		Actor:             "system",
+		Name:              "due",
+		Status:            scheduleStatusActive,
+		Repo:              ".",
+		BaseBranch:        "main",
+		Task:              "report",
+		Agents:            []string{"reporter"},
+		Strategy:          "sequential",
+		Schedule:          scheduleSpec{Type: "interval", Interval: "1h", Timezone: "UTC"},
+		ConcurrencyPolicy: schedulePolicyForbid,
+		NextRunAt:         now.Add(-time.Minute),
+		LastRunID:         activeRun.ID,
+		LastRunStatus:     activeRun.Status,
+		CreatedAt:         now.Add(-2 * time.Hour),
+		UpdatedAt:         now.Add(-time.Hour),
+	}
+	if err := saveSchedule(schedule); err != nil {
+		t.Fatal(err)
+	}
+
+	s.runDueSchedules(now, "scheduled")
+
+	reloaded, err := readSchedule(schedule.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reloaded.Executions) != 1 || reloaded.Executions[0].Status != "skipped" {
+		t.Fatalf("executions = %+v", reloaded.Executions)
+	}
+	if !reloaded.NextRunAt.After(now) {
+		t.Fatalf("next run = %s, want after %s", reloaded.NextRunAt, now)
 	}
 }
 

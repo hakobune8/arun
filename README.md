@@ -266,7 +266,7 @@ publish a new immutable chart release.
 - [ ] Built-in Docker, Helm, and Kubernetes operations agents
 - [x] Analyst and reporter agents for investigation workflows
 - [x] Log and data sources for investigation agents
-- [ ] Recurring orchestration jobs
+- [x] Recurring orchestration jobs
 - [ ] Built-in maintenance and reporting workflow templates
 - [ ] Outcome notifications for scheduled orchestrations
 
