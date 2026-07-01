@@ -11,6 +11,11 @@
 - Added explicit Kubernetes log evidence search through configured kubectl,
   namespace, and label selector settings.
 
+### Fixed
+- Fixed multi-arch Docker image builds by running the frontend build on the
+  BuildKit build platform and cross-compiling the Go binary for each target
+  architecture.
+
 ## [v1.2.0] - 2026-07-01
 
 ### Added

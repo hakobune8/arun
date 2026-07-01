@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates nodejs npm
 
@@ -7,8 +7,10 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN cd web && npm ci && npm run build
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
 ARG VERSION=dev
-RUN CGO_ENABLED=0 go build -ldflags "-X github.com/kazyamaz200/agentos/internal/cli.Version=${VERSION}" -o agentos ./cmd/agentos
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags "-X github.com/kazyamaz200/agentos/internal/cli.Version=${VERSION}" -o agentos ./cmd/agentos
 
 FROM golang:1.22-alpine
 
