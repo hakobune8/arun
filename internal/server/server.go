@@ -618,6 +618,7 @@ type orchestrateRequest struct {
 	LLMPreset      string                     `json:"llmPreset"`
 	OutputLanguage string                     `json:"outputLanguage,omitempty"`
 	GitHub         *orchestrateGitHubRequest  `json:"github,omitempty"`
+	Limits         governanceLimits           `json:"limits,omitempty"`
 }
 
 type orchestrationStartOptions struct {
@@ -717,6 +718,8 @@ type orchestrationRecord struct {
 	Strategy                 string                                 `json:"strategy"`
 	LLMPreset                string                                 `json:"llmPreset"`
 	OutputLanguage           string                                 `json:"outputLanguage,omitempty"`
+	Limits                   governanceLimits                       `json:"limits,omitempty"`
+	Usage                    governanceUsage                        `json:"usage,omitempty"`
 	Status                   string                                 `json:"status"`
 	Error                    string                                 `json:"error,omitempty"`
 	Plan                     *orchestrator.TaskPlan                 `json:"plan,omitempty"`
@@ -926,6 +929,13 @@ func (s *Server) createOrchestration(req *orchestrateRequest, opts orchestration
 	if len(req.Agents) == 0 || req.Task == "" {
 		return nil, fmt.Errorf("agents and task are required")
 	}
+	limits, err := normalizeGovernanceLimits(req.Limits)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.enforceGovernanceBeforeStart(req, limits); err != nil {
+		return nil, err
+	}
 
 	llmClient, presetID, err := s.llmClientForPreset(req.LLMPreset)
 	if err != nil {
@@ -988,12 +998,14 @@ func (s *Server) createOrchestration(req *orchestrateRequest, opts orchestration
 		Strategy:       req.Strategy,
 		LLMPreset:      presetID,
 		OutputLanguage: normalizeOutputLanguage(req.OutputLanguage),
+		Limits:         limits,
 		Status:         "planning",
 		GitHub:         githubState,
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
 	appendOrchestrationEvent(record, "created", "", "Orchestration created")
+	initializeGovernanceUsage(record)
 	if record.Repo == "" {
 		record.Repo = "."
 	}
@@ -1024,16 +1036,23 @@ func orchestrationStartStatus(err error) int {
 }
 
 func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string]runtime.Agent, llmClient llm.LLMClient) {
-	runCtx, cancelRun := context.WithCancel(context.Background())
-	s.registerActiveOrchestration(record.ID, cancelRun)
+	baseCtx, cancelBase := context.WithCancel(context.Background())
+	defer cancelBase()
+	runCtx := baseCtx
+	cancelBudget := func() {}
+	if timeout := record.Limits.maxDuration(); timeout > 0 {
+		runCtx, cancelBudget = context.WithTimeout(baseCtx, timeout)
+	}
+	defer cancelBudget()
+	s.registerActiveOrchestration(record.ID, cancelBase)
 	defer s.unregisterActiveOrchestration(record.ID)
-	defer cancelRun()
 
 	cfg := &runtime.Config{Verbose: false}
 	orch := orchestrator.NewOrchestrator(llmClient, sandbox.NewLocalSandbox(record.RepoPath), agents, cfg)
 	orch.SetAgentMetadata(orchestrationAgentMetadata(record, agents, s.agentReg), orchestrationAgentProfiles(record, agents))
 	orch.SetBaseBranch(record.BaseBranch)
 	orch.SetRunID(record.ID)
+	orch.SetMaxRetries(record.Limits.MaxRetries)
 
 	if record.Strategy == "parallel" {
 		orch.SetStrategy(orchestrator.StrategyParallel)
@@ -1058,7 +1077,12 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 	planningTask = taskWithRepositoryGuidelines(planningTask, repositoryGuidelines)
 	plan, err := orch.Plan(planCtx, planningTask)
 	if err != nil {
-		if errors.Is(planCtx.Err(), context.Canceled) || errors.Is(runCtx.Err(), context.Canceled) {
+		if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+			record.Status = "failed"
+			record.Error = fmt.Sprintf("governance limit exceeded: maxDuration %s", record.Limits.MaxDuration)
+			markGovernanceLimitExceeded(record, record.Error)
+			appendOrchestrationEvent(record, "budget.exceeded", "", record.Error)
+		} else if errors.Is(planCtx.Err(), context.Canceled) || errors.Is(runCtx.Err(), context.Canceled) {
 			s.stopCanceledOrchestration(record, "Orchestration canceled during planning")
 			return
 		} else {
@@ -1067,6 +1091,24 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 			appendOrchestrationEvent(record, "planning.failed", "", record.Error)
 		}
 		record.UpdatedAt = time.Now().UTC()
+		updateGovernanceUsage(record)
+		if saveErr := saveOrchestrationRecord(record); saveErr != nil {
+			slog.Warn("save orchestration failed", "id", record.ID, "error", saveErr)
+		}
+		s.auditOrchestrationOutcome(record, auditOutcomeFailure, record.Error)
+		s.postSourceIssueFinalComment(record)
+		s.notifyScheduledRun(record)
+		return
+	}
+	if err := enforceGovernancePlan(record, plan); err != nil {
+		record.Plan = plan
+		record.Subtasks = makeSubtaskStates(plan)
+		record.Status = "failed"
+		record.Error = "governance limit exceeded: " + err.Error()
+		markGovernanceLimitExceeded(record, record.Error)
+		appendOrchestrationEvent(record, "budget.exceeded", "", record.Error)
+		record.UpdatedAt = time.Now().UTC()
+		updateGovernanceUsage(record)
 		if saveErr := saveOrchestrationRecord(record); saveErr != nil {
 			slog.Warn("save orchestration failed", "id", record.ID, "error", saveErr)
 		}
@@ -1088,6 +1130,7 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 	record.Subtasks = makeSubtaskStates(plan)
 	record.Status = "running"
 	record.UpdatedAt = time.Now().UTC()
+	updateGovernanceUsage(record)
 	if err := saveOrchestrationRecord(record); err != nil {
 		slog.Warn("save orchestration failed", "id", record.ID, "error", err)
 	}
@@ -1103,6 +1146,7 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 		applySubtaskEvent(record, &event)
 		appendTimelineForSubtaskEvent(record, &event)
 		record.UpdatedAt = time.Now().UTC()
+		updateGovernanceUsage(record)
 		if err := saveOrchestrationRecord(record); err != nil {
 			slog.Warn("save orchestration failed", "id", record.ID, "error", err)
 		}
@@ -1125,6 +1169,13 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 		}
 		record.Results = results
 		record.UpdatedAt = time.Now().UTC()
+		if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+			record.Error = fmt.Sprintf("governance limit exceeded: maxDuration %s", record.Limits.MaxDuration)
+			markGovernanceLimitExceeded(record, record.Error)
+			appendOrchestrationEvent(record, "budget.exceeded", "", record.Error)
+		} else {
+			updateGovernanceUsage(record)
+		}
 		if saveErr := saveOrchestrationRecord(record); saveErr != nil {
 			slog.Warn("save orchestration failed", "id", record.ID, "error", saveErr)
 		}
@@ -1153,6 +1204,7 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 	}
 	appendOrchestrationEvent(record, "completed", "", "Orchestration completed")
 	record.UpdatedAt = time.Now().UTC()
+	updateGovernanceUsage(record)
 	if err := saveOrchestrationRecord(record); err != nil {
 		slog.Warn("save orchestration failed", "id", record.ID, "error", err)
 	}

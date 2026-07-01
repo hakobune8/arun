@@ -21,6 +21,30 @@ litellm --config litellm_config.yaml
 | `AGENTOS_LLM_DEFAULT_PRESET` | `default` | Default Web UI model preset ID |
 | `AGENTOS_LLM_PRESETS` | generated default | JSON array of server-side LLM presets |
 | `AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT` | `10m` | Maximum runtime for one orchestration subtask |
+| `AGENTOS_ORCHESTRATE_PLAN_TIMEOUT` | `90s` | Maximum runtime for orchestration planning |
+
+### Governance Limits
+
+Web UI and API orchestrations accept optional `limits` values. These are stored
+on each orchestration record and copied from schedules to scheduled runs:
+
+```json
+{
+  "maxDuration": "30m",
+  "maxSubtasks": 12,
+  "maxRetries": 3,
+  "maxLlmTokens": 200000,
+  "maxGitHubRequests": 100,
+  "maxConcurrentRepoRuns": 1,
+  "maxConcurrentOrgRuns": 4
+}
+```
+
+When omitted, AgentOS uses `30m` duration, `12` subtasks, and one active run per
+repository. The server enforces maximum duration, planned subtasks, repository
+concurrency, and organization concurrency. Token and GitHub request budgets are
+reported in run detail as governance metadata until provider/request clients
+expose reliable usage accounting.
 
 ### Web UI Model Presets
 

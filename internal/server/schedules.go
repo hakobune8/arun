@@ -60,6 +60,7 @@ type scheduleDefinition struct {
 	LLMPreset         string                     `json:"llmPreset,omitempty"`
 	OutputLanguage    string                     `json:"outputLanguage,omitempty"`
 	GitHub            *orchestrateGitHubRequest  `json:"github,omitempty"`
+	Limits            governanceLimits           `json:"limits,omitempty"`
 	Schedule          scheduleSpec               `json:"schedule"`
 	ConcurrencyPolicy string                     `json:"concurrencyPolicy"`
 	RetryPolicy       scheduleRetryPolicy        `json:"retryPolicy,omitempty"`
@@ -413,6 +414,11 @@ func prepareSchedule(schedule *scheduleDefinition, now time.Time) error {
 	if schedule.Strategy != "sequential" && schedule.Strategy != "parallel" {
 		return fmt.Errorf("strategy must be sequential or parallel")
 	}
+	limits, err := normalizeGovernanceLimits(schedule.Limits)
+	if err != nil {
+		return err
+	}
+	schedule.Limits = limits
 	schedule.Notification.Triggers = normalizedNotificationTriggers(schedule.Notification.Triggers)
 	schedule.Notification.Destinations = normalizedNotificationDestinations(schedule.Notification.Destinations)
 	if _, err := scheduleLocation(schedule); err != nil {
@@ -622,6 +628,7 @@ func (schedule *scheduleDefinition) orchestrateRequest() *orchestrateRequest {
 		LLMPreset:      schedule.LLMPreset,
 		OutputLanguage: schedule.OutputLanguage,
 		GitHub:         schedule.GitHub,
+		Limits:         schedule.Limits,
 	}
 }
 

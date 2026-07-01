@@ -71,6 +71,8 @@ type Orchestration = {
   customAgents?: Json[]
   scenarioTemplate?: Json
   github?: Json
+  limits?: Json
+  usage?: Json
   plan?: { subtasks?: Json[] }
   subtasks?: Json[]
   results?: Json[]
@@ -99,6 +101,7 @@ type Schedule = {
   schedule?: Json
   concurrencyPolicy?: string
   notification?: Json
+  limits?: Json
   nextRunAt?: string
   lastRunAt?: string
   lastRunId?: string
@@ -159,6 +162,13 @@ const defaultForm = {
   prTitle: '',
   issueTemplate: '',
   prTemplate: '',
+  maxDuration: '30m',
+  maxSubtasks: '12',
+  maxRetries: '',
+  maxLlmTokens: '',
+  maxGitHubRequests: '',
+  maxConcurrentRepoRuns: '1',
+  maxConcurrentOrgRuns: '',
 }
 
 const defaultScheduleForm = {
@@ -184,6 +194,13 @@ const defaultScheduleForm = {
   notifyTriggers: 'failed, quality_gate_failed, manual_intervention',
   notifyDestinations: 'inbox',
   webhookUrl: '',
+  maxDuration: '30m',
+  maxSubtasks: '12',
+  maxRetries: '',
+  maxLlmTokens: '',
+  maxGitHubRequests: '',
+  maxConcurrentRepoRuns: '1',
+  maxConcurrentOrgRuns: '',
 }
 
 async function api<T = any>(path: string, init?: RequestInit): Promise<T> {
@@ -210,6 +227,13 @@ function readableTask(value: unknown) {
     .replace(/\s+(PR body:)/g, '\n$1')
     .replace(/\s+(Labels?:)/g, '\n$1')
     .trim()
+}
+
+function numberOrUndefined(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const parsed = Number(trimmed)
+  return Number.isFinite(parsed) ? parsed : undefined
 }
 
 function formatTime(value?: string) {
@@ -574,6 +598,15 @@ function App() {
             issueTemplate: form.issueTemplate,
             prTemplate: form.prTemplate,
           },
+          limits: {
+            maxDuration: form.maxDuration.trim(),
+            maxSubtasks: numberOrUndefined(form.maxSubtasks),
+            maxRetries: numberOrUndefined(form.maxRetries),
+            maxLlmTokens: numberOrUndefined(form.maxLlmTokens),
+            maxGitHubRequests: numberOrUndefined(form.maxGitHubRequests),
+            maxConcurrentRepoRuns: numberOrUndefined(form.maxConcurrentRepoRuns),
+            maxConcurrentOrgRuns: numberOrUndefined(form.maxConcurrentOrgRuns),
+          },
         }),
       })
       setStatus(`Started: ${result.id}`)
@@ -620,6 +653,15 @@ function App() {
             triggers: scheduleForm.notifyTriggers.split(',').map((item) => item.trim()).filter(Boolean),
             destinations: scheduleForm.notifyDestinations.split(',').map((item) => item.trim()).filter(Boolean),
             webhookUrl: scheduleForm.webhookUrl.trim(),
+          },
+          limits: {
+            maxDuration: scheduleForm.maxDuration.trim(),
+            maxSubtasks: numberOrUndefined(scheduleForm.maxSubtasks),
+            maxRetries: numberOrUndefined(scheduleForm.maxRetries),
+            maxLlmTokens: numberOrUndefined(scheduleForm.maxLlmTokens),
+            maxGitHubRequests: numberOrUndefined(scheduleForm.maxGitHubRequests),
+            maxConcurrentRepoRuns: numberOrUndefined(scheduleForm.maxConcurrentRepoRuns),
+            maxConcurrentOrgRuns: numberOrUndefined(scheduleForm.maxConcurrentOrgRuns),
           },
         }),
       })
@@ -876,6 +918,34 @@ function SchedulesPage(props: {
           <Field label="Concurrency">
             <select className={inputClass} value={form.concurrencyPolicy} onChange={(e) => update({ concurrencyPolicy: e.target.value })}><option value="forbid">Forbid overlap</option><option value="allow">Allow overlap</option></select>
           </Field>
+          <div className="grid gap-3 rounded-os border border-line bg-void p-3">
+            <div className="text-sm font-semibold text-ink">Limits</div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+              <Field label="Max Duration">
+                <input className={inputClass} value={form.maxDuration} onChange={(e) => update({ maxDuration: e.target.value })} placeholder="30m" />
+              </Field>
+              <Field label="Max Subtasks">
+                <input className={inputClass} inputMode="numeric" value={form.maxSubtasks} onChange={(e) => update({ maxSubtasks: e.target.value })} placeholder="12" />
+              </Field>
+              <Field label="Max Retries">
+                <input className={inputClass} inputMode="numeric" value={form.maxRetries} onChange={(e) => update({ maxRetries: e.target.value })} placeholder="agent default" />
+              </Field>
+              <Field label="Repo Concurrency">
+                <input className={inputClass} inputMode="numeric" value={form.maxConcurrentRepoRuns} onChange={(e) => update({ maxConcurrentRepoRuns: e.target.value })} placeholder="1" />
+              </Field>
+              <Field label="Org Concurrency">
+                <input className={inputClass} inputMode="numeric" value={form.maxConcurrentOrgRuns} onChange={(e) => update({ maxConcurrentOrgRuns: e.target.value })} placeholder="optional" />
+              </Field>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+              <Field label="LLM Token Budget">
+                <input className={inputClass} inputMode="numeric" value={form.maxLlmTokens} onChange={(e) => update({ maxLlmTokens: e.target.value })} placeholder="optional" />
+              </Field>
+              <Field label="GitHub Request Budget">
+                <input className={inputClass} inputMode="numeric" value={form.maxGitHubRequests} onChange={(e) => update({ maxGitHubRequests: e.target.value })} placeholder="optional" />
+              </Field>
+            </div>
+          </div>
           <div className="grid gap-3 rounded-os border border-line bg-void p-3">
             <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.notifyEnabled} onChange={(e) => update({ notifyEnabled: e.target.checked })} />Notifications</label>
             <Field label="Notification Triggers">
@@ -1139,6 +1209,30 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
                 <option value="ja">Japanese</option>
               </select>
             </Field>
+            <div className="grid gap-3 rounded-os border border-line bg-void p-3">
+              <div className="text-sm font-semibold text-ink">Limits</div>
+              <Field label="Max Duration">
+                <input className={inputClass} value={form.maxDuration} onChange={(e) => update({ maxDuration: e.target.value })} placeholder="30m" />
+              </Field>
+              <Field label="Max Subtasks">
+                <input className={inputClass} inputMode="numeric" value={form.maxSubtasks} onChange={(e) => update({ maxSubtasks: e.target.value })} placeholder="12" />
+              </Field>
+              <Field label="Max Retries">
+                <input className={inputClass} inputMode="numeric" value={form.maxRetries} onChange={(e) => update({ maxRetries: e.target.value })} placeholder="agent default" />
+              </Field>
+              <Field label="Repo Concurrency">
+                <input className={inputClass} inputMode="numeric" value={form.maxConcurrentRepoRuns} onChange={(e) => update({ maxConcurrentRepoRuns: e.target.value })} placeholder="1" />
+              </Field>
+              <Field label="Org Concurrency">
+                <input className={inputClass} inputMode="numeric" value={form.maxConcurrentOrgRuns} onChange={(e) => update({ maxConcurrentOrgRuns: e.target.value })} placeholder="optional" />
+              </Field>
+              <Field label="LLM Token Budget">
+                <input className={inputClass} inputMode="numeric" value={form.maxLlmTokens} onChange={(e) => update({ maxLlmTokens: e.target.value })} placeholder="optional" />
+              </Field>
+              <Field label="GitHub Request Budget">
+                <input className={inputClass} inputMode="numeric" value={form.maxGitHubRequests} onChange={(e) => update({ maxGitHubRequests: e.target.value })} placeholder="optional" />
+              </Field>
+            </div>
           </div>
         </Panel>
         <Panel>
@@ -1211,6 +1305,8 @@ function OverviewTab({ record }: { record: Orchestration }) {
   const passed = results.filter((x) => x.success).length
   const failed = results.filter((x) => x.success === false).length
   const total = record.plan?.subtasks?.length ?? results.length
+  const usage = record.usage ?? {}
+  const limits = record.limits ?? {}
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_24rem]">
       <Panel>
@@ -1219,6 +1315,15 @@ function OverviewTab({ record }: { record: Orchestration }) {
           <Stat label="Passed" value={passed} tone="text-green-os" />
           <Stat label="Failed" value={failed} tone="text-red-os" />
           <Stat label="Agents" value={record.agents?.length ?? 0} tone="text-amber-os" />
+        </div>
+        <div className="mt-5 grid gap-3 rounded-os border border-line bg-void p-3 text-sm sm:grid-cols-2">
+          <div><span className="text-soft">Budget</span><div className="break-words text-ink">{usage.budgetStatus || 'within_limits'}</div></div>
+          <div><span className="text-soft">Duration</span><div className="break-words text-ink">{usage.duration || '-' } / {limits.maxDuration || '-'}</div></div>
+          <div><span className="text-soft">Subtasks</span><div className="break-words text-ink">{usage.subtasksPlanned ?? total} / {limits.maxSubtasks || '-'}</div></div>
+          <div><span className="text-soft">Repo Concurrency</span><div className="break-words text-ink">{limits.maxConcurrentRepoRuns || '-'}</div></div>
+          <div><span className="text-soft">LLM Tokens</span><div className="break-words text-ink">{usage.llmTokensUsed ?? 0} / {usage.llmTokensBudget || limits.maxLlmTokens || '-'}</div></div>
+          <div><span className="text-soft">GitHub Requests</span><div className="break-words text-ink">{usage.gitHubRequestsUsed ?? 0} / {usage.gitHubRequestsBudget || limits.maxGitHubRequests || '-'}</div></div>
+          {usage.limitExceeded ? <div className="break-words text-red-os sm:col-span-2">{usage.limitExceeded}</div> : null}
         </div>
         <h2 className="mt-5 text-sm font-semibold text-ink">Summary</h2>
         {record.summary ? <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-os bg-void p-3 text-xs text-soft">{record.summary}</pre> : <p className="mt-2 text-sm text-soft">Pending.</p>}

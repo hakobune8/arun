@@ -1273,6 +1273,79 @@ func TestPrepareOrchestrationGitHub_RejectsNonGitHubRepo(t *testing.T) {
 	}
 }
 
+func TestNormalizeGovernanceLimits_DefaultsAndValidation(t *testing.T) {
+	got, err := normalizeGovernanceLimits(governanceLimits{})
+	if err != nil {
+		t.Fatalf("normalizeGovernanceLimits() error = %v", err)
+	}
+	if got.MaxDuration != "30m0s" || got.MaxSubtasks != 12 || got.MaxConcurrentRepoRun != 1 {
+		t.Fatalf("limits = %+v, want defaults", got)
+	}
+
+	_, err = normalizeGovernanceLimits(governanceLimits{MaxDuration: "0s"})
+	if err == nil || !strings.Contains(err.Error(), "positive duration") {
+		t.Fatalf("error = %v, want positive duration validation", err)
+	}
+}
+
+func TestEnforceGovernancePlan_RejectsTooManySubtasks(t *testing.T) {
+	record := &orchestrationRecord{Limits: governanceLimits{MaxSubtasks: 1}}
+	plan := &orchestrator.TaskPlan{Subtasks: []orchestrator.Subtask{
+		{ID: "step-1", AgentName: "docs"},
+		{ID: "step-2", AgentName: "reviewer"},
+	}}
+	err := enforceGovernancePlan(record, plan)
+	if err == nil || !strings.Contains(err.Error(), "subtask limit exceeded") {
+		t.Fatalf("error = %v, want subtask limit exceeded", err)
+	}
+}
+
+func TestServer_EnforceGovernanceBeforeStartRejectsRepoConcurrency(t *testing.T) {
+	t.Setenv("AGENTOS_HOME", shortTestDir(t))
+	s := NewServer(0)
+	now := time.Now().UTC()
+	active := &orchestrationRecord{
+		ID:         "run-1111111111111111",
+		Repo:       "owner/repo",
+		BaseBranch: "main",
+		Task:       "active",
+		Status:     "running",
+		CreatedAt:  now.Add(-time.Minute),
+		UpdatedAt:  now,
+	}
+	if err := saveOrchestrationRecord(active); err != nil {
+		t.Fatal(err)
+	}
+
+	req := &orchestrateRequest{Repo: "https://github.com/owner/repo.git"}
+	err := s.enforceGovernanceBeforeStart(req, governanceLimits{MaxConcurrentRepoRun: 1})
+	if err == nil || !strings.Contains(err.Error(), "repo concurrency limit exceeded") {
+		t.Fatalf("error = %v, want repo concurrency rejection", err)
+	}
+}
+
+func TestPrepareSchedule_NormalizesGovernanceLimits(t *testing.T) {
+	now := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	schedule := &scheduleDefinition{
+		ID:                "schedule-1111111111111111",
+		Name:              "test",
+		Repo:              ".",
+		Task:              "report",
+		Agents:            []string{"reporter"},
+		Strategy:          "sequential",
+		Schedule:          scheduleSpec{Type: "interval", Interval: "1h", Timezone: "UTC"},
+		ConcurrencyPolicy: schedulePolicyForbid,
+		Limits:            governanceLimits{MaxDuration: "5m", MaxSubtasks: 2},
+	}
+	if err := prepareSchedule(schedule, now); err != nil {
+		t.Fatalf("prepareSchedule() error = %v", err)
+	}
+	req := schedule.orchestrateRequest()
+	if req.Limits.MaxDuration != "5m" || req.Limits.MaxSubtasks != 2 || req.Limits.MaxConcurrentRepoRun != 1 {
+		t.Fatalf("request limits = %+v", req.Limits)
+	}
+}
+
 func TestOrchestrationRecordStore_PreservesGitHubArtifacts(t *testing.T) {
 	t.Setenv("AGENTOS_HOME", shortTestDir(t))
 	now := time.Now().UTC().Truncate(time.Second)

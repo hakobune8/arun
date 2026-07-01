@@ -199,8 +199,8 @@ pr_body.md        # Pull request body draft
 - **Command denylist**: `rm -rf`, `sudo`, `curl`, `wget`, `ssh`, `scp` are denied by default
 - **Secret detection**: `.env`, `*.pem`, `id_rsa*`, `id_ed25519*` are blocked by filesystem tools
 - **Branch handling**: Runs create and work on the task branch when possible
-- **File limits**: Maximum changed file limits are defined in profiles and planned for enforcement
-- **Retry limits**: Automatic retry with configurable maximum
+- **Governance limits**: Orchestrations and schedules support maximum duration, subtasks, retries, repository concurrency, organization concurrency, LLM token budgets, and GitHub request budgets. Duration, subtask, and concurrency limits are enforced by the server.
+- **Retry limits**: Agent profiles and orchestration governance metadata expose configurable retry limits
 
 ## Documentation
 
@@ -242,6 +242,7 @@ pr_body.md        # Pull request body draft
 | `QDRANT_API_KEY` | - | Qdrant API key |
 | `AGENTOS_AUTH_REQUIRED` | `false` | Require GitHub login for work-triggering APIs |
 | `AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT` | `10m` | Timeout for each orchestration subtask |
+| `AGENTOS_ORCHESTRATE_PLAN_TIMEOUT` | `90s` | Timeout for orchestration planning |
 | `GITHUB_OAUTH_CLIENT_ID` | - | GitHub OAuth App client ID |
 | `GITHUB_OAUTH_CLIENT_SECRET` | - | GitHub OAuth App client secret |
 | `GITHUB_OAUTH_CALLBACK_URL` | - | GitHub OAuth callback URL |

@@ -72,12 +72,31 @@ repositories require GitHub App installation credentials or a GitHub token in
 the AgentOS deployment environment. The repository picker uses authenticated
 GitHub repository listing and stores the selected repository as `owner/repo`.
 
+## Governance Limits
+
+Web UI and API orchestrations accept optional execution limits:
+
+- `maxDuration` caps total orchestration runtime, for example `30m`.
+- `maxSubtasks` fails the run after planning if too many subtasks were planned.
+- `maxConcurrentRepoRuns` rejects new runs for a repository when the active
+  count reaches the limit.
+- `maxConcurrentOrgRuns` applies the same guard across repositories in one
+  owner or organization.
+- `maxRetries`, `maxLlmTokens`, and `maxGitHubRequests` are persisted as
+  budget metadata and surfaced in run detail for governance reporting.
+
+If omitted, AgentOS defaults to a 30 minute run duration, 12 planned subtasks,
+and one active run per repository. Orchestration detail records include
+normalized `limits` plus `usage` fields with budget status, duration, planned
+subtasks, completed subtasks, and failure counts.
+
 ## Scheduled Runs
 
 The Web UI Schedules page and `/api/schedules` API can persist recurring
 orchestration jobs. A schedule stores the repository, base branch, task, agents,
 LLM preset, output controls, GitHub artifact settings, an interval or five-field
-cron expression, timezone, concurrency policy, and execution history.
+cron expression, timezone, governance limits, concurrency policy, and execution
+history.
 
 Built-in scheduled workflow templates are available from
 `/api/schedules/templates` and the Schedules page. Templates provide practical

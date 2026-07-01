@@ -52,6 +52,7 @@ type Orchestrator struct {
 	cfg            *runtime.Config
 	baseBranch     string
 	subtaskTimeout time.Duration
+	maxRetries     int
 	runID          string
 }
 
@@ -137,6 +138,11 @@ func (o *Orchestrator) SetRunID(id string) {
 // SetSubtaskTimeout sets the maximum runtime for a single subtask.
 func (o *Orchestrator) SetSubtaskTimeout(timeout time.Duration) {
 	o.subtaskTimeout = timeout
+}
+
+// SetMaxRetries overrides the retry count for each subtask runtime when positive.
+func (o *Orchestrator) SetMaxRetries(maxRetries int) {
+	o.maxRetries = maxRetries
 }
 
 // SetAgentMetadata overrides planner metadata and runtime profiles for selected
@@ -863,6 +869,9 @@ func (o *Orchestrator) executeSubtask(ctx context.Context, subtask *Subtask, sha
 	prof, ok := o.agentProfiles[agt.Name()]
 	if !ok {
 		prof = subtaskProfile(agt.Name())
+	}
+	if o.maxRetries > 0 {
+		prof.Limits.MaxRetries = o.maxRetries
 	}
 	runSandbox := sandbox.NewLocalSandbox(o.sandbox.RootDir())
 	rt := runtime.NewRuntime(o.llm, &prof, runSandbox, o.cfg, agt)

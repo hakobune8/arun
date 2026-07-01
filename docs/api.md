@@ -252,6 +252,15 @@ Create or update body:
     "timezone": "Asia/Tokyo"
   },
   "concurrencyPolicy": "forbid",
+  "limits": {
+    "maxDuration": "30m",
+    "maxSubtasks": 12,
+    "maxRetries": 3,
+    "maxLlmTokens": 200000,
+    "maxGitHubRequests": 100,
+    "maxConcurrentRepoRuns": 1,
+    "maxConcurrentOrgRuns": 4
+  },
   "notification": {
     "enabled": true,
     "triggers": ["failed", "quality_gate_failed", "manual_intervention"],
@@ -292,6 +301,13 @@ For interval schedules, use:
 previous schedule run is still planning or running. `POST /run` manually starts
 the same saved configuration and records the execution in schedule history.
 
+`limits` is optional. When omitted, AgentOS applies conservative defaults:
+`maxDuration: 30m`, `maxSubtasks: 12`, and `maxConcurrentRepoRuns: 1`.
+`maxDuration`, `maxSubtasks`, repository concurrency, and organization
+concurrency are enforced before or during execution. Token and GitHub request
+budgets are persisted on the orchestration record and shown in the Web UI; they
+are reserved for provider/request accounting as clients expose usage details.
+
 Schedule notifications can target `inbox`, `webhook`, `github_issue`, and
 `github_pr`. Supported triggers are `started`, `completed`, `failed`,
 `skipped`, `pr_created`, `quality_gate_failed`, and `manual_intervention`.
@@ -330,6 +346,41 @@ Content-Type: application/json
 Use `{"action":"reject","reason":"..."}` to reject a pending approval. Approval
 actions require the same automation authorization controls as other sensitive
 orchestration actions.
+
+### Orchestration Governance Fields
+
+`POST /api/orchestrate` and schedule create/update requests accept the same
+optional `limits` object:
+
+```json
+{
+  "limits": {
+    "maxDuration": "30m",
+    "maxSubtasks": 12,
+    "maxRetries": 3,
+    "maxLlmTokens": 200000,
+    "maxGitHubRequests": 100,
+    "maxConcurrentRepoRuns": 1,
+    "maxConcurrentOrgRuns": 4
+  }
+}
+```
+
+Orchestration detail responses include the normalized `limits` and current
+`usage`:
+
+```json
+{
+  "limits": { "maxDuration": "30m0s", "maxSubtasks": 12, "maxConcurrentRepoRuns": 1 },
+  "usage": {
+    "duration": "2m14s",
+    "subtasksPlanned": 3,
+    "subtasksCompleted": 3,
+    "failedSubtasks": 0,
+    "budgetStatus": "within_limits"
+  }
+}
+```
 
 ## Rate Limiting
 

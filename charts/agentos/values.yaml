@@ -76,6 +76,8 @@ env:
   AGENTOS_ADMIN_USERS: ""
   # Maximum runtime for a single orchestration subtask
   AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT: "10m"
+  # Maximum runtime for orchestration planning
+  AGENTOS_ORCHESTRATE_PLAN_TIMEOUT: "90s"
   # GitHub token (optional, for PR operations)
   GITHUB_TOKEN: ""
   # GitHub App installation authentication (optional, preferred for write operations)
