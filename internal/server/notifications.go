@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -30,6 +31,8 @@ import (
 	agentosgh "github.com/kazyamaz200/agentos/internal/github"
 	"github.com/kazyamaz200/agentos/internal/safety"
 )
+
+var notificationIDPattern = regexp.MustCompile(`^notification-[0-9a-f]{16}$`)
 
 const (
 	notificationTriggerStarted            = "started"
@@ -94,6 +97,33 @@ func (s *Server) handleNotifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = json.NewEncoder(w).Encode(records) //nolint:errcheck // best-effort response
+}
+
+func (s *Server) handleNotificationDetail(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	user, ok := s.requireAuth(w, r)
+	if !ok {
+		return
+	}
+	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/notifications/"), "/")
+	if !isValidNotificationID(id) {
+		http.Error(w, "invalid notification id", http.StatusBadRequest)
+		return
+	}
+	if !s.requireAutomationPermission(w, r, user, "notifications.manage", "notification/"+id, "", "") {
+		return
+	}
+	switch r.Method {
+	case http.MethodDelete:
+		if err := deleteNotificationRecord(id); err != nil {
+			http.Error(w, "delete notification: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_ = appendAuditEvent(&auditEvent{Actor: actorLogin(user), Action: "notifications.delete", Target: "notification/" + id, Outcome: auditOutcomeSuccess}) //nolint:errcheck // best-effort audit
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
 func (s *Server) notifyScheduledRun(record *orchestrationRecord) {
@@ -364,6 +394,10 @@ func notificationsDir() string {
 	return filepath.Join(apphome.Dir(), "notifications")
 }
 
+func isValidNotificationID(id string) bool {
+	return notificationIDPattern.MatchString(id)
+}
+
 func saveNotificationRecord(notification *notificationRecord) error {
 	if notification == nil {
 		return nil
@@ -377,6 +411,17 @@ func saveNotificationRecord(notification *notificationRecord) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0o600)
+}
+
+func deleteNotificationRecord(id string) error {
+	if !isValidNotificationID(id) {
+		return fmt.Errorf("invalid notification id")
+	}
+	err := os.Remove(filepath.Join(notificationsDir(), id+".json"))
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func listNotificationRecords(limit int) ([]notificationRecord, error) {

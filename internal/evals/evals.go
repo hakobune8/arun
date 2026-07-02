@@ -69,6 +69,7 @@ type Options struct {
 	LiveURL                  string
 	IncludeAuthE2E           bool
 	IncludeStorageCleanupE2E bool
+	IncludeScheduleNotifyE2E bool
 }
 
 // Report summarizes one eval suite run.
@@ -237,6 +238,18 @@ func StorageCleanupScenarios() []Scenario {
 	}}
 }
 
+// ScheduleNotificationScenarios returns opt-in checks for schedule execution notifications.
+func ScheduleNotificationScenarios() []Scenario {
+	return []Scenario{{
+		ID:             "schedule-notification-e2e",
+		Name:           "Schedule execution notification E2E",
+		Category:       "live-auth",
+		Mode:           ModePlan,
+		FunctionalArea: []string{"live-smoke", "schedules", "schedule-execution", "notifications", "auth-boundary", "cleanup"},
+		Live:           true,
+	}}
+}
+
 // Run executes the selected deterministic eval scenarios.
 func Run(ctx context.Context, opts Options) (*Report, error) {
 	started := time.Now().UTC()
@@ -249,6 +262,9 @@ func Run(ctx context.Context, opts Options) (*Report, error) {
 	}
 	if opts.IncludeStorageCleanupE2E {
 		scenarios = append(scenarios, filterScenarios(StorageCleanupScenarios(), opts.ScenarioIDs)...)
+	}
+	if opts.IncludeScheduleNotifyE2E {
+		scenarios = append(scenarios, filterScenarios(ScheduleNotificationScenarios(), opts.ScenarioIDs)...)
 	}
 	if len(scenarios) == 0 {
 		return nil, fmt.Errorf("no eval scenarios selected")
@@ -383,6 +399,9 @@ func runLiveScenario(ctx context.Context, scenario *Scenario, liveURL string, re
 	}
 	if scenario.ID == "storage-cleanup-e2e" {
 		return runStorageCleanupScenario(ctx, liveURL, result)
+	}
+	if scenario.ID == "schedule-notification-e2e" {
+		return runScheduleNotificationScenario(ctx, liveURL, result)
 	}
 	base := strings.TrimRight(strings.TrimSpace(liveURL), "/")
 	if base == "" {
@@ -525,6 +544,198 @@ func sanitizeAuthE2EOutput(out string) string {
 		}
 	}
 	return out
+}
+
+type scheduleEvalDefinition struct {
+	ID            string                  `json:"id"`
+	Name          string                  `json:"name"`
+	Status        string                  `json:"status"`
+	Repo          string                  `json:"repo"`
+	BaseBranch    string                  `json:"baseBranch"`
+	NextRunAt     time.Time               `json:"nextRunAt"`
+	LastRunAt     time.Time               `json:"lastRunAt"`
+	LastRunID     string                  `json:"lastRunId"`
+	LastRunStatus string                  `json:"lastRunStatus"`
+	Executions    []scheduleEvalExecution `json:"executions"`
+}
+
+type scheduleEvalExecution struct {
+	ID        string    `json:"id"`
+	RunID     string    `json:"runId"`
+	Status    string    `json:"status"`
+	Reason    string    `json:"reason"`
+	StartedAt time.Time `json:"startedAt"`
+}
+
+type notificationEvalRecord struct {
+	ID           string                     `json:"id"`
+	ScheduleID   string                     `json:"scheduleId"`
+	RunID        string                     `json:"runId"`
+	Trigger      string                     `json:"trigger"`
+	Status       string                     `json:"status"`
+	Repo         string                     `json:"repo"`
+	Destinations []string                   `json:"destinations"`
+	Deliveries   []notificationEvalDelivery `json:"deliveries"`
+	CreatedAt    time.Time                  `json:"createdAt"`
+}
+
+type notificationEvalDelivery struct {
+	Destination string `json:"destination"`
+	Status      string `json:"status"`
+}
+
+func runScheduleNotificationScenario(ctx context.Context, liveURL string, result *ScenarioResult) *ScenarioResult {
+	base := strings.TrimRight(strings.TrimSpace(liveURL), "/")
+	if base == "" {
+		base = strings.TrimRight(os.Getenv("AGENTOS_EVAL_LIVE_URL"), "/")
+	}
+	if base == "" {
+		result.FailureReasons = append(result.FailureReasons, "live URL is required via --live-url or AGENTOS_EVAL_LIVE_URL")
+		return result
+	}
+	if !authCookieConfigured() {
+		result.FailureReasons = append(result.FailureReasons, "authenticated API session cookie is required via AGENTOS_EVAL_AUTH_COOKIE")
+		return result
+	}
+	repo := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_SCHEDULE_REPO"))
+	if repo == "" {
+		repo = "."
+	}
+	branch := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_SCHEDULE_BASE_BRANCH"))
+	if branch == "" {
+		branch = "main"
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	name := "AgentOS Eval Schedule Notification " + time.Now().UTC().Format("20060102T150405")
+	payload := map[string]any{
+		"name":              name,
+		"repo":              repo,
+		"baseBranch":        branch,
+		"task":              "AgentOS schedule notification E2E smoke. Produce a short no-op report. Do not modify files.",
+		"agents":            []string{"reporter"},
+		"strategy":          "sequential",
+		"schedule":          map[string]any{"type": "interval", "interval": "24h", "timezone": "UTC"},
+		"concurrencyPolicy": "forbid",
+		"limits":            map[string]any{"maxDuration": "2m", "maxSubtasks": 1, "maxConcurrentRepoRuns": 100},
+		"notification":      map[string]any{"enabled": true, "triggers": []string{"started"}, "destinations": []string{"inbox"}},
+		"github":            map[string]any{"createIssue": false, "createPullRequest": false},
+	}
+
+	var created scheduleEvalDefinition
+	if err := postJSON(ctx, client, base+"/api/schedules", payload, &created); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "create schedule: "+err.Error())
+		return result
+	}
+	var notificationID string
+	defer func() {
+		if notificationID != "" {
+			_ = deleteAPI(ctx, client, base+"/api/notifications/"+notificationID)
+		}
+		if created.ID != "" {
+			_ = deleteAPI(ctx, client, base+"/api/schedules/"+created.ID)
+		}
+	}()
+	createdOK := strings.HasPrefix(created.ID, "schedule-") && created.Status == "active" && !created.NextRunAt.IsZero()
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "schedules", Action: "create schedule", Passed: createdOK})
+	if !createdOK {
+		result.FailureReasons = append(result.FailureReasons, "created schedule missing active status, id, or next run time")
+	}
+
+	var execution scheduleEvalExecution
+	if err := postJSON(ctx, client, base+"/api/schedules/"+created.ID+"/run", map[string]any{}, &execution); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "run schedule: "+err.Error())
+		return result
+	}
+	runOK := execution.Status == "started" && strings.HasPrefix(execution.RunID, "run-")
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "schedules", Action: "manual execution", Passed: runOK})
+	if !runOK {
+		result.FailureReasons = append(result.FailureReasons, fmt.Sprintf("execution status=%q runID=%q, want started run-*", execution.Status, execution.RunID))
+	}
+
+	var schedule scheduleEvalDefinition
+	scheduleOK := false
+	for i := 0; i < 20; i++ {
+		if err := getJSON(ctx, client, base+"/api/schedules/"+created.ID, &schedule); err == nil {
+			for _, item := range schedule.Executions {
+				if item.RunID == execution.RunID {
+					scheduleOK = schedule.LastRunID == execution.RunID && item.Status != ""
+					break
+				}
+			}
+		}
+		if scheduleOK {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "schedules", Action: "execution history", Passed: scheduleOK})
+	if !scheduleOK {
+		result.FailureReasons = append(result.FailureReasons, "schedule execution history did not include run "+execution.RunID)
+	}
+
+	var notification notificationEvalRecord
+	notificationOK := false
+	for i := 0; i < 20; i++ {
+		var notifications []notificationEvalRecord
+		if err := getJSON(ctx, client, base+"/api/notifications", &notifications); err == nil {
+			for i := range notifications {
+				item := &notifications[i]
+				if item.ScheduleID == created.ID && item.RunID == execution.RunID && item.Trigger == "started" {
+					notification = *item
+					notificationID = item.ID
+					notificationOK = item.Status == "started" && hasInboxDelivery(item.Deliveries)
+					break
+				}
+			}
+		}
+		if notificationOK {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "notifications", Action: "started inbox notification", Passed: notificationOK})
+	if !notificationOK {
+		result.FailureReasons = append(result.FailureReasons, "started inbox notification not found for schedule "+created.ID+" run "+execution.RunID)
+	}
+
+	cleanupOK := true
+	if notificationID != "" {
+		if err := deleteAPI(ctx, client, base+"/api/notifications/"+notificationID); err != nil {
+			cleanupOK = false
+			result.FailureReasons = append(result.FailureReasons, "delete notification: "+err.Error())
+		} else {
+			notificationID = ""
+		}
+	}
+	if err := deleteAPI(ctx, client, base+"/api/schedules/"+created.ID); err != nil {
+		cleanupOK = false
+		result.FailureReasons = append(result.FailureReasons, "delete schedule: "+err.Error())
+	} else {
+		created.ID = ""
+	}
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "schedules", Action: "cleanup artifacts", Passed: cleanupOK})
+	result.Artifacts = map[string]string{
+		"url":                 base,
+		"scheduleID":          schedule.ID,
+		"scheduleName":        name,
+		"triggerTime":         execution.StartedAt.Format(time.RFC3339Nano),
+		"runID":               execution.RunID,
+		"executionStatus":     execution.Status,
+		"lastRunStatus":       schedule.LastRunStatus,
+		"notificationID":      notification.ID,
+		"notificationStatus":  notification.Status,
+		"notificationTrigger": notification.Trigger,
+	}
+	return result
+}
+
+func hasInboxDelivery(deliveries []notificationEvalDelivery) bool {
+	for _, delivery := range deliveries {
+		if delivery.Destination == "inbox" && delivery.Status == "success" {
+			return true
+		}
+	}
+	return false
 }
 
 type storageCleanupEvalResult struct {
@@ -707,6 +918,50 @@ func getStorageAuditEvents(ctx context.Context, client *http.Client, base string
 		return nil, err
 	}
 	return events, nil
+}
+
+func getJSON(ctx context.Context, client *http.Client, url string, into any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return err
+	}
+	addAuthHeaders(req)
+	return doJSON(client, req, into)
+}
+
+func postJSON(ctx context.Context, client *http.Client, url string, payload, into any) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	addAuthHeaders(req)
+	return doJSON(client, req, into)
+}
+
+func deleteAPI(ctx context.Context, client *http.Client, url string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, http.NoBody)
+	if err != nil {
+		return err
+	}
+	addAuthHeaders(req)
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
 }
 
 func doJSON(client *http.Client, req *http.Request, into any) error {

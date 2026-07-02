@@ -112,11 +112,41 @@ func TestRun_StorageCleanupE2ERequiresCookie(t *testing.T) {
 	}
 }
 
+func TestRun_ScheduleNotificationE2ERequiresCookie(t *testing.T) {
+	t.Setenv("AGENTOS_EVAL_AUTH_COOKIE", "")
+	report, err := Run(context.Background(), Options{
+		WorkDir:                  t.TempDir(),
+		ScenarioIDs:              []string{"schedule-notification-e2e"},
+		IncludeScheduleNotifyE2E: true,
+		LiveURL:                  "https://agentos.example.invalid",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if report.Total != 1 || report.Passed != 0 || report.Failed != 1 {
+		t.Fatalf("report = %+v, want one failing schedule notification E2E scenario", report)
+	}
+	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
+	if !strings.Contains(reasons, "AGENTOS_EVAL_AUTH_COOKIE") {
+		t.Fatalf("failure reasons = %q, want missing cookie", reasons)
+	}
+}
+
 func TestSanitizeAuthE2EOutput(t *testing.T) {
 	t.Setenv("AGENTOS_EVAL_AUTH_COOKIE", "agentos_session=secret")
 	got := sanitizeAuthE2EOutput("failed with agentos_session=secret")
 	if strings.Contains(got, "secret") || !strings.Contains(got, "[redacted]") {
 		t.Fatalf("sanitizeAuthE2EOutput() = %q", got)
+	}
+}
+
+func TestHasInboxDelivery(t *testing.T) {
+	deliveries := []notificationEvalDelivery{{Destination: "inbox", Status: "success"}}
+	if !hasInboxDelivery(deliveries) {
+		t.Fatal("hasInboxDelivery() = false, want true")
+	}
+	if hasInboxDelivery([]notificationEvalDelivery{{Destination: "webhook", Status: "success"}}) {
+		t.Fatal("hasInboxDelivery() = true for non-inbox delivery, want false")
 	}
 }
 

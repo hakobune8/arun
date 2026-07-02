@@ -119,6 +119,7 @@ func NewServer(port int) *Server {
 	mux.HandleFunc("/api/settings/llm", s.handleLLMSettings)
 	mux.HandleFunc("/api/audit", s.handleAudit)
 	mux.HandleFunc("/api/notifications", s.handleNotifications)
+	mux.HandleFunc("/api/notifications/", s.handleNotificationDetail)
 	mux.HandleFunc("/api/storage", s.handleStorage)
 	mux.HandleFunc("/api/storage/", s.handleStorageDetail)
 	mux.HandleFunc("/api/runs", s.handleRuns)

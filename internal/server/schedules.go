@@ -219,6 +219,13 @@ func (s *Server) handleScheduleDetail(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(updated) //nolint:errcheck // best-effort response
+	case action == "" && r.Method == http.MethodDelete:
+		if err := deleteSchedule(id); err != nil {
+			http.Error(w, "delete schedule: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_ = appendAuditEvent(&auditEvent{Actor: actorLogin(user), Action: "schedules.delete", Target: "schedule/" + id, Repo: schedule.Repo, Outcome: auditOutcomeSuccess}) //nolint:errcheck // best-effort audit
+		w.WriteHeader(http.StatusNoContent)
 	case action == "pause" && r.Method == http.MethodPost:
 		schedule.Status = scheduleStatusPaused
 		schedule.UpdatedAt = time.Now().UTC()
@@ -723,6 +730,17 @@ func readSchedule(id string) (*scheduleDefinition, error) {
 		return nil, err
 	}
 	return &schedule, nil
+}
+
+func deleteSchedule(id string) error {
+	if !isValidScheduleID(id) {
+		return fmt.Errorf("invalid schedule id")
+	}
+	err := os.Remove(filepath.Join(schedulesDir(), id+".json"))
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func listSchedules() ([]*scheduleDefinition, error) {

@@ -47,6 +47,7 @@ var (
 	evalsLiveURL           string
 	evalsAuthE2E           bool
 	evalsStorageCleanupE2E bool
+	evalsScheduleNotifyE2E bool
 )
 
 func init() {
@@ -59,6 +60,7 @@ func init() {
 	evalsCmd.Flags().StringVar(&evalsLiveURL, "live-url", "", "Base URL for live smoke checks; defaults to AGENTOS_EVAL_LIVE_URL")
 	evalsCmd.Flags().BoolVar(&evalsAuthE2E, "auth-e2e", false, "Include opt-in authenticated Web UI browser E2E checks")
 	evalsCmd.Flags().BoolVar(&evalsStorageCleanupE2E, "storage-cleanup-e2e", false, "Include opt-in authenticated storage cleanup dry-run and execution checks")
+	evalsCmd.Flags().BoolVar(&evalsScheduleNotifyE2E, "schedule-notification-e2e", false, "Include opt-in authenticated schedule execution notification checks")
 }
 
 func runEvals(ctx context.Context) error {
@@ -80,6 +82,7 @@ func runEvals(ctx context.Context) error {
 		LiveURL:                  evalsLiveURL,
 		IncludeAuthE2E:           evalsAuthE2E,
 		IncludeStorageCleanupE2E: evalsStorageCleanupE2E,
+		IncludeScheduleNotifyE2E: evalsScheduleNotifyE2E,
 	})
 	if err != nil {
 		return err

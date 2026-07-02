@@ -95,6 +95,29 @@ outside the repository.
 Real GitHub writes and Kubernetes rollout checks remain separate v1.4.x
 operational scenarios. They are not part of the default CI eval suite.
 
+## Schedule Notification E2E
+
+Schedule notification checks are opt-in and require an authenticated API
+session. The scenario creates a short-lived schedule, manually executes it,
+verifies the schedule execution history, verifies the `started` inbox
+notification, then deletes the test schedule and notification:
+
+```sh
+AGENTOS_EVAL_AUTH_COOKIE='agentos_session=<signed-session-cookie>' \
+agentos evals \
+  --schedule-notification-e2e \
+  --scenario schedule-notification-e2e \
+  --live-url https://agentos.nakanoshima.hakobune8.com \
+  --format markdown \
+  --output .agentos/evals/schedule-notification-report.md
+```
+
+Optional `AGENTOS_EVAL_SCHEDULE_REPO` and
+`AGENTOS_EVAL_SCHEDULE_BASE_BRANCH` values override the default safe local
+repository scope (`.` / `main`). The report includes the schedule ID, trigger
+time, run ID, execution status, notification ID, notification trigger, and
+notification status.
+
 ## Storage Cleanup E2E
 
 Storage cleanup checks are opt-in and require disposable fixtures that are

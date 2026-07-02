@@ -2015,6 +2015,17 @@ func TestServer_ScheduleCRUDPauseResume(t *testing.T) {
 	if len(schedules) != 1 || schedules[0].ID != created.ID {
 		t.Fatalf("schedules = %+v", schedules)
 	}
+
+	w = serveRequest(s, "DELETE", "/api/schedules/"+created.ID, nil)
+	assertStatus(t, w.Code, http.StatusNoContent)
+	w = serveRequest(s, "GET", "/api/schedules", nil)
+	assertStatus(t, w.Code, http.StatusOK)
+	if err := json.Unmarshal(w.Body.Bytes(), &schedules); err != nil {
+		t.Fatal(err)
+	}
+	if len(schedules) != 0 {
+		t.Fatalf("schedules after delete = %+v, want none", schedules)
+	}
 }
 
 func TestServer_ScheduleTemplates(t *testing.T) {
@@ -2245,6 +2256,16 @@ func TestServer_ScheduleNotificationFailureDeliveryHistory(t *testing.T) {
 	}
 	if len(notifications[0].Deliveries) != 1 || notifications[0].Deliveries[0].Status != notificationDeliveryFailure || !strings.Contains(notifications[0].Deliveries[0].Error, "webhook URL") {
 		t.Fatalf("deliveries = %+v", notifications[0].Deliveries)
+	}
+
+	w := serveRequest(s, "DELETE", "/api/notifications/"+notifications[0].ID, nil)
+	assertStatus(t, w.Code, http.StatusNoContent)
+	notifications, err = listNotificationRecords(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notifications) != 0 {
+		t.Fatalf("notifications after delete = %+v, want none", notifications)
 	}
 }
 

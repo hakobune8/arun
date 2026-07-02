@@ -219,10 +219,12 @@ GET /api/schedules/templates
 POST /api/schedules
 GET /api/schedules/{id}
 PUT /api/schedules/{id}
+DELETE /api/schedules/{id}
 POST /api/schedules/{id}/pause
 POST /api/schedules/{id}/resume
 POST /api/schedules/{id}/run
 GET /api/notifications
+DELETE /api/notifications/{id}
 ```
 
 Schedules define recurring Orchestrate jobs. They persist under
@@ -313,6 +315,8 @@ Schedule notifications can target `inbox`, `webhook`, `github_issue`, and
 `skipped`, `pr_created`, `quality_gate_failed`, and `manual_intervention`.
 `GET /api/notifications` returns the newest notification history with delivery
 status, retry count, destination, run link, and redacted error messages.
+`DELETE /api/schedules/{id}` and `DELETE /api/notifications/{id}` remove
+test or obsolete schedule artifacts for administrators.
 
 ---
 
