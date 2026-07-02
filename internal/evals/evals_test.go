@@ -249,6 +249,76 @@ func TestRun_ScrumGitHubE2ERejectsInvalidCleanupMode(t *testing.T) {
 	}
 }
 
+func TestRun_ScrumGitHubE2ELLMPresetsRequireMatrixBeforeToken(t *testing.T) {
+	t.Setenv("AGENTOS_EVAL_GITHUB_REPO", "owner/repo")
+	t.Setenv("AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST", "owner/repo")
+	t.Setenv("AGENTOS_EVAL_SCRUM_LLM_PRESETS", "true")
+	t.Setenv("AGENTOS_EVAL_LLM_PRESET_MATRIX", "")
+	t.Setenv("AGENTOS_LLM_PRESETS", "")
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_TOKEN", "")
+	report, err := Run(context.Background(), Options{
+		WorkDir:               t.TempDir(),
+		ScenarioIDs:           []string{"three-sprint-scrum-github-e2e"},
+		IncludeScrumGitHubE2E: true,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if report.Total != 1 || report.Passed != 0 || report.Failed != 1 {
+		t.Fatalf("report = %+v, want one failing scrum GitHub E2E scenario", report)
+	}
+	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
+	if !strings.Contains(reasons, "AGENTOS_EVAL_LLM_PRESET_MATRIX") || strings.Contains(reasons, "GitHub token") {
+		t.Fatalf("failure reasons = %q, want preset matrix failure before GitHub token lookup", reasons)
+	}
+}
+
+func TestScrumLiteLLMPresetMapFromEnvRequiresFivePresets(t *testing.T) {
+	t.Setenv("AGENTOS_EVAL_LLM_PRESET_MATRIX", `[{"id":"smoke","model":"test-model","baseUrl":"http://litellm:4000"}]`)
+	_, err := scrumLiteLLMPresetMapFromEnv()
+	if err == nil {
+		t.Fatal("scrumLiteLLMPresetMapFromEnv() error = nil, want missing presets")
+	}
+	for _, want := range []string{"planning", "coding", "review", "reporting"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want missing %s", err.Error(), want)
+		}
+	}
+}
+
+func TestScrumLLMStageCheckReportsUsage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Fatalf("path = %s, want /chat/completions", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"index":0,"message":{"role":"assistant","content":"review risk is recorded"}}],"usage":{"prompt_tokens":9,"completion_tokens":4,"total_tokens":13}}`))
+	}))
+	defer server.Close()
+	preset := liteLLMPresetEvalConfig{
+		ID:            "review",
+		Model:         "test-model",
+		BaseURL:       server.URL,
+		Timeout:       "5s",
+		Temperature:   0,
+		MaxTokens:     64,
+		TokenBudget:   100,
+		CostBudget:    "normal",
+		RetryAttempts: 1,
+	}
+	outcome := runScrumLLMStageCheck(context.Background(), scrumLLMStage{
+		Stage:    "review-risk-check",
+		PresetID: "review",
+		Agent:    "reviewer",
+		Sprint:   2,
+		Context:  "temperature zero review must return non-empty evidence",
+	}, &preset)
+	if !outcome.Success || outcome.TotalTokens != 13 || outcome.PresetID != "review" || outcome.Agent != "reviewer" {
+		t.Fatalf("outcome = %+v, want successful review outcome with token usage", outcome)
+	}
+}
+
 func TestRun_KubernetesRolloutE2ERequiresExplicitConfig(t *testing.T) {
 	t.Setenv("AGENTOS_EVAL_KUBECONFIG", "")
 	t.Setenv("AGENTOS_EVAL_KUBE_CONTEXT", "")

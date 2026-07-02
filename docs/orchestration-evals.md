@@ -168,6 +168,42 @@ each planned item, carries one blocked item from sprint 2 to sprint 3, closes
 completed work, and records issue URLs plus sprint-by-sprint state in the
 report.
 
+Set `AGENTOS_EVAL_SCRUM_LLM_PRESETS=true` to replace deterministic scrum stage
+notes with live LiteLLM preset calls. When enabled, the scenario requires
+`AGENTOS_EVAL_LLM_PRESET_MATRIX` or `AGENTOS_LLM_PRESETS` to include these
+preset IDs:
+
+- `planning` for backlog refinement and sprint planning.
+- `coding` for implementation notes and issue updates.
+- `review` for review and risk checks. Configure this preset with
+  `temperature: 0` when validating deterministic review behavior.
+- `smoke` for QA and reachability checks.
+- `reporting` for sprint summaries and stakeholder reports.
+
+Example matrix for the scrum preset pass:
+
+```sh
+AGENTOS_EVAL_SCRUM_LLM_PRESETS=true \
+AGENTOS_EVAL_LLM_PRESET_MATRIX='[
+  {"id":"planning","model":"staips-chat","baseUrl":"http://litellm:4000/v1","apiKeyEnv":"LITELLM_API_KEY","timeout":"45s","temperature":0.1,"maxTokens":1024,"tokenBudget":10000,"costBudget":"normal"},
+  {"id":"coding","model":"staips-chat","baseUrl":"http://litellm:4000/v1","apiKeyEnv":"LITELLM_API_KEY","timeout":"45s","temperature":0.1,"maxTokens":1024,"tokenBudget":10000,"costBudget":"normal"},
+  {"id":"review","model":"staips-chat","baseUrl":"http://litellm:4000/v1","apiKeyEnv":"LITELLM_API_KEY","timeout":"45s","temperature":0,"maxTokens":1024,"tokenBudget":10000,"costBudget":"normal"},
+  {"id":"smoke","model":"staips-chat","baseUrl":"http://litellm:4000/v1","apiKeyEnv":"LITELLM_API_KEY","timeout":"30s","temperature":0,"maxTokens":512,"tokenBudget":5000,"costBudget":"low"},
+  {"id":"reporting","model":"staips-chat","baseUrl":"http://litellm:4000/v1","apiKeyEnv":"LITELLM_API_KEY","timeout":"45s","temperature":0.2,"maxTokens":1024,"tokenBudget":10000,"costBudget":"normal"}
+]' \
+LITELLM_API_KEY='<litellm-api-key>' \
+agentos evals \
+  --scrum-github-e2e \
+  --scenario three-sprint-scrum-github-e2e \
+  --format markdown \
+  --output .agentos/evals/scrum-github-report.md
+```
+
+The report records `llmPresetMode`, each stage's preset ID, agent name, model,
+duration, token usage, configured token/cost budget, and failure reason. API key
+values are not printed. If a required preset is missing, the scenario fails
+before creating GitHub artifacts.
+
 Cleanup is controlled by `AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP`:
 
 - `close` (default) closes eval issues after recording sprint evidence.
