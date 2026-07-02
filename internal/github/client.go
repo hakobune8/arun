@@ -59,6 +59,13 @@ func NewClient(repoOwner, repoName string) *Client {
 	}
 }
 
+// WithToken returns the client configured to use an explicit bearer token.
+func (c *Client) WithToken(token string) *Client {
+	c.Token = strings.TrimSpace(token)
+	c.tokenProvider = staticTokenProvider{token: c.Token}
+	return c
+}
+
 func (c *Client) do(method, path string, body io.Reader) ([]byte, error) {
 	url := c.BaseURL + path
 	req, err := http.NewRequest(method, url, body)
