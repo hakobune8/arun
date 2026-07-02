@@ -49,6 +49,7 @@ var (
 	evalsStorageCleanupE2E    bool
 	evalsScheduleNotifyE2E    bool
 	evalsGitHubWorkflowE2E    bool
+	evalsScrumGitHubE2E       bool
 	evalsKubernetesRolloutE2E bool
 	evalsRealLLMSmokeE2E      bool
 	evalsLiteLLMPresetEvals   bool
@@ -66,6 +67,7 @@ func init() {
 	evalsCmd.Flags().BoolVar(&evalsStorageCleanupE2E, "storage-cleanup-e2e", false, "Include opt-in authenticated storage cleanup dry-run and execution checks")
 	evalsCmd.Flags().BoolVar(&evalsScheduleNotifyE2E, "schedule-notification-e2e", false, "Include opt-in authenticated schedule execution notification checks")
 	evalsCmd.Flags().BoolVar(&evalsGitHubWorkflowE2E, "github-workflow-e2e", false, "Include opt-in live GitHub issue and PR workflow checks")
+	evalsCmd.Flags().BoolVar(&evalsScrumGitHubE2E, "scrum-github-e2e", false, "Include opt-in executable three-sprint scrum GitHub workflow checks")
 	evalsCmd.Flags().BoolVar(&evalsKubernetesRolloutE2E, "kubernetes-rollout-e2e", false, "Include opt-in live Kubernetes rollout and rollback checks")
 	evalsCmd.Flags().BoolVar(&evalsRealLLMSmokeE2E, "real-llm-smoke-e2e", false, "Include opt-in real LLM orchestration smoke checks")
 	evalsCmd.Flags().BoolVar(&evalsLiteLLMPresetEvals, "litellm-preset-evals", false, "Include opt-in LiteLLM preset matrix checks")
@@ -92,6 +94,7 @@ func runEvals(ctx context.Context) error {
 		IncludeStorageCleanupE2E:    evalsStorageCleanupE2E,
 		IncludeScheduleNotifyE2E:    evalsScheduleNotifyE2E,
 		IncludeGitHubWorkflowE2E:    evalsGitHubWorkflowE2E,
+		IncludeScrumGitHubE2E:       evalsScrumGitHubE2E,
 		IncludeKubernetesRolloutE2E: evalsKubernetesRolloutE2E,
 		IncludeRealLLMSmokeE2E:      evalsRealLLMSmokeE2E,
 		IncludeLiteLLMPresetEvals:   evalsLiteLLMPresetEvals,

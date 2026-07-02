@@ -73,6 +73,7 @@ type Options struct {
 	IncludeStorageCleanupE2E    bool
 	IncludeScheduleNotifyE2E    bool
 	IncludeGitHubWorkflowE2E    bool
+	IncludeScrumGitHubE2E       bool
 	IncludeKubernetesRolloutE2E bool
 	IncludeRealLLMSmokeE2E      bool
 	IncludeLiteLLMPresetEvals   bool
@@ -279,6 +280,18 @@ func GitHubWorkflowScenarios() []Scenario {
 	}}
 }
 
+// ScrumGitHubScenarios returns opt-in checks that create live scrum GitHub artifacts.
+func ScrumGitHubScenarios() []Scenario {
+	return []Scenario{{
+		ID:             "three-sprint-scrum-github-e2e",
+		Name:           "Executable three-sprint scrum GitHub workflow",
+		Category:       "live-github",
+		Mode:           ModeExecute,
+		FunctionalArea: []string{"github-workflow", "backlog-refinement", "sprint-execution", "reporting", "retrospective", "memory-continuity", "cleanup"},
+		Live:           true,
+	}}
+}
+
 // KubernetesRolloutScenarios returns opt-in checks that exercise a live Kubernetes rollout.
 func KubernetesRolloutScenarios() []Scenario {
 	return []Scenario{{
@@ -333,6 +346,9 @@ func Run(ctx context.Context, opts Options) (*Report, error) {
 	}
 	if opts.IncludeGitHubWorkflowE2E {
 		scenarios = append(scenarios, filterScenarios(GitHubWorkflowScenarios(), opts.ScenarioIDs)...)
+	}
+	if opts.IncludeScrumGitHubE2E {
+		scenarios = append(scenarios, filterScenarios(ScrumGitHubScenarios(), opts.ScenarioIDs)...)
 	}
 	if opts.IncludeKubernetesRolloutE2E {
 		scenarios = append(scenarios, filterScenarios(KubernetesRolloutScenarios(), opts.ScenarioIDs)...)
@@ -485,6 +501,9 @@ func runLiveScenario(ctx context.Context, scenario *Scenario, liveURL string, re
 	}
 	if scenario.ID == "github-workflow-e2e" {
 		return runGitHubWorkflowScenario(ctx, result)
+	}
+	if scenario.ID == "three-sprint-scrum-github-e2e" {
+		return runScrumGitHubScenario(ctx, result)
 	}
 	if scenario.ID == "kubernetes-rollout-e2e" {
 		return runKubernetesRolloutScenario(ctx, result)
@@ -1113,6 +1132,231 @@ func runGitHubWorkflowScenario(ctx context.Context, result *ScenarioResult) *Sce
 		"createdArtifactID": stamp,
 	}
 	return result
+}
+
+type scrumGitHubArtifact struct {
+	ID         string   `json:"id"`
+	Issue      int      `json:"issue"`
+	URL        string   `json:"url"`
+	Sprint     int      `json:"sprint"`
+	Completed  int      `json:"completed,omitempty"`
+	Carried    bool     `json:"carried,omitempty"`
+	Blockers   []string `json:"blockers,omitempty"`
+	FinalState string   `json:"finalState"`
+}
+
+type scrumGitHubSprint struct {
+	Sprint    int      `json:"sprint"`
+	Planned   []string `json:"planned"`
+	Completed []string `json:"completed"`
+	Carried   []string `json:"carried,omitempty"`
+	Blockers  []string `json:"blockers,omitempty"`
+}
+
+func runScrumGitHubScenario(ctx context.Context, result *ScenarioResult) *ScenarioResult {
+	repo := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_GITHUB_REPO"))
+	if repo == "" {
+		result.FailureReasons = append(result.FailureReasons, "live GitHub repo is required via AGENTOS_EVAL_GITHUB_REPO")
+		return result
+	}
+	owner, name, ok := splitGitHubRepo(repo)
+	if !ok {
+		result.FailureReasons = append(result.FailureReasons, "AGENTOS_EVAL_GITHUB_REPO must be owner/name")
+		return result
+	}
+	if !githubRepoAllowed(repo, os.Getenv("AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST")) {
+		result.FailureReasons = append(result.FailureReasons, "AGENTOS_EVAL_GITHUB_REPO must be explicitly listed in AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST")
+		return result
+	}
+	token, err := agentosgh.TokenFromEnv(ctx)
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "GitHub token: "+err.Error())
+		return result
+	}
+	if strings.TrimSpace(token) == "" {
+		result.FailureReasons = append(result.FailureReasons, "GitHub token is required via GITHUB_TOKEN, GH_TOKEN, or GitHub App env")
+		return result
+	}
+
+	runID := time.Now().UTC().Format("20060102T150405")
+	client := agentosgh.NewClient(owner, name)
+	backlog := scrumGitHubBacklog()
+	issues := map[string]*agentosgh.Issue{}
+	artifacts := make([]scrumGitHubArtifact, 0, len(backlog))
+	cleanup := map[int]bool{}
+	defer func() {
+		for _, issue := range issues {
+			if issue != nil && issue.Number > 0 && !cleanup[issue.Number] {
+				_, _ = client.CloseIssue(issue.Number)
+			}
+		}
+	}()
+
+	for i := range backlog {
+		item := &backlog[i]
+		issue, err := client.CreateIssue(agentosgh.CreateIssueRequest{
+			Title: fmt.Sprintf("[AgentOS Eval][%s] %s %s", runID, item.ID, item.Title),
+			Body:  renderScrumGitHubIssueBody(runID, item, "backlog"),
+		})
+		if err != nil {
+			result.FailureReasons = append(result.FailureReasons, "create backlog issue "+item.ID+": "+err.Error())
+			return result
+		}
+		issues[item.ID] = issue
+		result.Checks = append(result.Checks, ScenarioCheck{Page: "github-scrum", Action: "create issue " + item.ID, Passed: issue.Number > 0 && issue.HTMLURL != ""})
+	}
+
+	sprints := []scrumGitHubSprint{
+		{Sprint: 1, Planned: []string{"AOS-101", "AOS-102", "AOS-103"}, Completed: []string{"AOS-101", "AOS-102", "AOS-103"}},
+		{Sprint: 2, Planned: []string{"AOS-104", "AOS-105", "AOS-106"}, Completed: []string{"AOS-104", "AOS-105"}, Carried: []string{"AOS-106"}, Blockers: []string{"AOS-106 waiting on LiteLLM operations preset confirmation"}},
+		{Sprint: 3, Planned: []string{"AOS-106", "AOS-107"}, Completed: []string{"AOS-106", "AOS-107"}},
+	}
+	for _, sprint := range sprints {
+		if err := commentScrumSprint(client, issues, runID, &sprint); err != nil {
+			result.FailureReasons = append(result.FailureReasons, fmt.Sprintf("sprint %d comment: %s", sprint.Sprint, err))
+			return result
+		}
+		for _, id := range sprint.Completed {
+			issue := issues[id]
+			if issue == nil {
+				result.FailureReasons = append(result.FailureReasons, "missing issue for completed item "+id)
+				return result
+			}
+			closed, err := client.CloseIssue(issue.Number)
+			if err != nil {
+				result.FailureReasons = append(result.FailureReasons, "close completed issue "+id+": "+err.Error())
+				return result
+			}
+			issues[id] = closed
+			cleanup[closed.Number] = true
+		}
+		result.Checks = append(result.Checks, ScenarioCheck{
+			Page:   "github-scrum",
+			Action: fmt.Sprintf("sprint %d update", sprint.Sprint),
+			Passed: true,
+		})
+	}
+
+	for i := range backlog {
+		item := &backlog[i]
+		issue := issues[item.ID]
+		completedIn := item.CompletedIn
+		if completedIn == 0 {
+			completedIn = item.Sprint
+		}
+		artifacts = append(artifacts, scrumGitHubArtifact{
+			ID:         item.ID,
+			Issue:      issue.Number,
+			URL:        issue.HTMLURL,
+			Sprint:     item.Sprint,
+			Completed:  completedIn,
+			Carried:    item.ID == "AOS-106",
+			Blockers:   issueBlockers(item),
+			FinalState: issue.State,
+		})
+	}
+	encodedArtifacts, _ := json.Marshal(artifacts)
+	encodedSprints, _ := json.Marshal(sprints)
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "github-scrum", Action: "all backlog issues closed", Passed: allScrumIssuesClosed(issues)})
+	result.Successes = len(sprints)
+	result.Artifacts = map[string]string{
+		"repo":              repo,
+		"runID":             runID,
+		"issueCount":        fmt.Sprintf("%d", len(artifacts)),
+		"sprintCount":       fmt.Sprintf("%d", len(sprints)),
+		"completedWork":     "7",
+		"carriedWork":       "1",
+		"blockerCount":      "1",
+		"cleanupMode":       "close-issues",
+		"artifacts":         string(encodedArtifacts),
+		"sprints":           string(encodedSprints),
+		"artifactPrefix":    "[AgentOS Eval]",
+		"repoAllowlistUsed": strings.TrimSpace(os.Getenv("AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST")),
+	}
+	if !allScrumIssuesClosed(issues) {
+		result.FailureReasons = append(result.FailureReasons, "not all scrum eval issues reached closed state")
+	}
+	return result
+}
+
+func scrumGitHubBacklog() []scrumBacklogItem {
+	return []scrumBacklogItem{
+		{ID: "AOS-101", Title: "Define governance quota defaults", Owner: "analyst", Estimate: 3, Status: "done", Sprint: 1, CompletedIn: 1},
+		{ID: "AOS-102", Title: "Add storage cleanup runbook checks", Owner: "qa", Estimate: 2, Status: "done", Sprint: 1, CompletedIn: 1},
+		{ID: "AOS-103", Title: "Publish stakeholder sprint report", Owner: "reporter", Estimate: 1, Status: "done", Sprint: 1, CompletedIn: 1},
+		{ID: "AOS-104", Title: "Review release readiness checklist", Owner: "reviewer", Estimate: 2, Status: "done", Sprint: 2, CompletedIn: 2},
+		{ID: "AOS-105", Title: "Prepare follow-up release notes", Owner: "release-manager", Estimate: 2, Status: "done", Sprint: 2, CompletedIn: 2},
+		{ID: "AOS-106", Title: "Investigate flaky live LLM smoke", Owner: "analyst", Estimate: 3, Status: "done", Sprint: 2, BlockedBy: "AOS-106 waiting on LiteLLM operations preset confirmation", CompletedIn: 3},
+		{ID: "AOS-107", Title: "Harden preset matrix documentation", Owner: "reporter", Estimate: 1, Status: "done", Sprint: 3, CompletedIn: 3},
+	}
+}
+
+func renderScrumGitHubIssueBody(runID string, item *scrumBacklogItem, status string) string {
+	return fmt.Sprintf(`Created by AgentOS executable scrum GitHub eval.
+
+- Run ID: %s
+- Item: %s
+- Owner: %s
+- Estimate: %d
+- Initial sprint: %d
+- Eval status: %s
+
+This artifact is safe to close after the eval records final sprint evidence.
+`, runID, item.ID, item.Owner, item.Estimate, item.Sprint, status)
+}
+
+func commentScrumSprint(client *agentosgh.Client, issues map[string]*agentosgh.Issue, runID string, sprint *scrumGitHubSprint) error {
+	for _, id := range sprint.Planned {
+		issue := issues[id]
+		if issue == nil || issue.Number == 0 {
+			return fmt.Errorf("missing issue %s", id)
+		}
+		status := "planned"
+		if slices.Contains(sprint.Completed, id) {
+			status = "completed"
+		}
+		if slices.Contains(sprint.Carried, id) {
+			status = "carried"
+		}
+		body := fmt.Sprintf("AgentOS eval run `%s` sprint %d status: `%s`.", runID, sprint.Sprint, status)
+		if len(sprint.Blockers) > 0 && slices.Contains(sprint.Carried, id) {
+			body += "\n\nBlockers:\n- " + strings.Join(sprint.Blockers, "\n- ")
+		}
+		if _, err := client.CreateIssueComment(issue.Number, agentosgh.CreateIssueCommentRequest{Body: body}); err != nil {
+			return fmt.Errorf("%s: %w", id, err)
+		}
+	}
+	return nil
+}
+
+func githubRepoAllowed(repo, allowlist string) bool {
+	repo = strings.TrimSpace(strings.TrimSuffix(repo, ".git"))
+	for _, allowed := range strings.Split(allowlist, ",") {
+		allowed = strings.TrimSpace(strings.TrimSuffix(allowed, ".git"))
+		if allowed != "" && strings.EqualFold(repo, allowed) {
+			return true
+		}
+	}
+	return false
+}
+
+func issueBlockers(item *scrumBacklogItem) []string {
+	if strings.TrimSpace(item.BlockedBy) == "" {
+		return nil
+	}
+	return []string{item.BlockedBy}
+}
+
+func allScrumIssuesClosed(issues map[string]*agentosgh.Issue) bool {
+	if len(issues) == 0 {
+		return false
+	}
+	for _, issue := range issues {
+		if issue == nil || !strings.EqualFold(issue.State, "closed") {
+			return false
+		}
+	}
+	return true
 }
 
 func splitGitHubRepo(repo string) (owner, name string, ok bool) {

@@ -208,6 +208,26 @@ func TestRun_GitHubWorkflowE2ERequiresRepo(t *testing.T) {
 	}
 }
 
+func TestRun_ScrumGitHubE2ERequiresAllowlist(t *testing.T) {
+	t.Setenv("AGENTOS_EVAL_GITHUB_REPO", "owner/repo")
+	t.Setenv("AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST", "owner/other")
+	report, err := Run(context.Background(), Options{
+		WorkDir:               t.TempDir(),
+		ScenarioIDs:           []string{"three-sprint-scrum-github-e2e"},
+		IncludeScrumGitHubE2E: true,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if report.Total != 1 || report.Passed != 0 || report.Failed != 1 {
+		t.Fatalf("report = %+v, want one failing scrum GitHub E2E scenario", report)
+	}
+	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
+	if !strings.Contains(reasons, "AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST") {
+		t.Fatalf("failure reasons = %q, want missing allowlist", reasons)
+	}
+}
+
 func TestRun_KubernetesRolloutE2ERequiresExplicitConfig(t *testing.T) {
 	t.Setenv("AGENTOS_EVAL_KUBECONFIG", "")
 	t.Setenv("AGENTOS_EVAL_KUBE_CONTEXT", "")
@@ -358,6 +378,18 @@ func TestSplitGitHubRepo(t *testing.T) {
 	}
 	if _, _, ok := splitGitHubRepo("owner/repo/extra"); ok {
 		t.Fatal("splitGitHubRepo() accepted nested path")
+	}
+}
+
+func TestGitHubRepoAllowed(t *testing.T) {
+	if !githubRepoAllowed("owner/repo", "owner/other, owner/repo") {
+		t.Fatal("githubRepoAllowed() = false, want true")
+	}
+	if !githubRepoAllowed("owner/repo.git", "owner/repo") {
+		t.Fatal("githubRepoAllowed() did not normalize .git suffix")
+	}
+	if githubRepoAllowed("owner/repo", "owner/repo-extra") {
+		t.Fatal("githubRepoAllowed() accepted partial match")
 	}
 }
 

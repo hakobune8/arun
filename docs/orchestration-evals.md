@@ -142,6 +142,32 @@ request, looks up check runs and workflow runs for the base branch, then closes
 the PR and issue and deletes the branch. The report records the issue URL, PR
 URL, branch, file path, cleanup state, and check/workflow lookup counts.
 
+## Executable Scrum GitHub E2E
+
+The executable scrum GitHub scenario extends the deterministic
+`three-sprint-agile-scrum` flow with real GitHub issue artifacts. It is disabled
+by default and refuses to run unless the target repository is explicitly
+allowlisted.
+
+Use a dedicated test repository such as `kazyamaz200/agentos-test`:
+
+```sh
+AGENTOS_EVAL_GITHUB_REPO='kazyamaz200/agentos-test' \
+AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST='kazyamaz200/agentos-test' \
+GITHUB_TOKEN='<token-with-repo-access>' \
+agentos evals \
+  --scrum-github-e2e \
+  --scenario three-sprint-scrum-github-e2e \
+  --format markdown \
+  --output .agentos/evals/scrum-github-report.md
+```
+
+The scenario creates `[AgentOS Eval]` backlog issues, comments sprint status on
+each planned item, carries one blocked item from sprint 2 to sprint 3, closes
+completed work, and records issue URLs plus sprint-by-sprint state in the
+report. The first implementation keeps evidence as closed issues. More advanced
+cleanup modes and interrupted-run recovery are tracked separately.
+
 ## Kubernetes Rollout E2E
 
 Kubernetes rollout checks are opt-in and require an explicit kubeconfig,
