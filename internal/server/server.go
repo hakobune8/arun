@@ -713,6 +713,7 @@ type scenarioTemplate struct {
 	Source            string                     `json:"source,omitempty" yaml:"source,omitempty"`
 	Agents            []string                   `json:"agents" yaml:"agents"`
 	Strategy          string                     `json:"strategy,omitempty" yaml:"strategy,omitempty"`
+	CreateIssue       bool                       `json:"createIssue,omitempty" yaml:"createIssue,omitempty"`
 	CreatePullRequest bool                       `json:"createPullRequest,omitempty" yaml:"createPullRequest,omitempty"`
 	RequireApproval   bool                       `json:"requireApproval,omitempty" yaml:"requireApproval,omitempty"`
 	Limits            governanceLimits           `json:"limits,omitempty" yaml:"limits,omitempty"`
@@ -3084,10 +3085,11 @@ Expected output:
 		{
 			ID:                "implementation-heavy-scrum",
 			Name:              "Implementation-Heavy Scrum",
-			Description:       "Run a build-oriented scrum workflow for new or sandbox repositories with concrete artifacts, review, smoke, and reporting.",
+			Description:       "Run a build-oriented scrum workflow for new or sandbox repositories with app, CI/CD, Kubernetes, review, smoke, and reporting artifacts.",
 			Source:            "built-in",
-			Agents:            availableAgentNames(registry, "analyst", "go-backend", "frontend", "docs", "qa", "reviewer", "release-manager"),
+			Agents:            availableAgentNames(registry, "analyst", "go-backend", "frontend", "docs", "qa", "reviewer", "release-manager", "docker", "helm", "kubernetes", "devops"),
 			Strategy:          "sequential",
+			CreateIssue:       true,
 			CreatePullRequest: true,
 			Limits: governanceLimits{
 				MaxDuration:          "60m",
@@ -3096,30 +3098,38 @@ Expected output:
 			},
 			TaskTemplate: `Run an implementation-heavy agile scrum workflow for {{repo}} on {{baseBranch}}.
 
-Operating mode: build-first for a new or sandbox repository. Create concrete, reviewable repository artifacts where safe. Prefer a small vertical slice over a broad unfinished scaffold. Do not rewrite unrelated existing work. If the repository is completely empty or has no commits yet, create an initial minimal app scaffold with README, validation commands, and smoke-test notes before extending it.
+Operating mode: build-first for a new or sandbox repository. Create concrete, reviewable repository artifacts where safe. Prefer a small vertical slice over a broad unfinished scaffold. Do not rewrite unrelated existing work. If the repository is completely empty or has no commits yet, create an initial minimal product scaffold before extending it.
+
+Target baseline for a new repository:
+- A minimal Go HTTP server with a health endpoint and a small product API or static asset handler.
+- A minimal Web UI or static frontend slice when it fits the repository goal.
+- Dockerfile and local validation commands.
+- Helm chart and Kubernetes manifests suitable for deploying into the same Kubernetes environment as AgentOS. Include Service and Deployment. Ingress is not required.
+- GitHub Actions CI that runs tests, lint or smoke checks, and build validation so future PRs can improve the product continuously.
+- README documentation with setup, local run, Kubernetes deploy notes, validation commands, and operational follow-up backlog.
 
 Sprint 1:
 - Inspect repository state and choose the smallest coherent product increment.
-- For an empty repository, start with a minimal static frontend or similarly lightweight scaffold that can be opened, reviewed, and validated without external services.
+- For an empty repository, start with a minimal Go server plus a lightweight frontend or static response that can be opened, reviewed, and validated without external services.
 - Decide the primary implementation path from repository evidence. Use backend, frontend, documentation, or a combination only when it fits the repository.
 - Implement a minimal working slice with setup or usage documentation.
 - Review and smoke test the slice.
 
 Sprint 2:
-- Extend the slice with one meaningful capability, test, or integration.
+- Extend the slice with one meaningful capability, test, CI check, containerization, or Kubernetes integration.
 - Keep changes cohesive and easy to review.
 - Update documentation and run validation.
 - Review risks, gaps, and follow-up work.
 
 Sprint 3:
-- Stabilize the result, improve developer ergonomics, and remove obvious rough edges.
+- Stabilize the result, improve developer ergonomics, add or refine Helm/Kubernetes deploy artifacts, and remove obvious rough edges.
 - Ensure README or docs explain how to run and verify the work.
 - Produce final review, smoke-test notes, and a Japanese stakeholder report.
 
 Expected output:
 - Concrete file changes or a clear explanation of why no safe implementation was possible.
 - Sprint 1, Sprint 2, and Sprint 3 sections.
-- Implementation, documentation, review, smoke, and release-readiness notes.
+- Implementation, documentation, review, smoke, CI/CD, Kubernetes, and release-readiness notes.
 - Commands run and validation results.
 - Final backlog for the next human-led sprint.`,
 			Variables: []scenarioTemplateVariable{

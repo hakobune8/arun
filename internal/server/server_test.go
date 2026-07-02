@@ -1246,13 +1246,18 @@ func TestServer_OrchestrateTemplates_ReturnsBuiltIns(t *testing.T) {
 		t.Fatalf("implementation-heavy-scrum template not found: %+v", templates)
 		return
 	}
-	if !heavy.CreatePullRequest || heavy.Strategy != "sequential" || !strings.Contains(heavy.TaskTemplate, "build-first") {
+	if !heavy.CreateIssue || !heavy.CreatePullRequest || heavy.Strategy != "sequential" || !strings.Contains(heavy.TaskTemplate, "build-first") {
 		t.Fatalf("implementation-heavy-scrum defaults = %+v", heavy)
+	}
+	for _, want := range []string{"Go HTTP server", "Helm chart", "Kubernetes manifests", "GitHub Actions CI"} {
+		if !strings.Contains(heavy.TaskTemplate, want) {
+			t.Fatalf("implementation-heavy-scrum task missing %q", want)
+		}
 	}
 	if heavy.Limits.MaxDuration != "60m" || heavy.Limits.MaxSubtasks != 24 || heavy.Limits.MaxConcurrentRepoRun != 1 {
 		t.Fatalf("implementation-heavy-scrum limits = %+v, want 60m/24/1", heavy.Limits)
 	}
-	for _, want := range []string{"analyst", "go-backend", "frontend", "docs", "qa", "reviewer", "release-manager"} {
+	for _, want := range []string{"analyst", "go-backend", "frontend", "docs", "qa", "reviewer", "release-manager", "docker", "helm", "kubernetes", "devops"} {
 		if !containsString(heavy.Agents, want) {
 			t.Fatalf("implementation-heavy-scrum agents = %+v, want %s", heavy.Agents, want)
 		}
