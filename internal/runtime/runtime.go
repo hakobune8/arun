@@ -396,7 +396,13 @@ func ParsePlan(resp *llm.ChatResponse) (*Plan, error) {
 	content = stripJSONFences(content)
 	var plan Plan
 	if err := json.Unmarshal([]byte(content), &plan); err != nil {
-		return nil, fmt.Errorf("parse plan JSON: %w\ncontent: %s", err, content)
+		repaired := repairPlanStepObjects(content)
+		if repaired == content {
+			return nil, fmt.Errorf("parse plan JSON: %w\ncontent: %s", err, content)
+		}
+		if repairErr := json.Unmarshal([]byte(repaired), &plan); repairErr != nil {
+			return nil, fmt.Errorf("parse plan JSON: %w\ncontent: %s", err, content)
+		}
 	}
 	return &plan, nil
 }
@@ -419,4 +425,40 @@ func stripJSONFences(s string) string {
 	s = strings.TrimSuffix(s, "```")
 	s = strings.TrimSpace(s)
 	return s
+}
+
+func repairPlanStepObjects(content string) string {
+	lines := strings.Split(content, "\n")
+	var out []string
+	inSteps := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, `"steps"`) && strings.Contains(trimmed, "[") {
+			inSteps = true
+		}
+		if inSteps && strings.HasPrefix(trimmed, `"step_number"`) && previousNonEmptyLine(out) == "}," {
+			out = append(out, leadingWhitespace(line)+"{")
+		}
+		out = append(out, line)
+		if inSteps && trimmed == "]" {
+			inSteps = false
+		}
+		if inSteps && i == len(lines)-1 {
+			inSteps = false
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
+func previousNonEmptyLine(lines []string) string {
+	for i := len(lines) - 1; i >= 0; i-- {
+		if trimmed := strings.TrimSpace(lines[i]); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func leadingWhitespace(line string) string {
+	return line[:len(line)-len(strings.TrimLeft(line, " \t"))]
 }

@@ -277,6 +277,50 @@ func TestParsePlan_InvalidJSON(t *testing.T) {
 	}
 }
 
+func TestParsePlan_RepairsMissingStepObjectBrace(t *testing.T) {
+	t.Parallel()
+
+	resp := &llm.ChatResponse{
+		Choices: []llm.Choice{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					Content: `{
+  "plan_summary": "Review plan",
+  "steps": [
+    {
+      "step_number": 1,
+      "action": "read",
+      "description": "Read files",
+      "target_files": ["README.md"],
+      "reasoning": "Need context"
+    },
+    "step_number": 2,
+    "action": "shell",
+    "description": "Run validation",
+    "target_files": [],
+    "reasoning": "Need validation"
+    }
+  ],
+  "estimated_files_changed": 0
+}`,
+				},
+			},
+		},
+	}
+
+	plan, err := ParsePlan(resp)
+	if err != nil {
+		t.Fatalf("ParsePlan() error = %v", err)
+	}
+	if len(plan.Steps) != 2 {
+		t.Fatalf("len(Steps) = %d, want 2", len(plan.Steps))
+	}
+	if plan.Steps[1].StepNumber != 2 || plan.Steps[1].Action != "shell" {
+		t.Fatalf("repaired step = %+v", plan.Steps[1])
+	}
+}
+
 func TestParseReview_ValidJSON(t *testing.T) {
 	t.Parallel()
 
