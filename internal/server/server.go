@@ -697,6 +697,7 @@ type scenarioTemplate struct {
 	Strategy          string                     `json:"strategy,omitempty" yaml:"strategy,omitempty"`
 	CreatePullRequest bool                       `json:"createPullRequest,omitempty" yaml:"createPullRequest,omitempty"`
 	RequireApproval   bool                       `json:"requireApproval,omitempty" yaml:"requireApproval,omitempty"`
+	Limits            governanceLimits           `json:"limits,omitempty" yaml:"limits,omitempty"`
 	TaskTemplate      string                     `json:"taskTemplate" yaml:"taskTemplate"`
 	Variables         []scenarioTemplateVariable `json:"variables,omitempty" yaml:"variables,omitempty"`
 }
@@ -2766,6 +2767,11 @@ Follow existing frontend conventions, keep text and controls responsive, and inc
 			Agents:            availableAgentNames(registry, "analyst", "release-manager", "reviewer", "qa", "reporter"),
 			Strategy:          "sequential",
 			CreatePullRequest: false,
+			Limits: governanceLimits{
+				MaxDuration:          "45m",
+				MaxSubtasks:          18,
+				MaxConcurrentRepoRun: 1,
+			},
 			TaskTemplate: `Run a three-sprint agile scrum simulation for {{repo}} on {{baseBranch}}.
 
 Operating mode: report-first. Do not make destructive changes. Prefer Markdown reports, sprint plans, review notes, and smoke-test notes over code changes unless the repository state explicitly requires a small safe change.

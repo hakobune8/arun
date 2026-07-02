@@ -1136,7 +1136,19 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
       repo: form.repo,
       baseBranch: form.baseBranch || 'main',
     })
-    update({ task: task.trim() || form.task, strategy: selectedTemplate.strategy ?? form.strategy, createPullRequest: Boolean(selectedTemplate.createPullRequest) })
+    const limits = selectedTemplate.limits ?? {}
+    update({
+      task: task.trim() || form.task,
+      strategy: selectedTemplate.strategy ?? form.strategy,
+      createPullRequest: Boolean(selectedTemplate.createPullRequest),
+      maxDuration: limits.maxDuration ? String(limits.maxDuration) : form.maxDuration,
+      maxSubtasks: limits.maxSubtasks ? String(limits.maxSubtasks) : form.maxSubtasks,
+      maxRetries: limits.maxRetries ? String(limits.maxRetries) : form.maxRetries,
+      maxLlmTokens: limits.maxLlmTokens ? String(limits.maxLlmTokens) : form.maxLlmTokens,
+      maxGitHubRequests: limits.maxGitHubRequests ? String(limits.maxGitHubRequests) : form.maxGitHubRequests,
+      maxConcurrentRepoRuns: limits.maxConcurrentRepoRuns ? String(limits.maxConcurrentRepoRuns) : form.maxConcurrentRepoRuns,
+      maxConcurrentOrgRuns: limits.maxConcurrentOrgRuns ? String(limits.maxConcurrentOrgRuns) : form.maxConcurrentOrgRuns,
+    })
     props.setSelectedAgents(new Set(selectedTemplate.agents ?? []))
   }
 

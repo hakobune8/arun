@@ -1154,6 +1154,9 @@ func TestServer_OrchestrateTemplates_ReturnsBuiltIns(t *testing.T) {
 	if scrum.CreatePullRequest || scrum.Strategy != "sequential" || !strings.Contains(scrum.TaskTemplate, "Sprint 3") {
 		t.Fatalf("scrum template defaults = %+v", scrum)
 	}
+	if scrum.Limits.MaxDuration != "45m" || scrum.Limits.MaxSubtasks != 18 || scrum.Limits.MaxConcurrentRepoRun != 1 {
+		t.Fatalf("scrum limits = %+v, want 45m/18/1", scrum.Limits)
+	}
 	for _, want := range []string{"analyst", "release-manager", "reviewer", "qa", "reporter"} {
 		if !containsString(scrum.Agents, want) {
 			t.Fatalf("scrum agents = %+v, want %s", scrum.Agents, want)
