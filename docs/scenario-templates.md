@@ -13,11 +13,31 @@ Built-in templates cover:
 - Security/code-scanning remediation
 - Release preparation
 - Frontend UI change
+- Three-sprint agile scrum simulation
 
 Selecting a template renders variable inputs and a preview of the generated task
 text. Applying the template fills the task description, recommended agents,
 strategy, and pull request preference. When an orchestration starts, AgentOS
 saves the selected template as `scenarioTemplate` on the orchestration record.
+
+## Stage Presets
+
+Web/API orchestrations route planning and built-in agents to recommended
+LiteLLM preset IDs by default:
+
+| Scope | Preset ID |
+| --- | --- |
+| Planning | `planning` |
+| Implementation agents | `coding` |
+| `reviewer` | `review` |
+| `qa` | `smoke` |
+| `analyst` | `planning` |
+| `reporter` | `reporting` |
+
+If a recommended preset is not configured, AgentOS falls back to the selected
+or default orchestration preset and records the fallback reason as
+`stagePresets` on the orchestration record. The Web UI detail view displays the
+resolved stage and agent preset routing.
 
 ## Repository Templates
 
