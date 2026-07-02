@@ -14,18 +14,44 @@
 
 package github
 
+import "fmt"
+
 // ListRepositories lists repositories available to the configured GitHub token.
 func (c *Client) ListRepositories() ([]RepositorySummary, error) {
-	var installation struct {
-		Repositories []RepositorySummary `json:"repositories"`
+	if repos, err := c.listInstallationRepositories(); err == nil {
+		return repos, nil
 	}
-	if err := c.doJSON("GET", "/installation/repositories?per_page=100", nil, &installation); err == nil {
-		return installation.Repositories, nil
-	}
+	return c.listUserRepositories()
+}
 
+func (c *Client) listInstallationRepositories() ([]RepositorySummary, error) {
 	var repos []RepositorySummary
-	if err := c.doJSON("GET", "/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member", nil, &repos); err != nil {
-		return nil, err
+	for page := 1; ; page++ {
+		var installation struct {
+			Repositories []RepositorySummary `json:"repositories"`
+		}
+		path := fmt.Sprintf("/installation/repositories?per_page=100&page=%d", page)
+		if err := c.doJSON("GET", path, nil, &installation); err != nil {
+			return nil, err
+		}
+		repos = append(repos, installation.Repositories...)
+		if len(installation.Repositories) < 100 {
+			return repos, nil
+		}
 	}
-	return repos, nil
+}
+
+func (c *Client) listUserRepositories() ([]RepositorySummary, error) {
+	var repos []RepositorySummary
+	for page := 1; ; page++ {
+		var pageRepos []RepositorySummary
+		path := fmt.Sprintf("/user/repos?per_page=100&page=%d&sort=updated&affiliation=owner,collaborator,organization_member", page)
+		if err := c.doJSON("GET", path, nil, &pageRepos); err != nil {
+			return nil, err
+		}
+		repos = append(repos, pageRepos...)
+		if len(pageRepos) < 100 {
+			return repos, nil
+		}
+	}
 }
