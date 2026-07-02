@@ -848,6 +848,58 @@ func TestServer_GitHub_Repositories(t *testing.T) {
 	}
 }
 
+func TestServer_GitHub_RepositoriesUsesOAuthToken(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/installation/repositories":
+			http.Error(w, "installation unavailable", http.StatusUnauthorized)
+		case "/user/repos":
+			if got := r.Header.Get("Authorization"); got != "Bearer oauth-token" {
+				t.Fatalf("Authorization = %q, want OAuth token", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[{"id":2,"name":"oauth-repo","full_name":"owner/oauth-repo","private":false,"html_url":"https://github.com/owner/oauth-repo","default_branch":"main"}]`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer api.Close()
+	t.Setenv("GITHUB_API_URL", api.URL)
+	t.Setenv("AGENTOS_AUTH_REQUIRED", "true")
+	t.Setenv("AGENTOS_SESSION_SECRET", "test-secret")
+
+	s := NewServer(0)
+	w := serveRequestAs(s, "GET", "/api/github/repositories", nil, &authUser{
+		Login:       "alice",
+		AccessToken: "oauth-token",
+		ExpiresAt:   time.Now().UTC().Add(time.Hour),
+	})
+	assertStatus(t, w.Code, http.StatusOK)
+
+	var repos []agentosgh.RepositorySummary
+	if err := json.Unmarshal(w.Body.Bytes(), &repos); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(repos) != 1 || repos[0].FullName != "owner/oauth-repo" {
+		t.Fatalf("unexpected repositories: %+v", repos)
+	}
+}
+
+func TestServer_AuthSessionDoesNotExposeAccessToken(t *testing.T) {
+	t.Setenv("AGENTOS_AUTH_REQUIRED", "true")
+	t.Setenv("AGENTOS_SESSION_SECRET", "test-secret")
+	s := NewServer(0)
+	w := serveRequestAs(s, "GET", "/api/auth/session", nil, &authUser{
+		Login:       "alice",
+		AccessToken: "secret-token",
+		ExpiresAt:   time.Now().UTC().Add(time.Hour),
+	})
+	assertStatus(t, w.Code, http.StatusOK)
+	if strings.Contains(w.Body.String(), "secret-token") || strings.Contains(w.Body.String(), "accessToken") {
+		t.Fatalf("session leaked access token: %s", w.Body.String())
+	}
+}
+
 func TestServer_GitHub_UnknownResource(t *testing.T) {
 	t.Parallel()
 	s := NewServer(0)

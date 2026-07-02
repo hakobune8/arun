@@ -42,11 +42,12 @@ type authConfig struct {
 }
 
 type authUser struct {
-	Login     string    `json:"login"`
-	Name      string    `json:"name,omitempty"`
-	AvatarURL string    `json:"avatarUrl,omitempty"`
-	HTMLURL   string    `json:"htmlUrl,omitempty"`
-	ExpiresAt time.Time `json:"expiresAt"`
+	Login       string    `json:"login"`
+	Name        string    `json:"name,omitempty"`
+	AvatarURL   string    `json:"avatarUrl,omitempty"`
+	HTMLURL     string    `json:"htmlUrl,omitempty"`
+	AccessToken string    `json:"accessToken,omitempty"`
+	ExpiresAt   time.Time `json:"expiresAt"`
 }
 
 type sessionResponse struct {
@@ -157,10 +158,23 @@ func (s *Server) handleAuthSession(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(sessionResponse{
 		AuthRequired:  s.auth.enabled(),
 		Authenticated: user != nil,
-		User:          user,
+		User:          publicAuthUser(user),
 		LoginURL:      "/auth/login",
 		LogoutURL:     "/auth/logout",
 	}) //nolint:errcheck // best-effort response
+}
+
+func publicAuthUser(user *authUser) *authUser {
+	if user == nil {
+		return nil
+	}
+	return &authUser{
+		Login:     user.Login,
+		Name:      user.Name,
+		AvatarURL: user.AvatarURL,
+		HTMLURL:   user.HTMLURL,
+		ExpiresAt: user.ExpiresAt,
+	}
 }
 
 func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
@@ -183,7 +197,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	q := u.Query()
 	q.Set("client_id", s.auth.ClientID)
 	q.Set("redirect_uri", s.auth.RedirectURL)
-	q.Set("scope", "read:user")
+	q.Set("scope", "read:user repo")
 	q.Set("state", state)
 	u.RawQuery = q.Encode()
 	http.Redirect(w, r, u.String(), http.StatusFound)
@@ -216,6 +230,7 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "fetch GitHub user: "+err.Error(), http.StatusBadGateway)
 		return
 	}
+	user.AccessToken = token
 	user.ExpiresAt = time.Now().UTC().Add(24 * time.Hour)
 	session, err := json.Marshal(user)
 	if err != nil {

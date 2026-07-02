@@ -530,12 +530,16 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	if _, ok := s.requireAuth(w, r); !ok {
+	user, ok := s.requireAuth(w, r)
+	if !ok {
 		return
 	}
 	path := r.URL.Path[len("/api/github/"):]
 	if path == "repositories" {
 		client := agentosgh.NewClient("", "")
+		if user != nil && user.AccessToken != "" {
+			client = client.WithToken(user.AccessToken)
+		}
 		repos, err := client.ListRepositories()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
