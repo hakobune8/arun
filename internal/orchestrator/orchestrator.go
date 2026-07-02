@@ -992,7 +992,7 @@ func subtaskProfile(agentName string) profile.Profile {
 	case "qa":
 		prof.Role = "QA and verification agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git", "test"}
-		prof.Commands.Test = "go test ./..."
+		prof.Commands.Test = qaValidationCommand
 		prof.Commands.Lint = ""
 	case "docker":
 		prof.Role = "Docker operations agent"
