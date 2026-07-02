@@ -1155,6 +1155,32 @@ type scrumGitHubSprint struct {
 	Blockers  []string `json:"blockers,omitempty"`
 }
 
+type scrumLLMStage struct {
+	Stage    string `json:"stage"`
+	PresetID string `json:"presetId"`
+	Agent    string `json:"agent"`
+	Sprint   int    `json:"sprint,omitempty"`
+	Context  string `json:"-"`
+}
+
+type scrumLLMStageOutcome struct {
+	Stage            string `json:"stage"`
+	PresetID         string `json:"presetId"`
+	Agent            string `json:"agent"`
+	Sprint           int    `json:"sprint,omitempty"`
+	Model            string `json:"model"`
+	BaseURL          string `json:"baseUrl"`
+	Success          bool   `json:"success"`
+	DurationMS       int64  `json:"durationMs"`
+	FailureReason    string `json:"failureReason,omitempty"`
+	PromptTokens     int    `json:"promptTokens,omitempty"`
+	CompletionTokens int    `json:"completionTokens,omitempty"`
+	TotalTokens      int    `json:"totalTokens,omitempty"`
+	TokenBudget      int    `json:"tokenBudget,omitempty"`
+	CostBudget       string `json:"costBudget,omitempty"`
+	RetryAttempts    int    `json:"retryAttempts"`
+}
+
 func runScrumGitHubScenario(ctx context.Context, result *ScenarioResult) *ScenarioResult {
 	repo := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_GITHUB_REPO"))
 	if repo == "" {
@@ -1174,6 +1200,16 @@ func runScrumGitHubScenario(ctx context.Context, result *ScenarioResult) *Scenar
 	if cleanupMode == "" {
 		result.FailureReasons = append(result.FailureReasons, "AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP must be keep or close")
 		return result
+	}
+	scrumLLMEnabled := scrumLLMPresetsEnabled()
+	scrumLLMPresets := map[string]liteLLMPresetEvalConfig{}
+	if scrumLLMEnabled {
+		var err error
+		scrumLLMPresets, err = scrumLiteLLMPresetMapFromEnv()
+		if err != nil {
+			result.FailureReasons = append(result.FailureReasons, err.Error())
+			return result
+		}
 	}
 	token, err := agentosgh.TokenFromEnv(ctx)
 	if err != nil {
@@ -1218,6 +1254,29 @@ func runScrumGitHubScenario(ctx context.Context, result *ScenarioResult) *Scenar
 		{Sprint: 2, Planned: []string{"AOS-104", "AOS-105", "AOS-106"}, Completed: []string{"AOS-104", "AOS-105"}, Carried: []string{"AOS-106"}, Blockers: []string{"AOS-106 waiting on LiteLLM operations preset confirmation"}},
 		{Sprint: 3, Planned: []string{"AOS-106", "AOS-107"}, Completed: []string{"AOS-106", "AOS-107"}},
 	}
+	llmStageOutcomes := []scrumLLMStageOutcome{}
+	if scrumLLMEnabled && !reconciledExisting {
+		stages := scrumLLMStagePlan()
+		llmStageOutcomes = make([]scrumLLMStageOutcome, 0, len(stages))
+		for _, stage := range stages {
+			preset := scrumLLMPresets[stage.PresetID]
+			outcome := runScrumLLMStageCheck(ctx, stage, &preset)
+			llmStageOutcomes = append(llmStageOutcomes, outcome)
+			result.Checks = append(result.Checks, ScenarioCheck{
+				Page:       "github-scrum-llm",
+				Action:     fmt.Sprintf("%s preset %s", stage.Stage, stage.PresetID),
+				Passed:     outcome.Success,
+				DurationMS: outcome.DurationMS,
+				Failure:    outcome.FailureReason,
+			})
+			if outcome.Success {
+				result.Successes++
+			} else {
+				result.Failures++
+				result.FailureReasons = append(result.FailureReasons, fmt.Sprintf("%s/%s: %s", stage.Stage, stage.PresetID, outcome.FailureReason))
+			}
+		}
+	}
 	if !reconciledExisting {
 		for _, sprint := range sprints {
 			if err := commentScrumSprint(client, issues, runID, &sprint); err != nil {
@@ -1234,9 +1293,23 @@ func runScrumGitHubScenario(ctx context.Context, result *ScenarioResult) *Scenar
 	artifacts := cleanupScrumGitHubIssues(client, issues, backlog, cleanupMode)
 	encodedArtifacts, _ := json.Marshal(artifacts)
 	encodedSprints, _ := json.Marshal(sprints)
+	encodedLLMStages, _ := json.Marshal(llmStageOutcomes)
 	cleanupOK := scrumCleanupSucceeded(artifacts, cleanupMode)
 	result.Checks = append(result.Checks, ScenarioCheck{Page: "github-scrum", Action: "cleanup artifacts", Passed: cleanupOK})
-	result.Successes = len(sprints)
+	result.Successes += len(sprints)
+	llmMode := "disabled"
+	if scrumLLMEnabled {
+		llmMode = "enabled"
+		if reconciledExisting {
+			llmMode = "reconcile-skip"
+		}
+	}
+	llmStageSuccesses := 0
+	for i := range llmStageOutcomes {
+		if llmStageOutcomes[i].Success {
+			llmStageSuccesses++
+		}
+	}
 	result.Artifacts = map[string]string{
 		"repo":                  repo,
 		"runID":                 runID,
@@ -1250,6 +1323,12 @@ func runScrumGitHubScenario(ctx context.Context, result *ScenarioResult) *Scenar
 		"reconciledExistingRun": fmt.Sprintf("%t", reconciledExisting),
 		"artifacts":             string(encodedArtifacts),
 		"sprints":               string(encodedSprints),
+		"llmPresetMode":         llmMode,
+		"llmStageCount":         fmt.Sprintf("%d", len(llmStageOutcomes)),
+		"llmStageSuccesses":     fmt.Sprintf("%d", llmStageSuccesses),
+		"llmStageFailures":      fmt.Sprintf("%d", len(llmStageOutcomes)-llmStageSuccesses),
+		"llmStages":             string(encodedLLMStages),
+		"secretsRedacted":       "true",
 		"artifactPrefix":        "[AgentOS Eval]",
 		"repoAllowlistUsed":     strings.TrimSpace(os.Getenv("AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST")),
 	}
@@ -1257,6 +1336,178 @@ func runScrumGitHubScenario(ctx context.Context, result *ScenarioResult) *Scenar
 		result.FailureReasons = append(result.FailureReasons, "scrum GitHub cleanup did not complete successfully")
 	}
 	return result
+}
+
+func scrumLLMPresetsEnabled() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("AGENTOS_EVAL_SCRUM_LLM_PRESETS")), "true")
+}
+
+func scrumLiteLLMPresetMapFromEnv() (map[string]liteLLMPresetEvalConfig, error) {
+	raw := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LLM_PRESET_MATRIX"))
+	if raw == "" {
+		raw = strings.TrimSpace(os.Getenv("AGENTOS_LLM_PRESETS"))
+	}
+	if raw == "" {
+		return nil, fmt.Errorf("scrum LLM presets require AGENTOS_EVAL_LLM_PRESET_MATRIX or AGENTOS_LLM_PRESETS when AGENTOS_EVAL_SCRUM_LLM_PRESETS=true")
+	}
+	presets, err := liteLLMPresetEvalConfigFromRaw(raw)
+	if err != nil {
+		return nil, err
+	}
+	byID := map[string]liteLLMPresetEvalConfig{}
+	for i := range presets {
+		preset := presets[i]
+		byID[preset.ID] = preset
+	}
+	required := scrumRequiredPresetIDs()
+	missing := []string{}
+	for _, id := range required {
+		if _, ok := byID[id]; !ok {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("scrum LLM presets missing required ids: %s", strings.Join(missing, ", "))
+	}
+	return byID, nil
+}
+
+func scrumRequiredPresetIDs() []string {
+	return []string{"planning", "coding", "review", "smoke", "reporting"}
+}
+
+func scrumLLMStagePlan() []scrumLLMStage {
+	return []scrumLLMStage{
+		{
+			Stage:    "backlog-refinement",
+			PresetID: "planning",
+			Agent:    "analyst",
+			Context:  "Refine seven backlog issues and identify sprint-ready work for governance, storage cleanup, reporting, review, and LiteLLM preset documentation.",
+		},
+		{
+			Stage:    "implementation-notes",
+			PresetID: "coding",
+			Agent:    "release-manager",
+			Sprint:   2,
+			Context:  "Summarize implementation notes for AOS-104 and AOS-105 while AOS-106 remains blocked by operations preset confirmation.",
+		},
+		{
+			Stage:    "review-risk-check",
+			PresetID: "review",
+			Agent:    "reviewer",
+			Sprint:   2,
+			Context:  "Review risk for carrying AOS-106 from sprint 2 into sprint 3 and confirm the note is non-empty at temperature zero.",
+		},
+		{
+			Stage:    "qa-reachability-check",
+			PresetID: "smoke",
+			Agent:    "qa",
+			Sprint:   3,
+			Context:  "Check that the scrum eval can reach GitHub artifacts, comments, cleanup, and LLM preset reporting before release.",
+		},
+		{
+			Stage:    "stakeholder-report",
+			PresetID: "reporting",
+			Agent:    "reporter",
+			Sprint:   3,
+			Context:  "Produce a one-line stakeholder summary for three sprints with seven completed items, one carried item, and cleanup evidence.",
+		},
+	}
+}
+
+func runScrumLLMStageCheck(ctx context.Context, stage scrumLLMStage, preset *liteLLMPresetEvalConfig) scrumLLMStageOutcome {
+	timeout := 45 * time.Second
+	if strings.TrimSpace(preset.Timeout) != "" {
+		if parsed, err := time.ParseDuration(preset.Timeout); err == nil {
+			timeout = parsed
+		}
+	}
+	maxTokens := preset.MaxTokens
+	if maxTokens <= 0 {
+		maxTokens = 256
+	}
+	apiKey := ""
+	if preset.APIKeyEnv != "" {
+		apiKey = os.Getenv(preset.APIKeyEnv)
+	}
+	client := llm.NewLiteLLMClient(llm.Config{
+		BaseURL:    preset.BaseURL,
+		APIKey:     apiKey,
+		ModelCoder: preset.Model,
+		Timeout:    timeout,
+	})
+	outcome := scrumLLMStageOutcome{
+		Stage:         stage.Stage,
+		PresetID:      preset.ID,
+		Agent:         stage.Agent,
+		Sprint:        stage.Sprint,
+		Model:         preset.Model,
+		BaseURL:       preset.BaseURL,
+		TokenBudget:   preset.TokenBudget,
+		CostBudget:    preset.CostBudget,
+		RetryAttempts: preset.RetryAttempts,
+	}
+	attempts := preset.RetryAttempts + 1
+	if attempts < 1 {
+		attempts = 1
+	}
+	started := time.Now()
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		callCtx, cancel := context.WithTimeout(ctx, timeout)
+		resp, err := client.Chat(callCtx, llm.ChatRequest{
+			Model: preset.Model,
+			Messages: []llm.Message{
+				{Role: llm.RoleSystem, Content: scrumLLMStageSystemPrompt(stage.Agent)},
+				{Role: llm.RoleUser, Content: scrumLLMStageUserPrompt(stage)},
+			},
+			Temperature: preset.Temperature,
+			MaxTokens:   maxTokens,
+		})
+		cancel()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if len(resp.Choices) == 0 {
+			lastErr = fmt.Errorf("response contained no choices")
+			continue
+		}
+		content := strings.TrimSpace(resp.Choices[0].Message.Content)
+		if content == "" {
+			lastErr = fmt.Errorf("response was empty")
+			continue
+		}
+		outcome.Success = true
+		if resp.Usage != nil {
+			outcome.PromptTokens = resp.Usage.PromptTokens
+			outcome.CompletionTokens = resp.Usage.CompletionTokens
+			outcome.TotalTokens = resp.Usage.TotalTokens
+		}
+		if preset.TokenBudget > 0 && outcome.TotalTokens > preset.TokenBudget {
+			outcome.Success = false
+			lastErr = fmt.Errorf("token usage %d exceeded budget %d", outcome.TotalTokens, preset.TokenBudget)
+			continue
+		}
+		break
+	}
+	outcome.DurationMS = time.Since(started).Milliseconds()
+	if !outcome.Success && lastErr != nil {
+		outcome.FailureReason = sanitizeLiteLLMOutput(lastErr.Error())
+	}
+	return outcome
+}
+
+func scrumLLMStageSystemPrompt(agentName string) string {
+	return "You are the AgentOS " + agentName + " agent participating in an executable scrum eval. Reply with one concise operational note. Do not include secrets."
+}
+
+func scrumLLMStageUserPrompt(stage scrumLLMStage) string {
+	sprint := "overall"
+	if stage.Sprint > 0 {
+		sprint = fmt.Sprintf("sprint %d", stage.Sprint)
+	}
+	return fmt.Sprintf("Stage: %s. Scope: %s. Context: %s Return one non-empty line of evidence.", stage.Stage, sprint, stage.Context)
 }
 
 func scrumGitHubCleanupMode() string {
@@ -2014,6 +2265,10 @@ func liteLLMPresetEvalConfigFromEnv() ([]liteLLMPresetEvalConfig, error) {
 	if raw == "" {
 		return nil, fmt.Errorf("LiteLLM preset evals require AGENTOS_EVAL_LLM_PRESET_MATRIX or AGENTOS_LLM_PRESETS")
 	}
+	return liteLLMPresetEvalConfigFromRaw(raw)
+}
+
+func liteLLMPresetEvalConfigFromRaw(raw string) ([]liteLLMPresetEvalConfig, error) {
 	var presets []liteLLMPresetEvalConfig
 	if err := json.Unmarshal([]byte(raw), &presets); err != nil {
 		return nil, fmt.Errorf("parse LiteLLM preset matrix: %w", err)
