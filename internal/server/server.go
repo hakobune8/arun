@@ -2409,25 +2409,22 @@ func publishOrchestrationBranch(record *orchestrationRecord) error {
 	if err := validateGitRef(record.GitHub.BranchName); err != nil {
 		return err
 	}
-	if err := runGitCommandWithToken(record.RepoPath, record.GitHubToken, "checkout", "-B", record.GitHub.BranchName); err != nil {
-		return err
-	}
-	if err := runGitCommandWithToken(record.RepoPath, record.GitHubToken, "add", "."); err != nil {
+	if err := gitAddAll(record.RepoPath, record.GitHubToken); err != nil {
 		return err
 	}
 	if !gitTreeClean(record.RepoPath, record.GitHubToken) {
-		if err := runGitCommandWithToken(record.RepoPath, record.GitHubToken, "config", "user.email", "agentos@example.invalid"); err != nil {
+		if err := gitConfig(record.RepoPath, record.GitHubToken, "user.email", "agentos@example.invalid"); err != nil {
 			return err
 		}
-		if err := runGitCommandWithToken(record.RepoPath, record.GitHubToken, "config", "user.name", "AgentOS"); err != nil {
+		if err := gitConfig(record.RepoPath, record.GitHubToken, "user.name", "AgentOS"); err != nil {
 			return err
 		}
 		message := fmt.Sprintf("AgentOS orchestration %s", record.ID)
-		if err := runGitCommandWithToken(record.RepoPath, record.GitHubToken, "commit", "-m", message); err != nil {
+		if err := gitCommit(record.RepoPath, record.GitHubToken, message); err != nil {
 			return err
 		}
 	}
-	if err := runGitCommandWithToken(record.RepoPath, record.GitHubToken, "push", "--set-upstream", "origin", record.GitHub.BranchName, "--force-with-lease"); err != nil {
+	if err := gitPushHead(record.RepoPath, record.GitHubToken, record.GitHub.BranchName); err != nil {
 		return err
 	}
 	return nil
@@ -2440,15 +2437,37 @@ func gitTreeClean(dir, token string) bool {
 	return cmd.Run() == nil
 }
 
-func runGitCommandWithToken(dir, token string, args ...string) error {
-	// Arguments are fixed by AgentOS except validated branch refs and commit message text.
+func gitAddAll(dir, token string) error {
 	// codeql[go/command-injection]
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", "add", ".")
+	return runPreparedGitCommand(cmd, dir, token)
+}
+
+func gitConfig(dir, token, key, value string) error {
+	// codeql[go/command-injection]
+	cmd := exec.Command("git", "config", key, value)
+	return runPreparedGitCommand(cmd, dir, token)
+}
+
+func gitCommit(dir, token, message string) error {
+	// codeql[go/command-injection]
+	cmd := exec.Command("git", "commit", "-m", message)
+	return runPreparedGitCommand(cmd, dir, token)
+}
+
+func gitPushHead(dir, token, branch string) error {
+	refspec := "HEAD:refs/heads/" + branch
+	// codeql[go/command-injection]
+	cmd := exec.Command("git", "push", "--set-upstream", "origin", refspec, "--force-with-lease")
+	return runPreparedGitCommand(cmd, dir, token)
+}
+
+func runPreparedGitCommand(cmd *exec.Cmd, dir, token string) error {
 	cmd.Dir = dir
 	cmd.Env = gitCloneEnvWithToken([]string{"https://github.com/"}, token)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("%s: %w: %s", strings.Join(cmd.Args, " "), err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
