@@ -1961,14 +1961,8 @@ func prepareOrchestrationGitHub(id string, req *orchestrateRequest) (*orchestrat
 		return nil, err
 	}
 
-	issueTitle := strings.TrimSpace(req.GitHub.IssueTitle)
-	if issueTitle == "" {
-		issueTitle = strings.TrimSpace(req.Task)
-	}
-	prTitle := strings.TrimSpace(req.GitHub.PRTitle)
-	if prTitle == "" {
-		prTitle = strings.TrimSpace(req.Task)
-	}
+	issueTitle := normalizeGitHubArtifactTitle(req.GitHub.IssueTitle, req.Task, "AgentOS orchestration "+id)
+	prTitle := normalizeGitHubArtifactTitle(req.GitHub.PRTitle, req.Task, "AgentOS orchestration "+id)
 	issueTemplate := normalizeArtifactTemplateID(req.GitHub.IssueTemplate)
 	prTemplate := normalizeArtifactTemplateID(req.GitHub.PRTemplate)
 
@@ -1983,6 +1977,40 @@ func prepareOrchestrationGitHub(id string, req *orchestrateRequest) (*orchestrat
 		CreateIssue:       req.GitHub.CreateIssue,
 		CreatePullRequest: req.GitHub.CreatePullRequest,
 	}, nil
+}
+
+func normalizeGitHubArtifactTitle(title, taskText, fallback string) string {
+	for _, candidate := range []string{title, firstNonEmptyLine(taskText), fallback} {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		return truncateGitHubTitle(candidate)
+	}
+	return "AgentOS orchestration"
+}
+
+func firstNonEmptyLine(value string) string {
+	for _, line := range strings.Split(value, "\n") {
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func truncateGitHubTitle(title string) string {
+	const maxGitHubTitleRunes = 256
+	runes := []rune(strings.TrimSpace(title))
+	if len(runes) <= maxGitHubTitleRunes {
+		return string(runes)
+	}
+	const suffix = "..."
+	limit := maxGitHubTitleRunes - len([]rune(suffix))
+	if limit < 1 {
+		return string(runes[:maxGitHubTitleRunes])
+	}
+	return string(runes[:limit]) + suffix
 }
 
 func orchestrationRequestFromIssue(importReq *orchestrateFromIssueRequest, reg *agent.Registry) (*orchestrateRequest, *orchestrationSourceIssue, error) {
