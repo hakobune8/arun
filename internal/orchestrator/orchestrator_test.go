@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -843,6 +844,56 @@ func TestRecoverNoOpCIFixer_CreatesTestsAndWorkflow(t *testing.T) {
 	}
 	if !ciCoversScenario(repo) {
 		t.Fatalf("CI files do not cover scenario")
+	}
+}
+
+func TestRecoverBuiltInSubtask_StaticFrontendQAAndRelease(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if _, err := recoverFrontendStaticApp(repo, "Run an implementation-heavy agile scrum workflow for kazyamaz200/invaders on main."); err != nil {
+		t.Fatalf("recoverFrontendStaticApp() error = %v", err)
+	}
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-static-step"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{
+			"qa":              &recordingAgent{name: "qa"},
+			"release-manager": &recordingAgent{name: "release-manager"},
+		},
+		&runtime.Config{},
+	)
+
+	qaResult, ok := o.recoverBuiltInSubtask(context.Background(), &Subtask{
+		ID:          "step-2",
+		AgentName:   "qa",
+		Description: "Add focused frontend validation and smoke notes.",
+	}, runSandbox, errors.New("validation failed after 3 retries: tests"))
+	if !ok || !qaResult.Success {
+		t.Fatalf("qa recoverBuiltInSubtask() = (%+v, %v), want success", qaResult, ok)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "docs", "testing.md")); err != nil {
+		t.Fatalf("docs/testing.md not created: %v", err)
+	}
+
+	releaseResult, ok := o.recoverBuiltInSubtask(context.Background(), &Subtask{
+		ID:          "step-4",
+		AgentName:   "release-manager",
+		Description: "Prepare release readiness notes.",
+	}, runSandbox, errors.New("quality gate failed"))
+	if !ok || !releaseResult.Success {
+		t.Fatalf("release recoverBuiltInSubtask() = (%+v, %v), want success", releaseResult, ok)
+	}
+	changelog, err := os.ReadFile(filepath.Join(repo, "CHANGELOG.md"))
+	if err != nil {
+		t.Fatalf("CHANGELOG.md not created: %v", err)
+	}
+	if !strings.Contains(string(changelog), "v0.1.0") {
+		t.Fatalf("CHANGELOG.md missing version entry:\n%s", changelog)
 	}
 }
 
