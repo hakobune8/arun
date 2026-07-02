@@ -378,6 +378,8 @@ function App() {
   const [status, setStatus] = useState('')
   const [scheduleStatus, setScheduleStatus] = useState('')
   const [storageStatus, setStorageStatus] = useState('')
+  const [repositoriesLoading, setRepositoriesLoading] = useState(false)
+  const [templatesLoading, setTemplatesLoading] = useState(false)
 
   const canUseApp = !session.authRequired || session.authenticated
 
@@ -391,6 +393,16 @@ function App() {
     if (!canUseApp) return
     void Promise.all([loadAgents(), loadRepositories(), loadLLM(), loadRecords(), loadSchedules(), loadScheduleTemplates(), loadNotifications(), loadStorage()])
   }, [canUseApp])
+
+  useEffect(() => {
+    if (!canUseApp || page !== 'orchestrates' || orchPanel !== 'new') return
+    void loadRepositories()
+  }, [canUseApp, page, orchPanel])
+
+  useEffect(() => {
+    if (!canUseApp || page !== 'orchestrates' || orchPanel !== 'new') return
+    void loadTemplates(form.repo, form.baseBranch)
+  }, [canUseApp, page, orchPanel, form.repo, form.baseBranch])
 
   useEffect(() => {
     if (!selectedID) return
@@ -407,11 +419,14 @@ function App() {
   }
 
   async function loadRepositories() {
+    setRepositoriesLoading(true)
     try {
       const data = await api<RepositorySummary[]>('/api/github/repositories')
       setRepositories(data)
     } catch {
       setRepositories([])
+    } finally {
+      setRepositoriesLoading(false)
     }
   }
 
@@ -425,16 +440,19 @@ function App() {
     }
   }
 
-  async function loadTemplates() {
+  async function loadTemplates(repo = form.repo, baseBranch = form.baseBranch) {
+    setTemplatesLoading(true)
     try {
       const data = await api<Json[]>('/api/orchestrate/templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repo: form.repo, baseBranch: form.baseBranch || 'main' }),
+        body: JSON.stringify({ repo, baseBranch: baseBranch || 'main' }),
       })
       setTemplates(data)
     } catch {
       setTemplates([])
+    } finally {
+      setTemplatesLoading(false)
     }
   }
 
@@ -567,9 +585,11 @@ function App() {
             customAgents={customAgents}
             setCustomAgents={setCustomAgents}
             repositories={repositories}
+            repositoriesLoading={repositoriesLoading}
             loadRepositories={() => void loadRepositories()}
             templates={templates}
-            loadTemplates={() => void loadTemplates()}
+            templatesLoading={templatesLoading}
+            loadTemplates={() => void loadTemplates(form.repo, form.baseBranch)}
             llm={llm}
             status={status}
             setStatus={setStatus}
@@ -1037,8 +1057,10 @@ function OrchestratesPage(props: {
   customAgents: Json[]
   setCustomAgents: (agents: Json[]) => void
   repositories: RepositorySummary[]
+  repositoriesLoading: boolean
   loadRepositories: () => void
   templates: Json[]
+  templatesLoading: boolean
   loadTemplates: () => void
   llm: Json
   status: string
@@ -1138,8 +1160,8 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
           </div>
           <div className="grid gap-3 sm:grid-cols-[1fr_11rem]">
             <Field label="Repository">
-              <select className={inputClass} required value={form.repo} onChange={(e) => selectRepository(e.target.value)}>
-                <option value="">{repositoryOptions.length ? 'Select repository' : 'No GitHub repositories available'}</option>
+              <select className={inputClass} required value={form.repo} disabled={props.repositoriesLoading && repositoryOptions.length === 0} onChange={(e) => selectRepository(e.target.value)}>
+                <option value="">{props.repositoriesLoading ? 'Loading repositories...' : repositoryOptions.length ? 'Select repository' : 'No GitHub repositories available'}</option>
                 {repositoryOptions.map((repo) => <option key={repo.full_name} value={repo.full_name}>{repo.full_name}{repo.private ? ' private' : ''}</option>)}
               </select>
             </Field>
@@ -1154,8 +1176,8 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
           <div className="grid gap-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Scenario Template">
-                <select className={inputClass} value={form.scenarioTemplate} onChange={(e) => update({ scenarioTemplate: e.target.value })} onFocus={props.loadTemplates}>
-                  <option value="">No template</option>
+                <select className={inputClass} value={form.scenarioTemplate} disabled={props.templatesLoading && props.templates.length === 0} onChange={(e) => update({ scenarioTemplate: e.target.value })}>
+                  <option value="">{props.templatesLoading ? 'Loading templates...' : 'No template'}</option>
                   {props.templates.map((t) => <option key={t.id} value={t.id}>{t.name}{t.source === 'repository' ? ' (repository)' : ''}</option>)}
                 </select>
               </Field>
