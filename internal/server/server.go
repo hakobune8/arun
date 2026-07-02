@@ -543,6 +543,13 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
+			privateCount := 0
+			for _, repo := range repos {
+				if repo.Private {
+					privateCount++
+				}
+			}
+			slog.Info("GitHub OAuth repositories listed", "login", user.Login, "count", len(repos), "private", privateCount)
 			if repos == nil {
 				repos = []agentosgh.RepositorySummary{}
 			}

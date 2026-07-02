@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -61,6 +62,7 @@ type sessionResponse struct {
 type githubTokenResponse struct {
 	AccessToken string `json:"access_token"`
 	TokenType   string `json:"token_type"`
+	Scope       string `json:"scope"`
 	Error       string `json:"error"`
 	Description string `json:"error_description"`
 }
@@ -317,6 +319,7 @@ func (s *Server) exchangeGitHubCode(ctx context.Context, code string) (string, e
 	if token.AccessToken == "" {
 		return "", fmt.Errorf("missing access token")
 	}
+	slog.Info("GitHub OAuth token exchanged", "scope", token.Scope, "token_type", token.TokenType)
 	return token.AccessToken, nil
 }
 
