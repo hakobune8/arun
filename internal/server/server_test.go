@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -858,7 +859,18 @@ func TestServer_GitHub_RepositoriesUsesOAuthToken(t *testing.T) {
 				t.Fatalf("Authorization = %q, want OAuth token", got)
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`[{"id":2,"name":"oauth-repo","full_name":"owner/oauth-repo","private":false,"html_url":"https://github.com/owner/oauth-repo","default_branch":"main"}]`))
+			switch r.URL.Query().Get("page") {
+			case "1":
+				repos := make([]agentosgh.RepositorySummary, 100)
+				for i := range repos {
+					repos[i] = agentosgh.RepositorySummary{ID: int64(i + 1), Name: fmt.Sprintf("repo-%03d", i+1), FullName: fmt.Sprintf("owner/repo-%03d", i+1), DefaultBranch: "main"}
+				}
+				_ = json.NewEncoder(w).Encode(repos)
+			case "2":
+				_, _ = w.Write([]byte(`[{"id":200,"name":"private-repo","full_name":"owner/private-repo","private":true,"html_url":"https://github.com/owner/private-repo","default_branch":"main"}]`))
+			default:
+				_, _ = w.Write([]byte(`[]`))
+			}
 		default:
 			http.NotFound(w, r)
 		}
@@ -880,7 +892,7 @@ func TestServer_GitHub_RepositoriesUsesOAuthToken(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &repos); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if len(repos) != 1 || repos[0].FullName != "owner/oauth-repo" {
+	if len(repos) != 101 || repos[100].FullName != "owner/private-repo" || !repos[100].Private {
 		t.Fatalf("unexpected repositories: %+v", repos)
 	}
 }
