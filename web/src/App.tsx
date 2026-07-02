@@ -66,6 +66,7 @@ type Orchestration = {
   status?: string
   strategy?: string
   llmPreset?: string
+  stagePresets?: Json[]
   outputLanguage?: string
   agents?: string[]
   customAgents?: Json[]
@@ -143,6 +144,16 @@ type ScheduleTemplate = {
 type StorageState = {
   policy?: Json
   usage?: Json
+}
+
+function renderTemplateText(template: string, values: Record<string, string>) {
+  let rendered = template
+  Object.entries(values).forEach(([name, value]) => {
+    rendered = rendered
+      .replaceAll(`{{${name}}}`, value)
+      .replaceAll(`{{ ${name} }}`, value)
+  })
+  return rendered
 }
 
 type PageName = 'orchestrates' | 'schedules' | 'storage' | 'agents' | 'audit'
@@ -1099,8 +1110,10 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
 
   function applyTemplate() {
     if (!selectedTemplate) return
-    let task = String(selectedTemplate.taskTemplate ?? '')
-    task = task.replaceAll('{{ repo }}', form.repo).replaceAll('{{ baseBranch }}', form.baseBranch || 'main')
+    const task = renderTemplateText(String(selectedTemplate.taskTemplate ?? ''), {
+      repo: form.repo,
+      baseBranch: form.baseBranch || 'main',
+    })
     update({ task: task.trim() || form.task, strategy: selectedTemplate.strategy ?? form.strategy, createPullRequest: Boolean(selectedTemplate.createPullRequest) })
     props.setSelectedAgents(new Set(selectedTemplate.agents ?? []))
   }
@@ -1147,10 +1160,15 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
                 </select>
               </Field>
               <Field label="Strategy">
-                <select className={inputClass} value={form.strategy} onChange={(e) => update({ strategy: e.target.value })}>
-                  <option value="sequential">Sequential</option>
-                  <option value="parallel">Parallel</option>
-                </select>
+                <div className="grid gap-2">
+                  <select className={inputClass} value={form.strategy} onChange={(e) => update({ strategy: e.target.value })}>
+                    <option value="sequential">Sequential</option>
+                    <option value="parallel">Parallel</option>
+                  </select>
+                  <p className="text-xs leading-5 text-soft">
+                    Sequential runs planned subtasks in order. Parallel starts eligible subtasks concurrently and is best for independent work.
+                  </p>
+                </div>
               </Field>
             </div>
             {selectedTemplate ? (
@@ -1336,6 +1354,7 @@ function OverviewTab({ record }: { record: Orchestration }) {
   const total = record.plan?.subtasks?.length ?? results.length
   const usage = record.usage ?? {}
   const limits = record.limits ?? {}
+  const stagePresets = record.stagePresets ?? []
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_24rem]">
       <Panel>
@@ -1354,6 +1373,24 @@ function OverviewTab({ record }: { record: Orchestration }) {
           <div><span className="text-soft">GitHub Requests</span><div className="break-words text-ink">{usage.gitHubRequestsUsed ?? 0} / {usage.gitHubRequestsBudget || limits.maxGitHubRequests || '-'}</div></div>
           {usage.limitExceeded ? <div className="break-words text-red-os sm:col-span-2">{usage.limitExceeded}</div> : null}
         </div>
+        {stagePresets.length ? (
+          <>
+            <h2 className="mt-5 text-sm font-semibold text-ink">Stage Presets</h2>
+            <div className="mt-2 grid gap-2">
+              {stagePresets.map((item, idx) => (
+                <div key={`${item.stage ?? 'stage'}-${item.agent ?? idx}`} className="grid gap-2 rounded-os border border-line bg-void p-3 text-sm">
+                  <div className="flex flex-wrap gap-2">
+                    <Tag>{item.stage ?? '-'}</Tag>
+                    {item.agent ? <Tag>{item.agent}</Tag> : null}
+                    <Tag>{item.presetId ?? '-'}</Tag>
+                    {item.fallback ? <Status value="fallback" /> : null}
+                  </div>
+                  {item.reason ? <p className="break-words text-xs text-soft">{item.reason}</p> : null}
+                </div>
+              ))}
+            </div>
+          </>
+        ) : null}
         <h2 className="mt-5 text-sm font-semibold text-ink">Summary</h2>
         {record.summary ? <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-os bg-void p-3 text-xs text-soft">{record.summary}</pre> : <p className="mt-2 text-sm text-soft">Pending.</p>}
       </Panel>

@@ -104,6 +104,13 @@ capturing operational guidance in deployment docs or the preset eval matrix:
 | `reporting` | scheduled status reports and stakeholder summaries | `0.2` | `2048` | retry once; keep prompts bounded | low to normal budget |
 | `smoke` | low-cost health and staging checks | `0.0` | `512` | no retry or one retry only | low budget |
 
+Orchestrations use these preset IDs by default when they are configured.
+Planning uses `planning`; implementation-oriented agents use `coding`;
+`reviewer` uses `review`; `qa` uses `smoke`; `analyst` uses `planning`; and
+`reporter` uses `reporting`. If a recommended preset ID is missing, AgentOS
+falls back to the selected or default orchestration preset and records the
+fallback in the orchestration detail.
+
 AgentOS currently exposes `id`, `name`, `provider`, `baseUrl`, `model`, and
 `apiKeyEnv` to the server preset resolver. Timeout, temperature, token budget,
 retry policy, and cost notes are evaluated through

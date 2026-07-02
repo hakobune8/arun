@@ -1083,11 +1083,86 @@ func TestServer_OrchestrateTemplates_ReturnsBuiltIns(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &templates); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if len(templates) < 7 {
-		t.Fatalf("templates = %d, want at least 7", len(templates))
+	if len(templates) < 8 {
+		t.Fatalf("templates = %d, want at least 8", len(templates))
 	}
 	if templates[0].ID == "" || templates[0].TaskTemplate == "" || len(templates[0].Agents) == 0 {
 		t.Fatalf("template missing required fields: %+v", templates[0])
+	}
+	var scrum *scenarioTemplate
+	for i := range templates {
+		if templates[i].ID == "three-sprint-agile-scrum" {
+			scrum = &templates[i]
+			break
+		}
+	}
+	if scrum == nil {
+		t.Fatalf("three-sprint-agile-scrum template not found: %+v", templates)
+	}
+	if scrum.CreatePullRequest || scrum.Strategy != "sequential" || !strings.Contains(scrum.TaskTemplate, "Sprint 3") {
+		t.Fatalf("scrum template defaults = %+v", scrum)
+	}
+	for _, want := range []string{"analyst", "release-manager", "reviewer", "qa", "reporter"} {
+		if !containsString(scrum.Agents, want) {
+			t.Fatalf("scrum agents = %+v, want %s", scrum.Agents, want)
+		}
+	}
+}
+
+func TestServer_ResolveOrchestrationStagePresets_UsesRecommendedPresets(t *testing.T) {
+	t.Setenv("AGENTOS_LLM_DEFAULT_PRESET", "staips")
+	t.Setenv("AGENTOS_LLM_PRESETS", `[
+		{"id":"staips","name":"STAIPS","provider":"litellm","baseUrl":"http://litellm:4000","model":"default"},
+		{"id":"planning","name":"Planning","provider":"litellm","baseUrl":"http://litellm:4000","model":"planner"},
+		{"id":"coding","name":"Coding","provider":"litellm","baseUrl":"http://litellm:4000","model":"coder"},
+		{"id":"review","name":"Review","provider":"litellm","baseUrl":"http://litellm:4000","model":"reviewer"},
+		{"id":"smoke","name":"Smoke","provider":"litellm","baseUrl":"http://litellm:4000","model":"smoke"},
+		{"id":"reporting","name":"Reporting","provider":"litellm","baseUrl":"http://litellm:4000","model":"reporter"}
+	]`)
+	s := NewServer(0)
+	routing := s.resolveOrchestrationStagePresets([]string{"go-backend", "reviewer", "qa", "analyst", "reporter"}, "staips")
+
+	if !routing.enabled {
+		t.Fatal("routing disabled")
+	}
+	want := map[string]string{
+		"planning":         "planning",
+		"agent:go-backend": "coding",
+		"agent:reviewer":   "review",
+		"agent:qa":         "smoke",
+		"agent:analyst":    "planning",
+		"agent:reporter":   "reporting",
+	}
+	if len(routing.records) != 6 {
+		t.Fatalf("records = %+v, want 6 entries", routing.records)
+	}
+	for _, rec := range routing.records {
+		if rec.Fallback {
+			t.Fatalf("unexpected fallback: %+v", rec)
+		}
+		key := rec.Stage
+		if rec.Agent != "" {
+			key = "agent:" + rec.Agent
+		}
+		if want[key] != rec.PresetID {
+			t.Fatalf("%s preset = %q, want %q; records=%+v", key, rec.PresetID, want[key], routing.records)
+		}
+	}
+}
+
+func TestServer_ResolveOrchestrationStagePresets_FallsBackToSelectedPreset(t *testing.T) {
+	t.Setenv("AGENTOS_LLM_DEFAULT_PRESET", "staips")
+	t.Setenv("AGENTOS_LLM_PRESETS", `[{"id":"staips","name":"STAIPS","provider":"litellm","baseUrl":"http://litellm:4000","model":"default"}]`)
+	s := NewServer(0)
+	routing := s.resolveOrchestrationStagePresets([]string{"go-backend", "reviewer"}, "staips")
+
+	if len(routing.records) != 3 {
+		t.Fatalf("records = %+v, want planning plus two agents", routing.records)
+	}
+	for _, rec := range routing.records {
+		if rec.PresetID != "staips" || !rec.Fallback || rec.Reason == "" {
+			t.Fatalf("fallback record = %+v, want staips fallback with reason", rec)
+		}
 	}
 }
 

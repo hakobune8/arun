@@ -697,6 +697,14 @@ type scenarioTemplate struct {
 	Variables         []scenarioTemplateVariable `json:"variables,omitempty" yaml:"variables,omitempty"`
 }
 
+type orchestrationStagePreset struct {
+	Stage    string `json:"stage"`
+	Agent    string `json:"agent,omitempty"`
+	PresetID string `json:"presetId"`
+	Fallback bool   `json:"fallback,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+}
+
 type orchestrationRecommendation struct {
 	Preset            string   `json:"preset"`
 	Confidence        float64  `json:"confidence"`
@@ -720,6 +728,7 @@ type orchestrationRecord struct {
 	ScheduleID               string                                 `json:"scheduleId,omitempty"`
 	Strategy                 string                                 `json:"strategy"`
 	LLMPreset                string                                 `json:"llmPreset"`
+	StagePresets             []orchestrationStagePreset             `json:"stagePresets,omitempty"`
 	OutputLanguage           string                                 `json:"outputLanguage,omitempty"`
 	Limits                   governanceLimits                       `json:"limits,omitempty"`
 	Usage                    governanceUsage                        `json:"usage,omitempty"`
@@ -952,6 +961,11 @@ func (s *Server) createOrchestration(req *orchestrateRequest, opts orchestration
 	artifactConfig := loadArtifactConfig(repoPath)
 	applyArtifactConfig(req, artifactConfig)
 	scenarioSelection := resolveScenarioTemplateSelection(req.Scenario, repoPath, s.agentReg)
+	stageRouting := s.resolveOrchestrationStagePresets(req.Agents, presetID)
+	planningClient := llmClient
+	if stageRouting.enabled {
+		planningClient = stageRouting.clientForStage("planning", llmClient)
+	}
 
 	agents := make(map[string]runtime.Agent)
 	customAgents, err := validateCustomAgentDefinitions(req.CustomAgents, s.agentReg)
@@ -964,10 +978,14 @@ func (s *Server) createOrchestration(req *orchestrateRequest, opts orchestration
 		customByName[def.Metadata.Name] = def
 	}
 	for _, name := range req.Agents {
+		agentClient := llmClient
+		if stageRouting.enabled {
+			agentClient = stageRouting.clientForAgent(name, llmClient)
+		}
 		if def, ok := customByName[name]; ok {
-			agents[name] = agent.NewBaseAgent(def.Metadata.Name, llmClient)
+			agents[name] = agent.NewBaseAgent(def.Metadata.Name, agentClient)
 		} else {
-			a, err := s.agentReg.Create(name, llmClient)
+			a, err := s.agentReg.Create(name, agentClient)
 			if err != nil {
 				return nil, fmt.Errorf("lookup agent %s: %w", name, err)
 			}
@@ -1000,6 +1018,7 @@ func (s *Server) createOrchestration(req *orchestrateRequest, opts orchestration
 		ScheduleID:     opts.ScheduleID,
 		Strategy:       req.Strategy,
 		LLMPreset:      presetID,
+		StagePresets:   stageRouting.records,
 		OutputLanguage: normalizeOutputLanguage(req.OutputLanguage),
 		Limits:         limits,
 		Status:         "planning",
@@ -1008,6 +1027,17 @@ func (s *Server) createOrchestration(req *orchestrateRequest, opts orchestration
 		UpdatedAt:      now,
 	}
 	appendOrchestrationEvent(record, "created", "", "Orchestration created")
+	for _, entry := range stageRouting.records {
+		label := entry.Stage
+		if entry.Agent != "" {
+			label = fmt.Sprintf("%s/%s", entry.Agent, entry.Stage)
+		}
+		if entry.Fallback {
+			appendOrchestrationEvent(record, "preset.fallback", "", fmt.Sprintf("%s uses %s: %s", label, entry.PresetID, entry.Reason))
+		} else {
+			appendOrchestrationEvent(record, "preset.selected", "", fmt.Sprintf("%s uses %s", label, entry.PresetID))
+		}
+	}
 	initializeGovernanceUsage(record)
 	if record.Repo == "" {
 		record.Repo = "."
@@ -1016,7 +1046,7 @@ func (s *Server) createOrchestration(req *orchestrateRequest, opts orchestration
 		return nil, fmt.Errorf("save orchestration: %w", err)
 	}
 
-	go s.runOrchestration(record, agents, llmClient)
+	go s.runOrchestration(record, agents, planningClient)
 
 	return record, nil
 }
@@ -1026,6 +1056,108 @@ func reqRepo(req *orchestrateRequest) string {
 		return ""
 	}
 	return strings.TrimSpace(req.Repo)
+}
+
+type orchestrationStagePresetRouting struct {
+	enabled bool
+	records []orchestrationStagePreset
+	clients map[string]llm.LLMClient
+}
+
+func (s *Server) resolveOrchestrationStagePresets(agentNames []string, fallbackPreset string) orchestrationStagePresetRouting {
+	routing := orchestrationStagePresetRouting{
+		enabled: true,
+		clients: map[string]llm.LLMClient{},
+	}
+	specs := []orchestrationStagePreset{{Stage: "planning", PresetID: "planning"}}
+	seenAgents := map[string]bool{}
+	for _, agentName := range agentNames {
+		agentName = strings.TrimSpace(agentName)
+		if agentName == "" || seenAgents[agentName] {
+			continue
+		}
+		seenAgents[agentName] = true
+		specs = append(specs, orchestrationStagePreset{
+			Stage:    orchestrationPresetStageForAgent(agentName),
+			Agent:    agentName,
+			PresetID: orchestrationPresetForAgent(agentName),
+		})
+	}
+	for _, spec := range specs {
+		presetID := spec.PresetID
+		client, resolved, err := s.llmClientForPreset(presetID)
+		entry := orchestrationStagePreset{
+			Stage:    spec.Stage,
+			Agent:    spec.Agent,
+			PresetID: resolved,
+		}
+		if err != nil {
+			client, resolved, err = s.llmClientForPreset(fallbackPreset)
+			entry.PresetID = resolved
+			entry.Fallback = true
+			entry.Reason = fmt.Sprintf("preset %q is not configured", presetID)
+		}
+		if err != nil {
+			entry.PresetID = fallbackPreset
+			entry.Fallback = true
+			entry.Reason = err.Error()
+		} else {
+			routing.clients[spec.Stage] = client
+			if spec.Agent != "" {
+				routing.clients["agent:"+spec.Agent] = client
+			}
+		}
+		routing.records = append(routing.records, entry)
+	}
+	return routing
+}
+
+func (r orchestrationStagePresetRouting) clientForStage(stage string, fallback llm.LLMClient) llm.LLMClient {
+	if r.clients != nil {
+		if client := r.clients[stage]; client != nil {
+			return client
+		}
+	}
+	return fallback
+}
+
+func (r orchestrationStagePresetRouting) clientForAgent(agentName string, fallback llm.LLMClient) llm.LLMClient {
+	if r.clients != nil {
+		if client := r.clients["agent:"+agentName]; client != nil {
+			return client
+		}
+	}
+	return fallback
+}
+
+func orchestrationPresetForAgent(agentName string) string {
+	switch agentName {
+	case "analyst":
+		return "planning"
+	case "reviewer":
+		return "review"
+	case "qa":
+		return "smoke"
+	case "reporter":
+		return "reporting"
+	default:
+		return "coding"
+	}
+}
+
+func orchestrationPresetStageForAgent(agentName string) string {
+	switch orchestrationPresetForAgent(agentName) {
+	case "planning":
+		return "planning"
+	case "review":
+		return "review"
+	case "smoke":
+		return "smoke"
+	case "reporting":
+		return "reporting"
+	default:
+		return "coding"
+	}
 }
 
 func orchestrationStartStatus(err error) int {
@@ -2620,6 +2752,45 @@ Follow existing frontend conventions, keep text and controls responsive, and inc
 				{Name: "screen", Label: "Screen or flow", Placeholder: "Dashboard, New Orchestration"},
 				{Name: "change", Label: "Change requested", Placeholder: "Add filter controls", Required: true},
 				{Name: "validation", Label: "Validation target", Placeholder: "desktop/mobile screenshots, npm test"},
+			},
+		},
+		{
+			ID:                "three-sprint-agile-scrum",
+			Name:              "Three-Sprint Agile Scrum",
+			Description:       "Run a guided three-sprint scrum workflow with planning, implementation, review, smoke, and reporting stages.",
+			Source:            "built-in",
+			Agents:            availableAgentNames(registry, "analyst", "release-manager", "reviewer", "qa", "reporter"),
+			Strategy:          "sequential",
+			CreatePullRequest: false,
+			TaskTemplate: `Run a three-sprint agile scrum simulation for {{repo}} on {{baseBranch}}.
+
+Operating mode: report-first. Do not make destructive changes. Prefer Markdown reports, sprint plans, review notes, and smoke-test notes over code changes unless the repository state explicitly requires a small safe change.
+
+Sprint 1:
+- Plan a narrow product increment from repository context.
+- Identify acceptance criteria, likely files, risks, and validation.
+- Implement only if the work is low risk and clearly scoped.
+- Review the result and run a lightweight smoke check.
+
+Sprint 2:
+- Continue from Sprint 1 findings.
+- Refine scope based on review and smoke-test evidence.
+- Implement only safe incremental changes.
+- Review and smoke test again.
+
+Sprint 3:
+- Stabilize the outcome.
+- Summarize what was built, what was not built, validation results, risks, and recommended backlog.
+- Produce a final Japanese stakeholder report.
+
+Expected output:
+- Sprint 1, Sprint 2, and Sprint 3 sections.
+- Planning, coding, review, smoke, and reporting notes for each sprint.
+- Clear list of repository changes, if any.
+- Final recommendation for the next human review step.`,
+			Variables: []scenarioTemplateVariable{
+				{Name: "repo", Label: "Repository", Placeholder: "owner/repo", Required: true},
+				{Name: "baseBranch", Label: "Base branch", Default: "main", Required: true},
 			},
 		},
 	}
