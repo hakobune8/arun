@@ -22,6 +22,12 @@ type CreatePRRequest struct {
 	Body  string `json:"body"`
 	Head  string `json:"head"`
 	Base  string `json:"base"`
+	Draft bool   `json:"draft,omitempty"`
+}
+
+// UpdatePRRequest contains the parameters for updating a pull request.
+type UpdatePRRequest struct {
+	State string `json:"state,omitempty"`
 }
 
 type createPRResponse struct {
@@ -47,6 +53,23 @@ func (c *Client) CreatePR(req CreatePRRequest) (*PullRequest, error) {
 		State:   resp.State,
 		Head:    req.Head,
 		Base:    req.Base,
+	}, nil
+}
+
+// ClosePR closes an existing pull request.
+func (c *Client) ClosePR(number int) (*PullRequest, error) {
+	path := fmt.Sprintf("/%s/pulls/%d", c.RepoPath(), number)
+
+	var resp createPRResponse
+	if err := c.doJSON("PATCH", path, UpdatePRRequest{State: "closed"}, &resp); err != nil {
+		return nil, fmt.Errorf("close PR: %w", err)
+	}
+
+	return &PullRequest{
+		Number:  resp.Number,
+		Title:   resp.Title,
+		HTMLURL: resp.HTMLURL,
+		State:   resp.State,
 	}, nil
 }
 

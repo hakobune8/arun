@@ -29,6 +29,8 @@ smoke checks are opt-in with `agentos evals --live --live-url <url>`.
   `AGENTOS_EVAL_AUTH_COOKIE` or `AGENTOS_EVAL_AUTH_STORAGE_STATE`
 - [ ] `agentos evals --schedule-notification-e2e --scenario schedule-notification-e2e`
   can create, run, verify, and clean up a test schedule notification flow
+- [ ] `agentos evals --github-workflow-e2e --scenario github-workflow-e2e`
+  can create and clean up test GitHub issue/PR artifacts in a dedicated repo
 - [ ] `agentos evals --storage-cleanup-e2e --scenario storage-cleanup-e2e`
   can run against disposable storage fixtures scoped by repo and branch
 - [ ] Main navigation exposes Orchestrate, Agents, and Audit

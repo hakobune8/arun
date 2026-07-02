@@ -31,6 +31,7 @@ import (
 
 	"github.com/kazyamaz200/agentos/internal/agent"
 	"github.com/kazyamaz200/agentos/internal/apphome"
+	agentosgh "github.com/kazyamaz200/agentos/internal/github"
 	"github.com/kazyamaz200/agentos/internal/llm"
 	"github.com/kazyamaz200/agentos/internal/orchestrator"
 	"github.com/kazyamaz200/agentos/internal/runtime"
@@ -70,6 +71,7 @@ type Options struct {
 	IncludeAuthE2E           bool
 	IncludeStorageCleanupE2E bool
 	IncludeScheduleNotifyE2E bool
+	IncludeGitHubWorkflowE2E bool
 }
 
 // Report summarizes one eval suite run.
@@ -250,6 +252,18 @@ func ScheduleNotificationScenarios() []Scenario {
 	}}
 }
 
+// GitHubWorkflowScenarios returns opt-in checks that create live GitHub artifacts.
+func GitHubWorkflowScenarios() []Scenario {
+	return []Scenario{{
+		ID:             "github-workflow-e2e",
+		Name:           "Live GitHub issue and PR workflow E2E",
+		Category:       "live-github",
+		Mode:           ModePlan,
+		FunctionalArea: []string{"github-workflow", "issue-create", "pull-request-create", "check-lookup", "workflow-runs", "cleanup"},
+		Live:           true,
+	}}
+}
+
 // Run executes the selected deterministic eval scenarios.
 func Run(ctx context.Context, opts Options) (*Report, error) {
 	started := time.Now().UTC()
@@ -265,6 +279,9 @@ func Run(ctx context.Context, opts Options) (*Report, error) {
 	}
 	if opts.IncludeScheduleNotifyE2E {
 		scenarios = append(scenarios, filterScenarios(ScheduleNotificationScenarios(), opts.ScenarioIDs)...)
+	}
+	if opts.IncludeGitHubWorkflowE2E {
+		scenarios = append(scenarios, filterScenarios(GitHubWorkflowScenarios(), opts.ScenarioIDs)...)
 	}
 	if len(scenarios) == 0 {
 		return nil, fmt.Errorf("no eval scenarios selected")
@@ -402,6 +419,9 @@ func runLiveScenario(ctx context.Context, scenario *Scenario, liveURL string, re
 	}
 	if scenario.ID == "schedule-notification-e2e" {
 		return runScheduleNotificationScenario(ctx, liveURL, result)
+	}
+	if scenario.ID == "github-workflow-e2e" {
+		return runGitHubWorkflowScenario(ctx, result)
 	}
 	base := strings.TrimRight(strings.TrimSpace(liveURL), "/")
 	if base == "" {
@@ -544,6 +564,168 @@ func sanitizeAuthE2EOutput(out string) string {
 		}
 	}
 	return out
+}
+
+func runGitHubWorkflowScenario(ctx context.Context, result *ScenarioResult) *ScenarioResult {
+	repo := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_GITHUB_REPO"))
+	if repo == "" {
+		result.FailureReasons = append(result.FailureReasons, "live GitHub repo is required via AGENTOS_EVAL_GITHUB_REPO")
+		return result
+	}
+	owner, name, ok := splitGitHubRepo(repo)
+	if !ok {
+		result.FailureReasons = append(result.FailureReasons, "AGENTOS_EVAL_GITHUB_REPO must be owner/name")
+		return result
+	}
+	token, err := agentosgh.TokenFromEnv(ctx)
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "GitHub token: "+err.Error())
+		return result
+	}
+	if strings.TrimSpace(token) == "" {
+		result.FailureReasons = append(result.FailureReasons, "GitHub token is required via GITHUB_TOKEN, GH_TOKEN, or GitHub App env")
+		return result
+	}
+	baseBranch := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_GITHUB_BASE_BRANCH"))
+	if baseBranch == "" {
+		baseBranch = "main"
+	}
+	stamp := time.Now().UTC().Format("20060102T150405")
+	branch := "agentos-eval/live-github-" + stamp
+	title := "[AgentOS Eval] Live GitHub workflow " + stamp
+	filePath := ".agentos-evals/live-github-" + stamp + ".md"
+	client := agentosgh.NewClient(owner, name)
+
+	var issue *agentosgh.Issue
+	var pr *agentosgh.PullRequest
+	branchCreated := false
+	defer func() {
+		if pr != nil && pr.Number > 0 {
+			_, _ = client.ClosePR(pr.Number)
+		}
+		if issue != nil && issue.Number > 0 {
+			_, _ = client.CloseIssue(issue.Number)
+		}
+		if branchCreated {
+			_ = client.DeleteBranch(branch)
+		}
+	}()
+
+	issue, err = client.CreateIssue(agentosgh.CreateIssueRequest{
+		Title: title + " issue",
+		Body:  "Created by AgentOS live GitHub workflow E2E. This test artifact should be closed automatically.",
+	})
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "create issue: "+err.Error())
+		return result
+	}
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "github", Action: "create issue", Passed: issue.Number > 0 && issue.HTMLURL != ""})
+	if issue.Number == 0 || issue.HTMLURL == "" {
+		result.FailureReasons = append(result.FailureReasons, "created issue missing number or URL")
+	}
+
+	comment, err := client.CreateIssueComment(issue.Number, agentosgh.CreateIssueCommentRequest{Body: "AgentOS live GitHub workflow E2E is preparing a temporary branch and PR."})
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "github", Action: "comment issue", Passed: err == nil && comment != nil && comment.HTMLURL != ""})
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "comment issue: "+err.Error())
+	}
+
+	baseSHA, err := client.GetBranchSHA(baseBranch)
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "get base branch: "+err.Error())
+		return result
+	}
+	if err := client.CreateBranch(branch, baseSHA); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "create branch: "+err.Error())
+		return result
+	}
+	branchCreated = true
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "github", Action: "create branch", Passed: true})
+
+	content := fmt.Sprintf("# AgentOS Live GitHub Workflow E2E\n\n- Created: %s\n- Issue: %s\n", time.Now().UTC().Format(time.RFC3339), issue.HTMLURL)
+	if err := client.PutFile(filePath, agentosgh.PutFileRequest{
+		Message: "add AgentOS live GitHub workflow eval artifact",
+		Content: content,
+		Branch:  branch,
+	}); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "create file: "+err.Error())
+		return result
+	}
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "github", Action: "create branch file", Passed: true})
+
+	pr, err = client.CreatePR(agentosgh.CreatePRRequest{
+		Title: title + " PR",
+		Body:  "Created by AgentOS live GitHub workflow E2E. This PR should be closed automatically.\n\nIssue: " + issue.HTMLURL,
+		Head:  branch,
+		Base:  baseBranch,
+		Draft: true,
+	})
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "create pull request: "+err.Error())
+		return result
+	}
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "github", Action: "create draft pull request", Passed: pr.Number > 0 && pr.HTMLURL != ""})
+	if pr.Number == 0 || pr.HTMLURL == "" {
+		result.FailureReasons = append(result.FailureReasons, "created pull request missing number or URL")
+	}
+
+	checkRuns, err := client.GetCheckRuns(baseBranch)
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "github", Action: "check lookup", Passed: err == nil})
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "check lookup: "+err.Error())
+	}
+	workflowRuns, err := client.ListWorkflowRuns(baseBranch)
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "github", Action: "workflow run lookup", Passed: err == nil})
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "workflow run lookup: "+err.Error())
+	}
+
+	cleanupOK := true
+	closedPR, err := client.ClosePR(pr.Number)
+	if err != nil {
+		cleanupOK = false
+		result.FailureReasons = append(result.FailureReasons, "close pull request: "+err.Error())
+	} else {
+		pr = nil
+		pr = closedPR
+	}
+	closedIssue, err := client.CloseIssue(issue.Number)
+	if err != nil {
+		cleanupOK = false
+		result.FailureReasons = append(result.FailureReasons, "close issue: "+err.Error())
+	} else {
+		issue = closedIssue
+	}
+	if err := client.DeleteBranch(branch); err != nil {
+		cleanupOK = false
+		result.FailureReasons = append(result.FailureReasons, "delete branch: "+err.Error())
+	} else {
+		branchCreated = false
+	}
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "github", Action: "cleanup artifacts", Passed: cleanupOK})
+	result.Artifacts = map[string]string{
+		"repo":              repo,
+		"baseBranch":        baseBranch,
+		"branch":            branch,
+		"filePath":          filePath,
+		"issueURL":          issue.HTMLURL,
+		"issueState":        issue.State,
+		"pullRequestURL":    pr.HTMLURL,
+		"pullRequestState":  pr.State,
+		"checkRunCount":     fmt.Sprintf("%d", len(checkRuns)),
+		"workflowRunCount":  fmt.Sprintf("%d", len(workflowRuns)),
+		"createdArtifactID": stamp,
+	}
+	return result
+}
+
+func splitGitHubRepo(repo string) (owner, name string, ok bool) {
+	repo = strings.TrimSpace(repo)
+	owner, name, ok = strings.Cut(repo, "/")
+	if !ok || owner == "" || name == "" || strings.Contains(name, "/") {
+		return "", "", false
+	}
+	return owner, strings.TrimSuffix(name, ".git"), true
 }
 
 type scheduleEvalDefinition struct {
