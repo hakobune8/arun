@@ -766,6 +766,7 @@ type orchestrationRecord struct {
 	GuidelinesUsed           []guideline.AppliedRepositoryGuideline `json:"guidelinesUsed,omitempty"`
 	MissedRequiredGuidelines []guideline.RepositoryGuideline        `json:"missedRequiredGuidelines,omitempty"`
 	GitHub                   *orchestrationGitHubState              `json:"github,omitempty"`
+	GitHubToken              string                                 `json:"-"`
 	CreatedAt                time.Time                              `json:"createdAt"`
 	UpdatedAt                time.Time                              `json:"updatedAt"`
 }
@@ -1045,6 +1046,7 @@ func (s *Server) createOrchestration(req *orchestrateRequest, opts orchestration
 		Limits:         limits,
 		Status:         "planning",
 		GitHub:         githubState,
+		GitHubToken:    strings.TrimSpace(opts.GitHubToken),
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
@@ -2298,6 +2300,14 @@ func userGitHubToken(user *authUser) string {
 	return strings.TrimSpace(user.AccessToken)
 }
 
+func githubClientForRecord(record *orchestrationRecord, owner, name string) *agentosgh.Client {
+	client := agentosgh.NewClient(owner, name)
+	if record != nil && strings.TrimSpace(record.GitHubToken) != "" {
+		client.WithToken(record.GitHubToken)
+	}
+	return client
+}
+
 func (s *Server) auditOrchestrationOutcome(record *orchestrationRecord, outcome auditOutcome, message string) {
 	if record == nil {
 		return
@@ -2325,7 +2335,7 @@ func (s *Server) createTrackingIssue(record *orchestrationRecord) {
 		s.auditGitHubArtifact(record, "github.issue.create", auditOutcomeFailure, record.GitHub.Error)
 		return
 	}
-	client := agentosgh.NewClient(owner, name)
+	client := githubClientForRecord(record, owner, name)
 	issue, err := client.CreateIssue(agentosgh.CreateIssueRequest{
 		Title: record.GitHub.IssueTitle,
 		Body:  orchestrationIssueBody(record),
@@ -2360,7 +2370,14 @@ func (s *Server) createPullRequestForOrchestration(record *orchestrationRecord) 
 		s.auditGitHubArtifact(record, "github.pull_request.create", auditOutcomeFailure, record.GitHub.Error)
 		return
 	}
-	client := agentosgh.NewClient(owner, name)
+	if err := publishOrchestrationBranch(record); err != nil {
+		record.GitHub.Error = "create pull request: " + err.Error()
+		record.UpdatedAt = time.Now().UTC()
+		_ = saveOrchestrationRecord(record)
+		s.auditGitHubArtifact(record, "github.pull_request.create", auditOutcomeFailure, record.GitHub.Error)
+		return
+	}
+	client := githubClientForRecord(record, owner, name)
 	pr, err := client.CreatePR(agentosgh.CreatePRRequest{
 		Title: record.GitHub.PRTitle,
 		Body:  orchestrationPRBody(record),
@@ -2380,6 +2397,79 @@ func (s *Server) createPullRequestForOrchestration(record *orchestrationRecord) 
 	record.UpdatedAt = time.Now().UTC()
 	_ = saveOrchestrationRecord(record)
 	s.auditGitHubArtifact(record, "github.pull_request.create", auditOutcomeSuccess, pr.HTMLURL)
+}
+
+func publishOrchestrationBranch(record *orchestrationRecord) error {
+	if record == nil || record.GitHub == nil {
+		return fmt.Errorf("missing GitHub state")
+	}
+	if strings.TrimSpace(record.RepoPath) == "" {
+		return fmt.Errorf("missing repository workspace")
+	}
+	if err := validateGitRef(record.GitHub.BranchName); err != nil {
+		return err
+	}
+	if err := gitAddAll(record.RepoPath, record.GitHubToken); err != nil {
+		return err
+	}
+	if !gitTreeClean(record.RepoPath, record.GitHubToken) {
+		if err := gitConfig(record.RepoPath, record.GitHubToken, "user.email", "agentos@example.invalid"); err != nil {
+			return err
+		}
+		if err := gitConfig(record.RepoPath, record.GitHubToken, "user.name", "AgentOS"); err != nil {
+			return err
+		}
+		message := fmt.Sprintf("AgentOS orchestration %s", record.ID)
+		if err := gitCommit(record.RepoPath, record.GitHubToken, message); err != nil {
+			return err
+		}
+	}
+	if err := gitPushHead(record.RepoPath, record.GitHubToken, record.GitHub.BranchName); err != nil {
+		return err
+	}
+	return nil
+}
+
+func gitTreeClean(dir, token string) bool {
+	cmd := exec.Command("git", "diff", "--cached", "--quiet")
+	cmd.Dir = dir
+	cmd.Env = gitCloneEnvWithToken([]string{"https://github.com/"}, token)
+	return cmd.Run() == nil
+}
+
+func gitAddAll(dir, token string) error {
+	// codeql[go/command-injection]
+	cmd := exec.Command("git", "add", ".")
+	return runPreparedGitCommand(cmd, dir, token)
+}
+
+func gitConfig(dir, token, key, value string) error {
+	// codeql[go/command-injection]
+	cmd := exec.Command("git", "config", key, value)
+	return runPreparedGitCommand(cmd, dir, token)
+}
+
+func gitCommit(dir, token, message string) error {
+	// codeql[go/command-injection]
+	cmd := exec.Command("git", "commit", "-m", message)
+	return runPreparedGitCommand(cmd, dir, token)
+}
+
+func gitPushHead(dir, token, branch string) error {
+	refspec := "HEAD:refs/heads/" + branch
+	// codeql[go/command-injection]
+	cmd := exec.Command("git", "push", "--set-upstream", "origin", refspec, "--force-with-lease")
+	return runPreparedGitCommand(cmd, dir, token)
+}
+
+func runPreparedGitCommand(cmd *exec.Cmd, dir, token string) error {
+	cmd.Dir = dir
+	cmd.Env = gitCloneEnvWithToken([]string{"https://github.com/"}, token)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s: %w: %s", strings.Join(cmd.Args, " "), err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 func (s *Server) postSourceIssueStartComment(record *orchestrationRecord) {
@@ -2434,7 +2524,7 @@ func (s *Server) createSourceIssueComment(record *orchestrationRecord, body stri
 	if record.GitHub.SourceIssueNumber <= 0 {
 		return nil, fmt.Errorf("missing source issue number")
 	}
-	client := agentosgh.NewClient(owner, name)
+	client := githubClientForRecord(record, owner, name)
 	return client.CreateIssueComment(record.GitHub.SourceIssueNumber, agentosgh.CreateIssueCommentRequest{Body: body})
 }
 
@@ -2451,7 +2541,7 @@ func (s *Server) closeSourceIssueIfPolicyAllows(record *orchestrationRecord) {
 		s.auditGitHubArtifact(record, "github.issue.close", auditOutcomeFailure, record.GitHub.Error)
 		return
 	}
-	client := agentosgh.NewClient(owner, name)
+	client := githubClientForRecord(record, owner, name)
 	if _, err := client.CloseIssue(record.GitHub.SourceIssueNumber); err != nil {
 		record.GitHub.Error = "close source issue: " + err.Error()
 		s.auditGitHubArtifact(record, "github.issue.close", auditOutcomeFailure, record.GitHub.Error)
