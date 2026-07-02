@@ -888,6 +888,9 @@ func (o *Orchestrator) executeSubtask(ctx context.Context, subtask *Subtask, sha
 	_ = runCmd(ctx, runSandbox.RootDir(), "git", "add", "-N", ".") //nolint:errcheck // best-effort diff visibility for new files
 	diff := gitDiff(ctx, runSandbox.RootDir())
 	if subtask.AgentName == "frontend" && strings.TrimSpace(diff) == "" {
+		if result, ok := o.recoverNoOpBuiltInSubtask(ctx, subtask, runSandbox); ok {
+			return result
+		}
 		return SubtaskResult{
 			SubtaskID: subtask.ID,
 			Success:   false,

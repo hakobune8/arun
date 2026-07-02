@@ -2856,10 +2856,11 @@ Expected output:
 			},
 			TaskTemplate: `Run an implementation-heavy agile scrum workflow for {{repo}} on {{baseBranch}}.
 
-Operating mode: build-first for a new or sandbox repository. Create concrete, reviewable repository artifacts where safe. Prefer a small vertical slice over a broad unfinished scaffold. Do not rewrite unrelated existing work.
+Operating mode: build-first for a new or sandbox repository. Create concrete, reviewable repository artifacts where safe. Prefer a small vertical slice over a broad unfinished scaffold. Do not rewrite unrelated existing work. If the repository is completely empty or has no commits yet, create an initial minimal app scaffold with README, validation commands, and smoke-test notes before extending it.
 
 Sprint 1:
 - Inspect repository state and choose the smallest coherent product increment.
+- For an empty repository, start with a minimal static frontend or similarly lightweight scaffold that can be opened, reviewed, and validated without external services.
 - Decide the primary implementation path from repository evidence. Use backend, frontend, documentation, or a combination only when it fits the repository.
 - Implement a minimal working slice with setup or usage documentation.
 - Review and smoke test the slice.

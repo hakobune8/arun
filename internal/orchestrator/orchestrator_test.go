@@ -640,6 +640,47 @@ func TestExecuteSubtask_FrontendFailsNoOp(t *testing.T) {
 	}
 }
 
+func TestExecuteSubtask_FrontendRecoversEmptyRepositoryNoOp(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("AGENTOS_HOME", filepath.Join(t.TempDir(), "agentos-home"))
+	if err := runCmd(context.Background(), repo, "git", "init"); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"frontend": &recordingAgent{name: "frontend"}},
+		&runtime.Config{},
+	)
+
+	subtask := &Subtask{
+		ID:          "step-1",
+		Description: "Run an implementation-heavy agile scrum workflow for kazyamaz200/invaders on main.",
+		AgentName:   "frontend",
+	}
+	applyDefaultQualityGate(subtask)
+
+	result := o.executeSubtask(context.Background(), subtask, "")
+	if !result.Success {
+		t.Fatalf("executeSubtask() failed: %s", result.Error)
+	}
+	if result.QualityGate == nil || !result.QualityGate.Passed {
+		t.Fatalf("quality gate = %+v, want passed", result.QualityGate)
+	}
+	if !strings.Contains(result.Output, "static frontend scaffold") {
+		t.Fatalf("output = %q, want frontend fallback detail", result.Output)
+	}
+	for _, file := range []string{"package.json", "index.html", "styles.css", filepath.Join("src", "main.js"), "README.md", filepath.Join("docs", "smoke-test.md")} {
+		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
+			t.Fatalf("%s not created: %v", file, err)
+		}
+	}
+	if !strings.Contains(result.Diff, "index.html") {
+		t.Fatalf("diff missing scaffold files:\n%s", result.Diff)
+	}
+}
+
 func TestValidateQualityGate_RequiredCommandAndContent(t *testing.T) {
 	repo := t.TempDir()
 	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("run go test ./...\n"), 0o600); err != nil {
