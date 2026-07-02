@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -1048,6 +1049,28 @@ func TestGitCloneEnv_AddsGitHubBasicAuth(t *testing.T) {
 	}
 }
 
+func TestGitCloneEnvWithToken_UsesRequestToken(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "env-token")
+	env := gitCloneEnvWithToken([]string{"clone", "https://github.com/owner/repo.git", "/tmp/repo"}, "oauth-token")
+	var encoded string
+	for _, item := range env {
+		encoded = strings.TrimPrefix(item, "GIT_CONFIG_VALUE_0=AUTHORIZATION: basic ")
+		if encoded != item {
+			break
+		}
+	}
+	if encoded == "" {
+		t.Fatal("missing git basic auth value")
+	}
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatalf("decode auth value: %v", err)
+	}
+	if string(decoded) != "x-access-token:oauth-token" {
+		t.Fatalf("decoded auth = %q, want request OAuth token", string(decoded))
+	}
+}
+
 func TestGitCloneEnv_SkipsNonGitHubRemote(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "secret-token")
 	env := gitCloneEnv([]string{"clone", "https://example.com/owner/repo.git", "/tmp/repo"})
@@ -1233,6 +1256,35 @@ func TestServer_OrchestrateTemplates_ReturnsBuiltIns(t *testing.T) {
 			t.Fatalf("implementation-heavy-scrum agents = %+v, want %s", heavy.Agents, want)
 		}
 	}
+}
+
+func TestServer_OrchestrateTemplates_ReturnsBuiltInsWhenRepositoryUnavailable(t *testing.T) {
+	t.Setenv("AGENTOS_AUTH_REQUIRED", "true")
+	t.Setenv("AGENTOS_SESSION_SECRET", "test-secret")
+	s := NewServer(0)
+	w := serveRequestAs(s, "POST", "/api/orchestrate/templates", []byte(`{"repo":"not-a-valid-repo","baseBranch":"main"}`), &authUser{
+		Login:       "alice",
+		AccessToken: "oauth-token",
+		ExpiresAt:   time.Now().UTC().Add(time.Hour),
+	})
+	assertStatus(t, w.Code, http.StatusOK)
+
+	var templates []scenarioTemplate
+	if err := json.Unmarshal(w.Body.Bytes(), &templates); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !containsScenarioTemplate(templates, "three-sprint-agile-scrum") {
+		t.Fatalf("templates missing built-in scrum template: %+v", templates)
+	}
+}
+
+func containsScenarioTemplate(templates []scenarioTemplate, id string) bool {
+	for i := range templates {
+		if templates[i].ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 func TestServer_ResolveOrchestrationStagePresets_UsesRecommendedPresets(t *testing.T) {
