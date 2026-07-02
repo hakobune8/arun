@@ -853,7 +853,7 @@ func TestServer_GitHub_RepositoriesUsesOAuthToken(t *testing.T) {
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/installation/repositories":
-			http.Error(w, "installation unavailable", http.StatusUnauthorized)
+			t.Fatalf("OAuth-backed repository picker should not call installation repositories")
 		case "/user/repos":
 			if got := r.Header.Get("Authorization"); got != "Bearer oauth-token" {
 				t.Fatalf("Authorization = %q, want OAuth token", got)

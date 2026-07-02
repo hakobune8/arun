@@ -538,7 +538,16 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 	if path == "repositories" {
 		client := agentosgh.NewClient("", "")
 		if user != nil && user.AccessToken != "" {
-			client = client.WithToken(user.AccessToken)
+			repos, err := client.WithToken(user.AccessToken).ListUserRepositories()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if repos == nil {
+				repos = []agentosgh.RepositorySummary{}
+			}
+			_ = json.NewEncoder(w).Encode(repos) //nolint:errcheck // best-effort response
+			return
 		}
 		repos, err := client.ListRepositories()
 		if err != nil {
