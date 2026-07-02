@@ -324,23 +324,18 @@ func (s *Server) exchangeGitHubCode(ctx context.Context, code string) (string, e
 }
 
 func (s *Server) fetchGitHubUser(ctx context.Context, token string) (*authUser, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.auth.UserURL, http.NoBody)
+	data, status, err := fetchGitHubUserData(ctx, s.auth.UserURL, token, "Bearer")
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
+	if status == http.StatusUnauthorized {
+		data, status, err = fetchGitHubUserData(ctx, s.auth.UserURL, token, "token")
+		if err != nil {
+			return nil, err
+		}
 	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("status %d: %s", status, strings.TrimSpace(string(data)))
 	}
 	var ghUser githubUserResponse
 	if err := json.Unmarshal(data, &ghUser); err != nil {
@@ -355,6 +350,25 @@ func (s *Server) fetchGitHubUser(ctx context.Context, token string) (*authUser, 
 		AvatarURL: ghUser.AvatarURL,
 		HTMLURL:   ghUser.HTMLURL,
 	}, nil
+}
+
+func fetchGitHubUserData(ctx context.Context, userURL, token, scheme string) (data []byte, status int, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, userURL, http.NoBody)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", scheme+" "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	data, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, 0, err
+	}
+	return data, resp.StatusCode, nil
 }
 
 func signedCookie(name, value string, maxAge time.Duration, secret string) *http.Cookie {

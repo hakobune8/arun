@@ -912,6 +912,41 @@ func TestServer_AuthSessionDoesNotExposeAccessToken(t *testing.T) {
 	}
 }
 
+func TestServer_FetchGitHubUserRetriesUnauthorizedBearerWithTokenScheme(t *testing.T) {
+	var calls int
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		switch calls {
+		case 1:
+			if got := r.Header.Get("Authorization"); got != "Bearer oauth-token" {
+				t.Fatalf("first Authorization = %q, want bearer token", got)
+			}
+			http.Error(w, `{"message":"Bad credentials"}`, http.StatusUnauthorized)
+		case 2:
+			if got := r.Header.Get("Authorization"); got != "token oauth-token" {
+				t.Fatalf("retry Authorization = %q, want token scheme", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"login":"alice","name":"Alice","avatar_url":"https://example.com/a.png","html_url":"https://github.com/alice"}`))
+		default:
+			t.Fatalf("unexpected extra call %d", calls)
+		}
+	}))
+	defer api.Close()
+
+	s := &Server{auth: authConfig{UserURL: api.URL}}
+	user, err := s.fetchGitHubUser(context.Background(), "oauth-token")
+	if err != nil {
+		t.Fatalf("fetchGitHubUser: %v", err)
+	}
+	if user.Login != "alice" {
+		t.Fatalf("login = %q, want alice", user.Login)
+	}
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2", calls)
+	}
+}
+
 func TestServer_GitHub_UnknownResource(t *testing.T) {
 	t.Parallel()
 	s := NewServer(0)
@@ -1162,6 +1197,7 @@ func TestServer_OrchestrateTemplates_ReturnsBuiltIns(t *testing.T) {
 	}
 	if scrum == nil {
 		t.Fatalf("three-sprint-agile-scrum template not found: %+v", templates)
+		return
 	}
 	if scrum.CreatePullRequest || scrum.Strategy != "sequential" || !strings.Contains(scrum.TaskTemplate, "Sprint 3") {
 		t.Fatalf("scrum template defaults = %+v", scrum)
@@ -1184,6 +1220,7 @@ func TestServer_OrchestrateTemplates_ReturnsBuiltIns(t *testing.T) {
 	}
 	if heavy == nil {
 		t.Fatalf("implementation-heavy-scrum template not found: %+v", templates)
+		return
 	}
 	if !heavy.CreatePullRequest || heavy.Strategy != "sequential" || !strings.Contains(heavy.TaskTemplate, "build-first") {
 		t.Fatalf("implementation-heavy-scrum defaults = %+v", heavy)

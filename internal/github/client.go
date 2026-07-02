@@ -16,6 +16,7 @@
 package github
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -67,8 +68,17 @@ func (c *Client) WithToken(token string) *Client {
 }
 
 func (c *Client) do(method, path string, body io.Reader) ([]byte, error) {
+	var bodyData []byte
+	if body != nil {
+		data, err := io.ReadAll(body)
+		if err != nil {
+			return nil, fmt.Errorf("read request body: %w", err)
+		}
+		bodyData = data
+	}
+
 	url := c.BaseURL + path
-	req, err := http.NewRequest(method, url, body)
+	req, err := http.NewRequest(method, url, bytes.NewReader(bodyData))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -86,7 +96,7 @@ func (c *Client) do(method, path string, body io.Reader) ([]byte, error) {
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	if body != nil {
+	if bodyData != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
@@ -102,9 +112,37 @@ func (c *Client) do(method, path string, body io.Reader) ([]byte, error) {
 	}
 
 	if resp.StatusCode >= 400 {
+		if resp.StatusCode == http.StatusUnauthorized && token != "" {
+			return c.doWithAuthorization(method, url, bodyData, "token "+token)
+		}
 		return nil, fmt.Errorf("GitHub API error (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
+	return respBody, nil
+}
+
+func (c *Client) doWithAuthorization(method, url string, bodyData []byte, authorization string) ([]byte, error) {
+	req, err := http.NewRequest(method, url, bytes.NewReader(bodyData))
+	if err != nil {
+		return nil, fmt.Errorf("create retry request: %w", err)
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", authorization)
+	if bodyData != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http retry request: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read retry response: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("GitHub API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
 	return respBody, nil
 }
 

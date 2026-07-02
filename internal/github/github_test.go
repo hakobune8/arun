@@ -792,3 +792,41 @@ func TestClient_NonJSONResponse(t *testing.T) {
 		t.Fatal("expected error for non-JSON response, got nil")
 	}
 }
+
+func TestClient_RetriesUnauthorizedBearerWithTokenScheme(t *testing.T) {
+	t.Parallel()
+	var calls int
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		switch calls {
+		case 1:
+			if got := r.Header.Get("Authorization"); got != "Bearer oauth-token" {
+				t.Fatalf("first Authorization = %q, want bearer token", got)
+			}
+			http.Error(w, `{"message":"Bad credentials"}`, http.StatusUnauthorized)
+		case 2:
+			if got := r.Header.Get("Authorization"); got != "token oauth-token" {
+				t.Fatalf("retry Authorization = %q, want token scheme", got)
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`[]`)) //nolint:errcheck // test helper
+		default:
+			t.Fatalf("unexpected extra call %d", calls)
+		}
+	}))
+	defer ts.Close()
+
+	c := &Client{
+		BaseURL:   ts.URL,
+		Token:     "oauth-token",
+		RepoOwner: "owner",
+		RepoName:  "repo",
+		http:      ts.Client(),
+	}
+	if _, err := c.ListIssues("open"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2", calls)
+	}
+}
