@@ -54,6 +54,11 @@ func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask *Subta
 }
 
 func (o *Orchestrator) recoverNoOpBuiltInSubtask(ctx context.Context, subtask *Subtask, runSandbox sandbox.Sandbox) (SubtaskResult, bool) {
+	if subtask.AgentName == "frontend" && repositoryIsEffectivelyEmpty(runSandbox.RootDir()) {
+		applyDefaultQualityGate(subtask)
+		status := validateQualityGate(ctx, runSandbox.RootDir(), subtask.QualityGate)
+		return o.recoverNoOpBuiltInSubtaskWithStatus(ctx, subtask, runSandbox, status)
+	}
 	if !isCanonicalGoServiceTask(subtask.Description) {
 		return SubtaskResult{}, false
 	}
@@ -70,6 +75,9 @@ func (o *Orchestrator) recoverNoOpBuiltInSubtaskWithStatus(ctx context.Context, 
 	defer cancel()
 
 	switch subtask.AgentName {
+	case "frontend":
+		out, err := recoverFrontendStaticApp(runSandbox.RootDir(), subtask.Description)
+		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 	case "go-backend":
 		out, err := recoverGoBackend(recoveryCtx, runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
@@ -163,6 +171,205 @@ func main() {
 		return "", err
 	}
 	return "Created minimal Go net/http service with / and /healthz.", nil
+}
+
+func recoverFrontendStaticApp(root, description string) (string, error) {
+	if err := os.MkdirAll(filepath.Join(root, "src"), 0o755); err != nil {
+		return "", fmt.Errorf("create src dir: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o755); err != nil {
+		return "", fmt.Errorf("create docs dir: %w", err)
+	}
+	projectName := inferProjectName(description, root)
+	title := titleCase(strings.ReplaceAll(projectName, "-", " "))
+	if title == "" {
+		title = "AgentOS Sprint App"
+	}
+	packageJSON := fmt.Sprintf(`{
+  "name": %q,
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --check src/main.js",
+    "build": "node --check src/main.js"
+  }
+}
+`, sanitizePackageName(projectName))
+	indexHTML := fmt.Sprintf(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>%s</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero" aria-labelledby="app-title">
+        <p class="eyebrow">Sprint 1 prototype</p>
+        <h1 id="app-title">%s</h1>
+        <p class="summary">A minimal browser app scaffold generated from an empty repository so the scrum workflow has concrete code, docs, and validation to review.</p>
+      </section>
+      <section class="board" aria-label="Sprint workflow">
+        <article>
+          <h2>Plan</h2>
+          <p>Capture the smallest useful product slice and keep scope visible.</p>
+        </article>
+        <article>
+          <h2>Build</h2>
+          <p>Implement one interactive vertical slice with plain HTML, CSS, and JavaScript.</p>
+        </article>
+        <article>
+          <h2>Verify</h2>
+          <p>Run syntax checks and browser smoke notes before human review.</p>
+        </article>
+      </section>
+      <button id="advance-sprint" type="button">Advance sprint</button>
+      <p id="sprint-status" class="status" aria-live="polite">Sprint 1 is ready for review.</p>
+    </main>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
+`, title, title)
+	stylesCSS := `:root {
+  color: #eef7ff;
+  background: #080c12;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+}
+
+.app-shell {
+  width: min(960px, 100%);
+  display: grid;
+  gap: 24px;
+}
+
+.hero,
+.board article {
+  border: 1px solid #223146;
+  background: #0f1723;
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: #5bd8ff;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  font-size: clamp(2rem, 6vw, 4rem);
+  margin-bottom: 16px;
+}
+
+.summary,
+.status {
+  color: #adc1d9;
+  line-height: 1.7;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+button {
+  width: fit-content;
+  min-height: 44px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 18px;
+  color: #041019;
+  background: #5bd8ff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 3px;
+}
+`
+	mainJS := `const statuses = [
+  "Sprint 1 is ready for review.",
+  "Sprint 2 is queued with one extension target.",
+  "Sprint 3 is focused on stabilization and reporting."
+];
+
+let currentSprint = 0;
+
+document.getElementById("advance-sprint").addEventListener("click", () => {
+  currentSprint = (currentSprint + 1) % statuses.length;
+  document.getElementById("sprint-status").textContent = statuses[currentSprint];
+});
+`
+	readme := strings.Join([]string{
+		"# " + title,
+		"",
+		"This repository started empty. AgentOS generated a minimal static web application so an implementation-heavy scrum workflow can produce reviewable code, documentation, and validation artifacts.",
+		"",
+		"## Run",
+		"",
+		"Open `index.html` in a browser, or serve the directory with any static file server.",
+		"",
+		"## Validate",
+		"",
+		"```sh",
+		"npm test",
+		"npm run build",
+		"```",
+		"",
+		"Both scripts use `node --check` and do not require package installation.",
+		"",
+		"## Scenario",
+		"",
+		strings.TrimSpace(description),
+		"",
+	}, "\n")
+	smoke := strings.Join([]string{
+		"# Smoke Test",
+		"",
+		"1. Open `index.html` in a browser.",
+		"2. Confirm the sprint board renders without layout overlap.",
+		"3. Click `Advance sprint` and confirm the status text changes.",
+		"4. Run `npm test` and `npm run build`.",
+		"",
+	}, "\n")
+	files := map[string]string{
+		"package.json":                         packageJSON,
+		"index.html":                           indexHTML,
+		"styles.css":                           stylesCSS,
+		filepath.Join("src", "main.js"):        mainJS,
+		"README.md":                            readme,
+		filepath.Join("docs", "smoke-test.md"): smoke,
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o600); err != nil {
+			return "", fmt.Errorf("write %s: %w", name, err)
+		}
+	}
+	return "Created minimal static frontend scaffold for an empty repository with README and smoke-test notes.", nil
 }
 
 func recoverGoCI(ctx context.Context, root string) (string, error) {
@@ -315,6 +522,57 @@ func inferModulePath(description, root string) string {
 	return name
 }
 
+func inferProjectName(description, root string) string {
+	for _, token := range strings.Fields(description) {
+		repo := strings.Trim(token, " \t\r\n.,;:()[]{}<>\"'`")
+		repo = strings.TrimPrefix(repo, "https://github.com/")
+		repo = strings.TrimPrefix(repo, "http://github.com/")
+		repo = strings.TrimSuffix(repo, ".git")
+		parts := strings.Split(repo, "/")
+		if len(parts) >= 2 && parts[0] != "" && parts[1] != "" {
+			return sanitizePackageName(parts[1])
+		}
+	}
+	name := filepath.Base(root)
+	if name == "." || name == string(filepath.Separator) || name == "" {
+		return "agentos-sprint-app"
+	}
+	return sanitizePackageName(name)
+}
+
+func sanitizePackageName(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	var b strings.Builder
+	lastDash := false
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	cleaned := strings.Trim(b.String(), "-")
+	if cleaned == "" {
+		return "agentos-sprint-app"
+	}
+	return cleaned
+}
+
+func titleCase(value string) string {
+	words := strings.Fields(value)
+	for i, word := range words {
+		if word == "" {
+			continue
+		}
+		words[i] = strings.ToUpper(word[:1]) + word[1:]
+	}
+	return strings.Join(words, " ")
+}
+
 func githubModuleFromToken(token string) string {
 	token = strings.Trim(token, " \t\r\n.,;:()[]{}<>\"'`")
 	token = strings.TrimPrefix(token, "https://")
@@ -361,6 +619,29 @@ func ciCoversScenario(root string) bool {
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
+}
+
+func repositoryIsEffectivelyEmpty(root string) bool {
+	empty := true
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			empty = false
+			return filepath.SkipAll
+		}
+		if path == root {
+			return nil
+		}
+		if entry.IsDir() {
+			switch entry.Name() {
+			case ".git", ".agentos":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		empty = false
+		return filepath.SkipAll
+	})
+	return err == nil && empty
 }
 
 func runShell(ctx context.Context, dir, command string) error {
