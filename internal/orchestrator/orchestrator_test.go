@@ -713,6 +713,36 @@ func TestExecuteSubtask_FrontendRecoversEmptyRepositoryNoOp(t *testing.T) {
 	}
 }
 
+func TestRecoverBuiltInSubtask_StaticFrontendFallbackGatePasses(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-step-1"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"frontend": &recordingAgent{name: "frontend"}},
+		&runtime.Config{},
+	)
+	subtask := &Subtask{
+		ID:          "step-1",
+		AgentName:   "frontend",
+		Description: "For a completely empty repository, build Empty Invaders.",
+	}
+	applyDefaultQualityGate(subtask)
+
+	result, ok := o.recoverBuiltInSubtask(context.Background(), subtask, runSandbox, errors.New("subtask timed out after 5m"))
+	if !ok || !result.Success {
+		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
+	}
+	if result.QualityGate == nil || !result.QualityGate.Passed {
+		t.Fatalf("quality gate = %+v, want fallback pass", result.QualityGate)
+	}
+}
+
 func TestRecoverBuiltInSubtask_FrontendTimeoutRecoversEmptyRepository(t *testing.T) {
 	repo := t.TempDir()
 	if err := os.WriteFile(filepath.Join(repo, "run.log"), []byte("runtime started\n"), 0o600); err != nil {
