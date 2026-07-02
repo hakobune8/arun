@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -1911,6 +1912,66 @@ templates:
 	if body := orchestrationPRBody(record); !strings.Contains(body, "Repo PR for run-0123456789abcdef") || !strings.Contains(body, "Summary=Summary text") {
 		t.Fatalf("repository PR body = %q", body)
 	}
+}
+
+func TestOrchestrationRecord_DoesNotPersistGitHubToken(t *testing.T) {
+	record := &orchestrationRecord{
+		ID:          "run-0123456789abcdef",
+		Repo:        "owner/repo",
+		BaseBranch:  "main",
+		Status:      "completed",
+		GitHubToken: "secret-oauth-token",
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
+	}
+	data, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "secret-oauth-token") || strings.Contains(string(data), "GitHubToken") {
+		t.Fatalf("record JSON leaked GitHub token: %s", data)
+	}
+}
+
+func TestPublishOrchestrationBranch_CommitsAndPushes(t *testing.T) {
+	remote := filepath.Join(t.TempDir(), "remote.git")
+	if err := runTestGit("", "init", "--bare", remote); err != nil {
+		t.Fatal(err)
+	}
+	repo := filepath.Join(t.TempDir(), "work")
+	if err := runTestGit("", "clone", remote, repo); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("# Test\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	record := &orchestrationRecord{
+		ID:          "run-0123456789abcdef",
+		RepoPath:    repo,
+		GitHubToken: "oauth-token",
+		GitHub: &orchestrationGitHubState{
+			Repo:       "owner/repo",
+			BranchName: "agentos/run-0123456789abcdef",
+		},
+	}
+	if err := publishOrchestrationBranch(record); err != nil {
+		t.Fatalf("publishOrchestrationBranch() error = %v", err)
+	}
+	if err := runTestGit(repo, "ls-remote", "--exit-code", "origin", "refs/heads/agentos/run-0123456789abcdef"); err != nil {
+		t.Fatalf("branch was not pushed: %v", err)
+	}
+}
+
+func runTestGit(dir string, args ...string) error {
+	cmd := exec.Command("git", args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 func TestReadOrchestrationRecord_RejectsInvalidID(t *testing.T) {
