@@ -2803,6 +2803,51 @@ Expected output:
 				{Name: "baseBranch", Label: "Base branch", Default: "main", Required: true},
 			},
 		},
+		{
+			ID:                "implementation-heavy-scrum",
+			Name:              "Implementation-Heavy Scrum",
+			Description:       "Run a build-oriented scrum workflow for new or sandbox repositories with concrete artifacts, review, smoke, and reporting.",
+			Source:            "built-in",
+			Agents:            availableAgentNames(registry, "analyst", "go-backend", "frontend", "docs", "qa", "reviewer", "release-manager"),
+			Strategy:          "sequential",
+			CreatePullRequest: true,
+			Limits: governanceLimits{
+				MaxDuration:          "60m",
+				MaxSubtasks:          24,
+				MaxConcurrentRepoRun: 1,
+			},
+			TaskTemplate: `Run an implementation-heavy agile scrum workflow for {{repo}} on {{baseBranch}}.
+
+Operating mode: build-first for a new or sandbox repository. Create concrete, reviewable repository artifacts where safe. Prefer a small vertical slice over a broad unfinished scaffold. Do not rewrite unrelated existing work.
+
+Sprint 1:
+- Inspect repository state and choose the smallest coherent product increment.
+- Decide the primary implementation path from repository evidence. Use backend, frontend, documentation, or a combination only when it fits the repository.
+- Implement a minimal working slice with setup or usage documentation.
+- Review and smoke test the slice.
+
+Sprint 2:
+- Extend the slice with one meaningful capability, test, or integration.
+- Keep changes cohesive and easy to review.
+- Update documentation and run validation.
+- Review risks, gaps, and follow-up work.
+
+Sprint 3:
+- Stabilize the result, improve developer ergonomics, and remove obvious rough edges.
+- Ensure README or docs explain how to run and verify the work.
+- Produce final review, smoke-test notes, and a Japanese stakeholder report.
+
+Expected output:
+- Concrete file changes or a clear explanation of why no safe implementation was possible.
+- Sprint 1, Sprint 2, and Sprint 3 sections.
+- Implementation, documentation, review, smoke, and release-readiness notes.
+- Commands run and validation results.
+- Final backlog for the next human-led sprint.`,
+			Variables: []scenarioTemplateVariable{
+				{Name: "repo", Label: "Repository", Placeholder: "owner/repo", Required: true},
+				{Name: "baseBranch", Label: "Base branch", Default: "main", Required: true},
+			},
+		},
 	}
 	return templates
 }
