@@ -60,6 +60,59 @@ func TestRun_ExecuteScenarioReportsArtifacts(t *testing.T) {
 	}
 }
 
+func TestRun_ThreeSprintScrumScenarioReportsContinuity(t *testing.T) {
+	report, err := Run(context.Background(), Options{
+		WorkDir:     t.TempDir(),
+		ScenarioIDs: []string{"three-sprint-agile-scrum"},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if report.Total != 1 || report.Failed != 0 || report.Passed != 1 {
+		t.Fatalf("report = %+v, want one passing scrum scenario", report)
+	}
+	result := report.ScenarioRuns[0]
+	for _, want := range []string{"analyst", "reporter", "reviewer", "qa", "release-manager"} {
+		if !contains(result.Agents, want) {
+			t.Fatalf("agents = %+v, want %q", result.Agents, want)
+		}
+	}
+	if result.Artifacts["sprintCount"] != "3" || result.Artifacts["completedWork"] != "7" || result.Artifacts["blockerCount"] != "1" {
+		t.Fatalf("scrum artifacts = %+v, want sprintCount=3 completedWork=7 blockerCount=1", result.Artifacts)
+	}
+	if !strings.Contains(result.Artifacts["summary"], `"carried":["AOS-106"]`) {
+		t.Fatalf("summary = %s, want AOS-106 carried between sprints", result.Artifacts["summary"])
+	}
+	for _, file := range result.RequiredFiles {
+		if !file.Exists {
+			t.Fatalf("required scrum file missing: %+v", file)
+		}
+	}
+}
+
+func TestRun_ThreeSprintScrumLiveModeRequiresExplicitConfig(t *testing.T) {
+	t.Setenv("AGENTOS_EVAL_SCRUM_LIVE", "true")
+	t.Setenv("AGENTOS_EVAL_GITHUB_REPO", "")
+	t.Setenv("AGENTOS_EVAL_LLM_PRESET_MATRIX", "")
+	t.Setenv("AGENTOS_LLM_PRESETS", "")
+	report, err := Run(context.Background(), Options{
+		WorkDir:     t.TempDir(),
+		ScenarioIDs: []string{"three-sprint-agile-scrum"},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if report.Total != 1 || report.Passed != 0 || report.Failed != 1 {
+		t.Fatalf("report = %+v, want failing live scrum readiness", report)
+	}
+	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
+	for _, want := range []string{"AGENTOS_EVAL_GITHUB_REPO", "AGENTOS_EVAL_LLM_PRESET_MATRIX"} {
+		if !strings.Contains(reasons, want) {
+			t.Fatalf("failure reasons = %q, want %s", reasons, want)
+		}
+	}
+}
+
 func TestRun_LiveSuiteDoesNotIncludeAuthenticatedE2EByDefault(t *testing.T) {
 	report, err := Run(context.Background(), Options{
 		WorkDir:     t.TempDir(),

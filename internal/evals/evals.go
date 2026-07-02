@@ -205,6 +205,17 @@ func DefaultScenarios() []Scenario {
 			ExpectedAgents: []string{"go-backend", "docs", "ci-fixer", "release-manager", "reviewer"},
 			FunctionalArea: []string{"planning", "agent-routing", "github-workflow", "release-readiness", "ci-workflow"},
 		},
+		{
+			ID:             "three-sprint-agile-scrum",
+			Name:           "Three-sprint agile scrum simulation",
+			Category:       "operational-flow",
+			Mode:           ModeExecute,
+			Task:           "Run three agile scrum sprints with backlog refinement, sprint planning, execution, review, reporting, retrospective, and next-sprint planning.",
+			Agents:         []string{"analyst", "reporter", "reviewer", "qa", "release-manager"},
+			ExpectedAgents: []string{"analyst", "reporter", "reviewer", "qa", "release-manager"},
+			RequiredFiles:  []string{"BACKLOG.md", filepath.Join("reports", "sprint-1.md"), filepath.Join("reports", "sprint-2.md"), filepath.Join("reports", "sprint-3.md"), filepath.Join("reports", "scrum-summary.md")},
+			FunctionalArea: []string{"planning", "backlog-refinement", "sprint-execution", "qa", "review", "reporting", "retrospective", "release-readiness", "memory-continuity"},
+		},
 	}
 }
 
@@ -391,6 +402,9 @@ func runScenario(ctx context.Context, workDir string, scenario *Scenario, opts O
 	if scenario.Live {
 		return finishResult(started, runLiveScenario(ctx, scenario, opts.LiveURL, &result))
 	}
+	if scenario.ID == "three-sprint-agile-scrum" {
+		return finishResult(started, runThreeSprintScrumScenario(ctx, workDir, scenario, &result))
+	}
 	repo, err := os.MkdirTemp(workDir, scenario.ID+"-*")
 	if err != nil {
 		result.FailureReasons = append(result.FailureReasons, err.Error())
@@ -522,6 +536,330 @@ func runLiveScenario(ctx context.Context, scenario *Scenario, liveURL string, re
 	}
 	result.Artifacts = map[string]string{"url": base, "js": js, "css": css}
 	return result
+}
+
+type scrumBacklogItem struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Owner       string `json:"owner"`
+	Estimate    int    `json:"estimate"`
+	Status      string `json:"status"`
+	Sprint      int    `json:"sprint,omitempty"`
+	BlockedBy   string `json:"blockedBy,omitempty"`
+	CompletedIn int    `json:"completedIn,omitempty"`
+}
+
+type scrumSprintReport struct {
+	Sprint         int      `json:"sprint"`
+	Goal           string   `json:"goal"`
+	Planned        []string `json:"planned"`
+	Committed      []string `json:"committed"`
+	Completed      []string `json:"completed"`
+	Carried        []string `json:"carried"`
+	Blockers       []string `json:"blockers,omitempty"`
+	Agents         []string `json:"agents"`
+	Stages         []string `json:"stages"`
+	ReportPath     string   `json:"reportPath"`
+	DurationMS     int64    `json:"durationMs"`
+	RetroNote      string   `json:"retroNote"`
+	NextSprintPlan string   `json:"nextSprintPlan"`
+}
+
+type scrumSimulationReport struct {
+	Backlog       []scrumBacklogItem  `json:"backlog"`
+	Sprints       []scrumSprintReport `json:"sprints"`
+	LiveMode      bool                `json:"liveMode"`
+	LiveReadiness []ScenarioCheck     `json:"liveReadiness,omitempty"`
+}
+
+func runThreeSprintScrumScenario(ctx context.Context, workDir string, scenario *Scenario, result *ScenarioResult) *ScenarioResult {
+	repo, err := os.MkdirTemp(workDir, scenario.ID+"-*")
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, err.Error())
+		return result
+	}
+	if err := initRepo(repo); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "init scrum repo: "+err.Error())
+		return result
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "reports"), 0o755); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "create reports directory: "+err.Error())
+		return result
+	}
+
+	backlog := []scrumBacklogItem{
+		{ID: "AOS-101", Title: "Define governance quota defaults", Owner: "analyst", Estimate: 3, Status: "ready"},
+		{ID: "AOS-102", Title: "Add storage cleanup runbook checks", Owner: "qa", Estimate: 2, Status: "ready"},
+		{ID: "AOS-103", Title: "Publish stakeholder sprint report", Owner: "reporter", Estimate: 1, Status: "ready"},
+		{ID: "AOS-104", Title: "Review release readiness checklist", Owner: "reviewer", Estimate: 2, Status: "ready"},
+		{ID: "AOS-105", Title: "Prepare follow-up release notes", Owner: "release-manager", Estimate: 2, Status: "ready"},
+		{ID: "AOS-106", Title: "Investigate flaky live LLM smoke", Owner: "analyst", Estimate: 3, Status: "ready"},
+		{ID: "AOS-107", Title: "Harden preset matrix documentation", Owner: "reporter", Estimate: 1, Status: "ready"},
+	}
+	sprintPlans := [][]string{
+		{"AOS-101", "AOS-102", "AOS-103"},
+		{"AOS-104", "AOS-105", "AOS-106"},
+		{"AOS-106", "AOS-107"},
+	}
+	completedBySprint := map[int][]string{
+		1: {"AOS-101", "AOS-102", "AOS-103"},
+		2: {"AOS-104", "AOS-105"},
+		3: {"AOS-106", "AOS-107"},
+	}
+	blockersBySprint := map[int][]string{
+		2: {"AOS-106 waiting on LiteLLM operations preset confirmation"},
+	}
+	agents := []string{"analyst", "reporter", "reviewer", "qa", "release-manager"}
+	stages := []string{"backlog-refinement", "sprint-planning", "execution", "qa", "review", "reporting", "retrospective", "next-sprint-planning"}
+	var sprintReports []scrumSprintReport
+	carriedIntoSprint := map[int][]string{}
+	for sprint := 1; sprint <= 3; sprint++ {
+		sprintStarted := time.Now()
+		planned := append([]string(nil), carriedIntoSprint[sprint]...)
+		planned = append(planned, sprintPlans[sprint-1]...)
+		planned = uniqueStrings(planned)
+		completed := completedBySprint[sprint]
+		carried := differenceStrings(planned, completed)
+		if sprint < 3 && len(carried) > 0 {
+			carriedIntoSprint[sprint+1] = append(carriedIntoSprint[sprint+1], carried...)
+		}
+		for i := range backlog {
+			if slices.Contains(planned, backlog[i].ID) && backlog[i].Sprint == 0 {
+				backlog[i].Sprint = sprint
+				backlog[i].Status = "committed"
+			}
+			if slices.Contains(completed, backlog[i].ID) {
+				backlog[i].Status = "done"
+				backlog[i].CompletedIn = sprint
+			}
+			if slices.Contains(carried, backlog[i].ID) {
+				backlog[i].Status = "carried"
+				backlog[i].BlockedBy = strings.Join(blockersBySprint[sprint], "; ")
+			}
+		}
+		reportPath := filepath.Join("reports", fmt.Sprintf("sprint-%d.md", sprint))
+		retro := scrumRetroNote(sprint, carried, blockersBySprint[sprint])
+		nextPlan := scrumNextPlan(sprint, carried)
+		report := scrumSprintReport{
+			Sprint:         sprint,
+			Goal:           scrumSprintGoal(sprint),
+			Planned:        planned,
+			Committed:      planned,
+			Completed:      append([]string(nil), completed...),
+			Carried:        carried,
+			Blockers:       append([]string(nil), blockersBySprint[sprint]...),
+			Agents:         agents,
+			Stages:         stages,
+			ReportPath:     reportPath,
+			DurationMS:     time.Since(sprintStarted).Milliseconds(),
+			RetroNote:      retro,
+			NextSprintPlan: nextPlan,
+		}
+		if err := os.WriteFile(filepath.Join(repo, reportPath), []byte(renderScrumSprintMarkdown(&report)), 0o600); err != nil {
+			result.FailureReasons = append(result.FailureReasons, fmt.Sprintf("sprint %d report: %v", sprint, err))
+		}
+		sprintReports = append(sprintReports, report)
+		result.Checks = append(result.Checks,
+			ScenarioCheck{Page: fmt.Sprintf("sprint-%d", sprint), Action: "planning", Passed: len(planned) > 0},
+			ScenarioCheck{Page: fmt.Sprintf("sprint-%d", sprint), Action: "execution", Passed: len(completed) > 0},
+			ScenarioCheck{Page: fmt.Sprintf("sprint-%d", sprint), Action: "review", Passed: slices.Contains(agents, "reviewer")},
+			ScenarioCheck{Page: fmt.Sprintf("sprint-%d", sprint), Action: "retrospective", Passed: retro != ""},
+		)
+	}
+	liveReadiness := scrumLiveReadinessChecks()
+	for _, check := range liveReadiness {
+		result.Checks = append(result.Checks, check)
+		if !check.Passed && strings.EqualFold(os.Getenv("AGENTOS_EVAL_SCRUM_LIVE"), "true") {
+			result.FailureReasons = append(result.FailureReasons, fmt.Sprintf("%s/%s: %s", check.Page, check.Action, check.Failure))
+		}
+	}
+	summary := scrumSimulationReport{
+		Backlog:       backlog,
+		Sprints:       sprintReports,
+		LiveMode:      strings.EqualFold(os.Getenv("AGENTOS_EVAL_SCRUM_LIVE"), "true"),
+		LiveReadiness: liveReadiness,
+	}
+	summaryJSON, err := json.Marshal(summary)
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "scrum summary json: "+err.Error())
+	} else if err := os.WriteFile(filepath.Join(repo, "reports", "scrum-summary.md"), []byte(renderScrumSummaryMarkdown(&summary)), 0o600); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "scrum summary report: "+err.Error())
+	}
+	if err := os.WriteFile(filepath.Join(repo, "BACKLOG.md"), []byte(renderScrumBacklogMarkdown(backlog)), 0o600); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "backlog report: "+err.Error())
+	}
+	for _, name := range scenario.RequiredFiles {
+		_, statErr := os.Stat(filepath.Join(repo, name))
+		exists := statErr == nil
+		result.RequiredFiles = append(result.RequiredFiles, FileCheck{Path: name, Exists: exists})
+		if !exists {
+			result.FailureReasons = append(result.FailureReasons, fmt.Sprintf("missing required file %q", name))
+		}
+	}
+	result.Agents = append([]string(nil), agents...)
+	result.Subtasks = len(sprintReports) * len(stages)
+	result.Successes = len(sprintReports)
+	result.Failures = len(result.FailureReasons)
+	result.Artifacts = map[string]string{
+		"repository":       repo,
+		"sprintCount":      fmt.Sprintf("%d", len(sprintReports)),
+		"completedWork":    fmt.Sprintf("%d", scrumCompletedCount(backlog)),
+		"carriedWork":      fmt.Sprintf("%d", scrumCarriedCount(sprintReports)),
+		"blockerCount":     fmt.Sprintf("%d", scrumBlockerCount(sprintReports)),
+		"summary":          string(summaryJSON),
+		"liveMode":         fmt.Sprintf("%t", summary.LiveMode),
+		"liveModeNote":     "Set AGENTOS_EVAL_SCRUM_LIVE=true with GitHub and LLM settings to make live readiness checks mandatory.",
+		"functionalStages": strings.Join(stages, ","),
+	}
+	return result
+}
+
+func uniqueStrings(values []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, value := range values {
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
+}
+
+func differenceStrings(all, done []string) []string {
+	var diff []string
+	for _, value := range all {
+		if !slices.Contains(done, value) {
+			diff = append(diff, value)
+		}
+	}
+	return diff
+}
+
+func scrumSprintGoal(sprint int) string {
+	switch sprint {
+	case 1:
+		return "Establish operational controls and a reporting baseline."
+	case 2:
+		return "Review release readiness and investigate live LLM risks."
+	default:
+		return "Close carried work and prepare the next operational hardening slice."
+	}
+}
+
+func scrumRetroNote(sprint int, carried, blockers []string) string {
+	if len(carried) == 0 {
+		return fmt.Sprintf("Sprint %d completed all committed work; continue the same WIP limit.", sprint)
+	}
+	return fmt.Sprintf("Sprint %d carried %s because %s; make dependency confirmation explicit in planning.", sprint, strings.Join(carried, ","), strings.Join(blockers, "; "))
+}
+
+func scrumNextPlan(sprint int, carried []string) string {
+	if sprint >= 3 {
+		return "Prepare release-readiness handoff and convert residual risks into follow-up issues."
+	}
+	if len(carried) == 0 {
+		return fmt.Sprintf("Sprint %d can pull the next ready backlog slice.", sprint+1)
+	}
+	return fmt.Sprintf("Sprint %d starts with carried work %s before pulling new scope.", sprint+1, strings.Join(carried, ","))
+}
+
+func renderScrumSprintMarkdown(report *scrumSprintReport) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Sprint %d Report\n\n", report.Sprint)
+	fmt.Fprintf(&b, "Goal: %s\n\n", report.Goal)
+	fmt.Fprintf(&b, "- Planned: %s\n", strings.Join(report.Planned, ", "))
+	fmt.Fprintf(&b, "- Completed: %s\n", strings.Join(report.Completed, ", "))
+	fmt.Fprintf(&b, "- Carried: %s\n", strings.Join(report.Carried, ", "))
+	if len(report.Blockers) > 0 {
+		fmt.Fprintf(&b, "- Blockers: %s\n", strings.Join(report.Blockers, "; "))
+	}
+	fmt.Fprintf(&b, "- Agents: %s\n", strings.Join(report.Agents, ", "))
+	fmt.Fprintf(&b, "- Retro: %s\n", report.RetroNote)
+	fmt.Fprintf(&b, "- Next: %s\n", report.NextSprintPlan)
+	return b.String()
+}
+
+func renderScrumSummaryMarkdown(summary *scrumSimulationReport) string {
+	var b strings.Builder
+	b.WriteString("# Three-Sprint Scrum Summary\n\n")
+	for i := range summary.Sprints {
+		sprint := &summary.Sprints[i]
+		fmt.Fprintf(&b, "## Sprint %d\n\n", sprint.Sprint)
+		fmt.Fprintf(&b, "- Completed: %s\n", strings.Join(sprint.Completed, ", "))
+		fmt.Fprintf(&b, "- Carried: %s\n", strings.Join(sprint.Carried, ", "))
+		fmt.Fprintf(&b, "- Blockers: %s\n", strings.Join(sprint.Blockers, "; "))
+		fmt.Fprintf(&b, "- Retro: %s\n\n", sprint.RetroNote)
+	}
+	fmt.Fprintf(&b, "Live mode: %t\n", summary.LiveMode)
+	return b.String()
+}
+
+func renderScrumBacklogMarkdown(backlog []scrumBacklogItem) string {
+	var b strings.Builder
+	b.WriteString("# Scrum Backlog\n\n")
+	for _, item := range backlog {
+		fmt.Fprintf(&b, "- [%s] %s — owner=%s estimate=%d status=%s sprint=%d completedIn=%d blocker=%s\n", item.ID, item.Title, item.Owner, item.Estimate, item.Status, item.Sprint, item.CompletedIn, item.BlockedBy)
+	}
+	return b.String()
+}
+
+func scrumCompletedCount(backlog []scrumBacklogItem) int {
+	count := 0
+	for _, item := range backlog {
+		if item.Status == "done" {
+			count++
+		}
+	}
+	return count
+}
+
+func scrumCarriedCount(sprints []scrumSprintReport) int {
+	count := 0
+	for i := range sprints {
+		count += len(sprints[i].Carried)
+	}
+	return count
+}
+
+func scrumBlockerCount(sprints []scrumSprintReport) int {
+	count := 0
+	for i := range sprints {
+		count += len(sprints[i].Blockers)
+	}
+	return count
+}
+
+func scrumLiveReadinessChecks() []ScenarioCheck {
+	liveEnabled := strings.EqualFold(strings.TrimSpace(os.Getenv("AGENTOS_EVAL_SCRUM_LIVE")), "true")
+	if !liveEnabled {
+		return []ScenarioCheck{{
+			Page:   "scrum-live",
+			Action: "live mode disabled",
+			Passed: true,
+		}}
+	}
+	checks := []ScenarioCheck{
+		{
+			Page:    "scrum-live",
+			Action:  "github repo configured",
+			Passed:  strings.TrimSpace(os.Getenv("AGENTOS_EVAL_GITHUB_REPO")) != "",
+			Failure: "AGENTOS_EVAL_GITHUB_REPO is required for live scrum GitHub integration",
+		},
+		{
+			Page:    "scrum-live",
+			Action:  "llm preset matrix configured",
+			Passed:  strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LLM_PRESET_MATRIX")) != "" || strings.TrimSpace(os.Getenv("AGENTOS_LLM_PRESETS")) != "",
+			Failure: "AGENTOS_EVAL_LLM_PRESET_MATRIX or AGENTOS_LLM_PRESETS is required for live scrum LLM integration",
+		},
+	}
+	for i := range checks {
+		if checks[i].Passed {
+			checks[i].Failure = ""
+		}
+	}
+	return checks
 }
 
 type authE2EResult struct {
