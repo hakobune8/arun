@@ -2,6 +2,8 @@ package evals
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -195,6 +197,56 @@ func TestRun_RealLLMSmokeRequiresOptIn(t *testing.T) {
 	}
 }
 
+func TestRun_LiteLLMPresetEvalsRequiresOptIn(t *testing.T) {
+	t.Setenv("AGENTOS_EVAL_LLM_PRESETS", "")
+	report, err := Run(context.Background(), Options{
+		WorkDir:                   t.TempDir(),
+		ScenarioIDs:               []string{"litellm-preset-matrix"},
+		IncludeLiteLLMPresetEvals: true,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if report.Total != 1 || report.Passed != 0 || report.Failed != 1 {
+		t.Fatalf("report = %+v, want one failing LiteLLM preset scenario", report)
+	}
+	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
+	if !strings.Contains(reasons, "AGENTOS_EVAL_LLM_PRESETS=true") {
+		t.Fatalf("failure reasons = %q, want missing LiteLLM preset opt-in", reasons)
+	}
+}
+
+func TestRun_LiteLLMPresetEvalsReportsMatrix(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Fatalf("path = %s, want /chat/completions", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"index":0,"message":{"role":"assistant","content":"ready agentos-preset-ok"}}],"usage":{"prompt_tokens":4,"completion_tokens":3,"total_tokens":7}}`))
+	}))
+	defer server.Close()
+	t.Setenv("AGENTOS_EVAL_LLM_PRESETS", "true")
+	t.Setenv("AGENTOS_EVAL_LLM_PRESET_MATRIX", `[{"id":"smoke","name":"Low-cost smoke","useCase":"smoke","provider":"litellm","baseUrl":"`+server.URL+`","model":"test-model","apiKeyEnv":"","timeout":"5s","temperature":0,"maxTokens":64,"retryAttempts":1,"tokenBudget":500,"costBudget":"low"}]`)
+	report, err := Run(context.Background(), Options{
+		WorkDir:                   t.TempDir(),
+		ScenarioIDs:               []string{"litellm-preset-matrix"},
+		IncludeLiteLLMPresetEvals: true,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if report.Total != 1 || report.Failed != 0 || report.Passed != 1 {
+		t.Fatalf("report = %+v, want one passing LiteLLM preset scenario", report)
+	}
+	result := report.ScenarioRuns[0]
+	if result.Successes != 1 || result.Artifacts["successRate"] != "1.00" {
+		t.Fatalf("result = %+v, want one successful preset with successRate 1.00", result)
+	}
+	if !strings.Contains(result.Artifacts["outcomes"], `"totalTokens":7`) || strings.Contains(result.Artifacts["outcomes"], "secret") {
+		t.Fatalf("outcomes artifact = %s, want token usage without secrets", result.Artifacts["outcomes"])
+	}
+}
+
 func TestCountingLLMClientCapsMaxTokens(t *testing.T) {
 	inner := llm.NewMockLLMClient([]llm.ChatResponse{{
 		Choices: []llm.Choice{{Message: llm.Message{Role: llm.RoleAssistant, Content: "{}"}}},
@@ -225,6 +277,14 @@ func TestSanitizeKubernetesOutput(t *testing.T) {
 	got := sanitizeKubernetesOutput("event included ghp_secret")
 	if strings.Contains(got, "ghp_secret") || !strings.Contains(got, "[redacted]") {
 		t.Fatalf("sanitizeKubernetesOutput() = %q", got)
+	}
+}
+
+func TestSanitizeLiteLLMOutput(t *testing.T) {
+	t.Setenv("LITELLM_API_KEY", "sk-secret")
+	got := sanitizeLiteLLMOutput("request failed with sk-secret")
+	if strings.Contains(got, "sk-secret") || !strings.Contains(got, "[redacted]") {
+		t.Fatalf("sanitizeLiteLLMOutput() = %q", got)
 	}
 }
 

@@ -127,15 +127,38 @@ environment variables backed by Kubernetes Secrets.
 
 ```yaml
 llm:
-  defaultPreset: staips
+  defaultPreset: coding
   presets:
-    - id: staips
-      name: STAIPS coder
+    - id: coding
+      name: Coding
+      provider: litellm
+      baseUrl: http://staips-litellm.staips-edge.svc.cluster.local
+      model: staips-chat
+      apiKeyEnv: LITELLM_API_KEY
+    - id: review
+      name: Review
+      provider: litellm
+      baseUrl: http://staips-litellm.staips-edge.svc.cluster.local
+      model: staips-chat
+      apiKeyEnv: LITELLM_API_KEY
+    - id: smoke
+      name: Low-cost smoke
       provider: litellm
       baseUrl: http://staips-litellm.staips-edge.svc.cluster.local
       model: staips-chat
       apiKeyEnv: LITELLM_API_KEY
 ```
+
+Safe rollout flow for preset changes:
+
+1. Add the new preset while keeping the current default.
+2. Run `agentos evals --litellm-preset-evals --scenario litellm-preset-matrix`
+   in staging with `AGENTOS_EVAL_LLM_PRESET_MATRIX`.
+3. Deploy the preset list with Helm and verify `/api/settings/llm` only exposes
+   public metadata and `keyConfigured`.
+4. Switch `llm.defaultPreset` after staging reports are acceptable.
+5. Roll back by restoring the previous `llm.defaultPreset` and preset list, then
+   redeploying the prior Helm values.
 
 ### GitHub Container Registry
 

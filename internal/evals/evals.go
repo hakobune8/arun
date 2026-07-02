@@ -75,6 +75,7 @@ type Options struct {
 	IncludeGitHubWorkflowE2E    bool
 	IncludeKubernetesRolloutE2E bool
 	IncludeRealLLMSmokeE2E      bool
+	IncludeLiteLLMPresetEvals   bool
 }
 
 // Report summarizes one eval suite run.
@@ -291,6 +292,18 @@ func RealLLMSmokeScenarios() []Scenario {
 	}}
 }
 
+// LiteLLMPresetScenarios returns opt-in checks that compare configured LiteLLM presets.
+func LiteLLMPresetScenarios() []Scenario {
+	return []Scenario{{
+		ID:             "litellm-preset-matrix",
+		Name:           "LiteLLM preset matrix",
+		Category:       "live-llm",
+		Mode:           ModePlan,
+		FunctionalArea: []string{"llm", "model-presets", "latency", "budget-signals", "failure-modes"},
+		Live:           true,
+	}}
+}
+
 // Run executes the selected deterministic eval scenarios.
 func Run(ctx context.Context, opts Options) (*Report, error) {
 	started := time.Now().UTC()
@@ -315,6 +328,9 @@ func Run(ctx context.Context, opts Options) (*Report, error) {
 	}
 	if opts.IncludeRealLLMSmokeE2E {
 		scenarios = append(scenarios, filterScenarios(RealLLMSmokeScenarios(), opts.ScenarioIDs)...)
+	}
+	if opts.IncludeLiteLLMPresetEvals {
+		scenarios = append(scenarios, filterScenarios(LiteLLMPresetScenarios(), opts.ScenarioIDs)...)
 	}
 	if len(scenarios) == 0 {
 		return nil, fmt.Errorf("no eval scenarios selected")
@@ -461,6 +477,9 @@ func runLiveScenario(ctx context.Context, scenario *Scenario, liveURL string, re
 	}
 	if scenario.ID == "real-llm-orchestration-smoke" {
 		return runRealLLMSmokeScenario(ctx, result)
+	}
+	if scenario.ID == "litellm-preset-matrix" {
+		return runLiteLLMPresetScenario(ctx, result)
 	}
 	base := strings.TrimRight(strings.TrimSpace(liveURL), "/")
 	if base == "" {
@@ -1091,6 +1110,41 @@ type realLLMSmokeConfig struct {
 	Model         string
 }
 
+type liteLLMPresetEvalConfig struct {
+	ID             string  `json:"id"`
+	Name           string  `json:"name"`
+	Provider       string  `json:"provider"`
+	UseCase        string  `json:"useCase"`
+	BaseURL        string  `json:"baseUrl"`
+	Model          string  `json:"model"`
+	APIKeyEnv      string  `json:"apiKeyEnv,omitempty"`
+	Timeout        string  `json:"timeout,omitempty"`
+	Temperature    float64 `json:"temperature,omitempty"`
+	MaxTokens      int     `json:"maxTokens,omitempty"`
+	RetryAttempts  int     `json:"retryAttempts,omitempty"`
+	CostBudget     string  `json:"costBudget,omitempty"`
+	TokenBudget    int     `json:"tokenBudget,omitempty"`
+	ExpectedPhrase string  `json:"expectedPhrase,omitempty"`
+}
+
+type liteLLMPresetEvalOutcome struct {
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	UseCase          string `json:"useCase,omitempty"`
+	Provider         string `json:"provider,omitempty"`
+	Model            string `json:"model"`
+	BaseURL          string `json:"baseUrl"`
+	Success          bool   `json:"success"`
+	DurationMS       int64  `json:"durationMs"`
+	FailureReason    string `json:"failureReason,omitempty"`
+	PromptTokens     int    `json:"promptTokens,omitempty"`
+	CompletionTokens int    `json:"completionTokens,omitempty"`
+	TotalTokens      int    `json:"totalTokens,omitempty"`
+	TokenBudget      int    `json:"tokenBudget,omitempty"`
+	CostBudget       string `json:"costBudget,omitempty"`
+	RetryAttempts    int    `json:"retryAttempts"`
+}
+
 type countingLLMClient struct {
 	inner               llm.LLMClient
 	maxTokens           int
@@ -1121,6 +1175,220 @@ func (c *countingLLMClient) Chat(ctx context.Context, req llm.ChatRequest) (*llm
 
 func (c *countingLLMClient) ModelName() string {
 	return c.inner.ModelName()
+}
+
+func runLiteLLMPresetScenario(ctx context.Context, result *ScenarioResult) *ScenarioResult {
+	presets, err := liteLLMPresetEvalConfigFromEnv()
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, err.Error())
+		return result
+	}
+	outcomes := make([]liteLLMPresetEvalOutcome, 0, len(presets))
+	for i := range presets {
+		preset := &presets[i]
+		outcome := runLiteLLMPresetCheck(ctx, preset)
+		outcomes = append(outcomes, outcome)
+		result.Checks = append(result.Checks, ScenarioCheck{
+			Page:       "litellm",
+			Action:     "preset " + preset.ID,
+			Passed:     outcome.Success,
+			DurationMS: outcome.DurationMS,
+			Failure:    outcome.FailureReason,
+		})
+		if outcome.Success {
+			result.Successes++
+		} else {
+			result.Failures++
+			result.FailureReasons = append(result.FailureReasons, fmt.Sprintf("%s: %s", preset.ID, outcome.FailureReason))
+		}
+	}
+	encoded, _ := json.Marshal(outcomes)
+	successRate := 0.0
+	if len(outcomes) > 0 {
+		successRate = float64(result.Successes) / float64(len(outcomes))
+	}
+	result.Artifacts = map[string]string{
+		"presetCount":     fmt.Sprintf("%d", len(outcomes)),
+		"successes":       fmt.Sprintf("%d", result.Successes),
+		"failures":        fmt.Sprintf("%d", result.Failures),
+		"successRate":     fmt.Sprintf("%.2f", successRate),
+		"outcomes":        string(encoded),
+		"costBudgetNote":  "Cost fields are reported from preset metadata; LiteLLM response cost is included only when exposed through usage or external reporting.",
+		"secretsRedacted": "true",
+	}
+	return result
+}
+
+func runLiteLLMPresetCheck(ctx context.Context, preset *liteLLMPresetEvalConfig) liteLLMPresetEvalOutcome {
+	timeout := 45 * time.Second
+	if strings.TrimSpace(preset.Timeout) != "" {
+		if parsed, err := time.ParseDuration(preset.Timeout); err == nil {
+			timeout = parsed
+		}
+	}
+	maxTokens := preset.MaxTokens
+	if maxTokens <= 0 {
+		maxTokens = 256
+	}
+	apiKey := ""
+	if preset.APIKeyEnv != "" {
+		apiKey = os.Getenv(preset.APIKeyEnv)
+	}
+	client := llm.NewLiteLLMClient(llm.Config{
+		BaseURL:    preset.BaseURL,
+		APIKey:     apiKey,
+		ModelCoder: preset.Model,
+		Timeout:    timeout,
+	})
+	outcome := liteLLMPresetEvalOutcome{
+		ID:            preset.ID,
+		Name:          preset.Name,
+		UseCase:       preset.UseCase,
+		Provider:      preset.Provider,
+		Model:         preset.Model,
+		BaseURL:       preset.BaseURL,
+		TokenBudget:   preset.TokenBudget,
+		CostBudget:    preset.CostBudget,
+		RetryAttempts: preset.RetryAttempts,
+	}
+	expected := strings.TrimSpace(preset.ExpectedPhrase)
+	attempts := preset.RetryAttempts + 1
+	if attempts < 1 {
+		attempts = 1
+	}
+	started := time.Now()
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		callCtx, cancel := context.WithTimeout(ctx, timeout)
+		resp, err := client.Chat(callCtx, llm.ChatRequest{
+			Model: preset.Model,
+			Messages: []llm.Message{
+				{Role: llm.RoleSystem, Content: liteLLMPresetSystemPrompt(expected)},
+				{Role: llm.RoleUser, Content: liteLLMPresetUserPrompt(expected)},
+			},
+			Temperature: preset.Temperature,
+			MaxTokens:   maxTokens,
+		})
+		cancel()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		content := strings.TrimSpace(resp.Choices[0].Message.Content)
+		outcome.Success = content != "" && (expected == "" || strings.Contains(content, expected))
+		if content == "" {
+			lastErr = fmt.Errorf("response was empty")
+			continue
+		}
+		if expected != "" && !outcome.Success {
+			lastErr = fmt.Errorf("response did not include expected marker %q", expected)
+			continue
+		}
+		if resp.Usage != nil {
+			outcome.PromptTokens = resp.Usage.PromptTokens
+			outcome.CompletionTokens = resp.Usage.CompletionTokens
+			outcome.TotalTokens = resp.Usage.TotalTokens
+		}
+		if preset.TokenBudget > 0 && outcome.TotalTokens > preset.TokenBudget {
+			outcome.Success = false
+			lastErr = fmt.Errorf("token usage %d exceeded budget %d", outcome.TotalTokens, preset.TokenBudget)
+			continue
+		}
+		break
+	}
+	outcome.DurationMS = time.Since(started).Milliseconds()
+	if !outcome.Success && lastErr != nil {
+		outcome.FailureReason = sanitizeLiteLLMOutput(lastErr.Error())
+	}
+	return outcome
+}
+
+func liteLLMPresetSystemPrompt(expected string) string {
+	if expected == "" {
+		return "You are an AgentOS LiteLLM preset health evaluator. Reply with a concise one-line operational readiness response."
+	}
+	return "You are an AgentOS LiteLLM preset health evaluator. Reply concisely and include the requested marker exactly."
+}
+
+func liteLLMPresetUserPrompt(expected string) string {
+	if expected == "" {
+		return "Return a one-line operational readiness response for this preset."
+	}
+	return "Return a one-line operational readiness response containing this marker exactly: " + expected
+}
+
+func liteLLMPresetEvalConfigFromEnv() ([]liteLLMPresetEvalConfig, error) {
+	if !strings.EqualFold(strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LLM_PRESETS")), "true") {
+		return nil, fmt.Errorf("LiteLLM preset evals require AGENTOS_EVAL_LLM_PRESETS=true")
+	}
+	raw := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LLM_PRESET_MATRIX"))
+	if raw == "" {
+		raw = strings.TrimSpace(os.Getenv("AGENTOS_LLM_PRESETS"))
+	}
+	if raw == "" {
+		return nil, fmt.Errorf("LiteLLM preset evals require AGENTOS_EVAL_LLM_PRESET_MATRIX or AGENTOS_LLM_PRESETS")
+	}
+	var presets []liteLLMPresetEvalConfig
+	if err := json.Unmarshal([]byte(raw), &presets); err != nil {
+		return nil, fmt.Errorf("parse LiteLLM preset matrix: %w", err)
+	}
+	defaultBaseURL := strings.TrimRight(strings.TrimSpace(os.Getenv("LITELLM_BASE_URL")), "/")
+	defaultAPIKeyEnv := strings.Join([]string{"LITELLM", "API", "KEY"}, "_")
+	clean := make([]liteLLMPresetEvalConfig, 0, len(presets))
+	seen := map[string]bool{}
+	for i := range presets {
+		preset := presets[i]
+		preset.ID = strings.TrimSpace(preset.ID)
+		preset.Name = strings.TrimSpace(preset.Name)
+		preset.Provider = strings.TrimSpace(preset.Provider)
+		preset.UseCase = strings.TrimSpace(preset.UseCase)
+		preset.BaseURL = strings.TrimRight(strings.TrimSpace(preset.BaseURL), "/")
+		preset.Model = strings.TrimSpace(preset.Model)
+		preset.APIKeyEnv = strings.TrimSpace(preset.APIKeyEnv)
+		preset.Timeout = strings.TrimSpace(preset.Timeout)
+		preset.CostBudget = strings.TrimSpace(preset.CostBudget)
+		preset.ExpectedPhrase = strings.TrimSpace(preset.ExpectedPhrase)
+		if preset.ID == "" || preset.Model == "" || seen[preset.ID] {
+			continue
+		}
+		if preset.Name == "" {
+			preset.Name = preset.ID
+		}
+		if preset.Provider == "" {
+			preset.Provider = "litellm"
+		}
+		if preset.BaseURL == "" {
+			preset.BaseURL = defaultBaseURL
+		}
+		if preset.BaseURL == "" {
+			continue
+		}
+		if preset.APIKeyEnv == "" {
+			preset.APIKeyEnv = defaultAPIKeyEnv
+		}
+		if preset.RetryAttempts < 0 {
+			preset.RetryAttempts = 0
+		}
+		if preset.MaxTokens <= 0 {
+			preset.MaxTokens = 256
+		}
+		seen[preset.ID] = true
+		clean = append(clean, preset)
+	}
+	if len(clean) == 0 {
+		return nil, fmt.Errorf("LiteLLM preset matrix contained no usable presets")
+	}
+	return clean, nil
+}
+
+func sanitizeLiteLLMOutput(out string) string {
+	for _, key := range []string{"LITELLM_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GITHUB_TOKEN", "GH_TOKEN"} {
+		value := os.Getenv(key)
+		if value != "" {
+			out = strings.ReplaceAll(out, value, "[redacted]")
+		}
+	}
+	return out
 }
 
 func runRealLLMSmokeScenario(ctx context.Context, result *ScenarioResult) *ScenarioResult {

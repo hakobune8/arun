@@ -96,6 +96,10 @@ auth:
 
 llm:
   defaultPreset: "default"
+  # Expose administrator-approved LiteLLM presets in the Web UI. Keep API keys
+  # in Kubernetes Secrets and reference them by apiKeyEnv. See
+  # docs/configuration.md for recommended coding/review/planning/reporting/smoke
+  # preset guidance and docs/orchestration-evals.md for live preset validation.
   presets:
     - id: "default"
       name: "Default LiteLLM"

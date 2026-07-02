@@ -190,6 +190,77 @@ when the LiteLLM response includes it, the configured timeout/token budget, and
 residual risk. Cost is reported only when supplied externally through
 `AGENTOS_EVAL_LLM_COST_BUDGET`.
 
+## LiteLLM Preset Matrix
+
+LiteLLM preset matrix checks are opt-in and make live LiteLLM calls. They send a
+short marker prompt to each configured preset and compare success, duration,
+failure reason, retry policy, token usage, and budget metadata:
+
+```sh
+AGENTOS_EVAL_LLM_PRESETS=true \
+AGENTOS_EVAL_LLM_PRESET_MATRIX='[
+  {
+    "id": "coding",
+    "name": "Coding",
+    "useCase": "repository implementation and CI fixes",
+    "provider": "litellm",
+    "baseUrl": "http://litellm:4000",
+    "model": "coder",
+    "apiKeyEnv": "LITELLM_API_KEY",
+    "timeout": "45s",
+    "temperature": 0.1,
+    "maxTokens": 4096,
+    "retryAttempts": 1,
+    "tokenBudget": 120000,
+    "costBudget": "normal"
+  },
+  {
+    "id": "review",
+    "name": "Review",
+    "useCase": "PR review, risk analysis, security notes",
+    "provider": "litellm",
+    "baseUrl": "http://litellm:4000",
+    "model": "coder",
+    "apiKeyEnv": "LITELLM_API_KEY",
+    "timeout": "45s",
+    "temperature": 0,
+    "maxTokens": 3072,
+    "retryAttempts": 1,
+    "tokenBudget": 80000,
+    "costBudget": "normal"
+  },
+  {
+    "id": "smoke",
+    "name": "Low-cost smoke",
+    "useCase": "staging and release health checks",
+    "provider": "litellm",
+    "baseUrl": "http://litellm:4000",
+    "model": "coder",
+    "apiKeyEnv": "LITELLM_API_KEY",
+    "timeout": "30s",
+    "temperature": 0,
+    "maxTokens": 512,
+    "retryAttempts": 0,
+    "tokenBudget": 5000,
+    "costBudget": "low"
+  }
+]' \
+LITELLM_API_KEY='<litellm-api-key>' \
+agentos evals \
+  --litellm-preset-evals \
+  --scenario litellm-preset-matrix \
+  --format markdown \
+  --output .agentos/evals/litellm-preset-report.md
+```
+
+If `AGENTOS_EVAL_LLM_PRESET_MATRIX` is omitted, the scenario falls back to
+`AGENTOS_LLM_PRESETS` and default eval values. The scenario never prints API key
+values; it reports only preset IDs, public endpoint metadata, model names,
+duration, token usage when LiteLLM returns it, and the budget metadata supplied
+in the matrix. By default a non-empty model response is considered a successful
+preset call; set `expectedPhrase` on a matrix item when a provider-specific
+marker must be present in the response.
+
 ## Schedule Notification E2E
 
 Schedule notification checks are opt-in and require an authenticated API

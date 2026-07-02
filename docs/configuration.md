@@ -93,6 +93,23 @@ Example `AGENTOS_LLM_PRESETS`:
 ]
 ```
 
+Recommended production presets should keep the Web UI preset shape stable while
+capturing operational guidance in deployment docs or the preset eval matrix:
+
+| Preset ID | Intended use | Temperature | Max tokens | Retry guidance | Budget guidance |
+| --- | --- | ---: | ---: | --- | --- |
+| `coding` | repository implementation, CI fixes, small refactors | `0.1` | `4096` | retry once on transient gateway errors | normal work budget |
+| `review` | PR review, risk analysis, security notes | `0.0` | `3072` | retry once; prefer deterministic output | normal work budget |
+| `planning` | orchestration plan generation and task breakdown | `0.1` | `2048` | retry once; fail closed on malformed plans | normal work budget |
+| `reporting` | scheduled status reports and stakeholder summaries | `0.2` | `2048` | retry once; keep prompts bounded | low to normal budget |
+| `smoke` | low-cost health and staging checks | `0.0` | `512` | no retry or one retry only | low budget |
+
+AgentOS currently exposes `id`, `name`, `provider`, `baseUrl`, `model`, and
+`apiKeyEnv` to the server preset resolver. Timeout, temperature, token budget,
+retry policy, and cost notes are evaluated through
+`AGENTOS_EVAL_LLM_PRESET_MATRIX` so production presets can be validated without
+changing the Web UI API contract.
+
 ---
 
 ## Qdrant Vector Store
