@@ -1977,6 +1977,25 @@ func TestPublishOrchestrationBranch_CommitsAndPushes(t *testing.T) {
 	}
 }
 
+func TestNormalizeGitHubArtifactTitle_UsesFirstTaskLine(t *testing.T) {
+	task := "Run an implementation-heavy agile scrum workflow for kazyamaz200/invaders on main.\n\nOperating mode: build-first."
+	got := normalizeGitHubArtifactTitle("", task, "fallback")
+	want := "Run an implementation-heavy agile scrum workflow for kazyamaz200/invaders on main."
+	if got != want {
+		t.Fatalf("title = %q, want %q", got, want)
+	}
+}
+
+func TestNormalizeGitHubArtifactTitle_TruncatesExplicitTitle(t *testing.T) {
+	got := normalizeGitHubArtifactTitle(strings.Repeat("a", 300), "task", "fallback")
+	if len([]rune(got)) != 256 {
+		t.Fatalf("title length = %d, want 256", len([]rune(got)))
+	}
+	if !strings.HasSuffix(got, "...") {
+		t.Fatalf("title = %q, want ellipsis suffix", got)
+	}
+}
+
 func runTestGit(dir string, args ...string) error {
 	_, err := runTestGitCombinedOutput(dir, args...)
 	return err
