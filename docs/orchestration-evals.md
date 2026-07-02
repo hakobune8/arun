@@ -154,6 +154,7 @@ Use a dedicated test repository such as `kazyamaz200/agentos-test`:
 ```sh
 AGENTOS_EVAL_GITHUB_REPO='kazyamaz200/agentos-test' \
 AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST='kazyamaz200/agentos-test' \
+AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP='close' \
 GITHUB_TOKEN='<token-with-repo-access>' \
 agentos evals \
   --scrum-github-e2e \
@@ -165,8 +166,18 @@ agentos evals \
 The scenario creates `[AgentOS Eval]` backlog issues, comments sprint status on
 each planned item, carries one blocked item from sprint 2 to sprint 3, closes
 completed work, and records issue URLs plus sprint-by-sprint state in the
-report. The first implementation keeps evidence as closed issues. More advanced
-cleanup modes and interrupted-run recovery are tracked separately.
+report.
+
+Cleanup is controlled by `AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP`:
+
+- `close` (default) closes eval issues after recording sprint evidence.
+- `keep` leaves eval issues open for manual inspection.
+
+Set `AGENTOS_EVAL_SCRUM_GITHUB_RUN_ID` to reuse or reconcile a known run id.
+When matching `[AgentOS Eval][<run-id>]` issues already exist, the scenario
+discovers them instead of creating duplicates and applies the requested cleanup
+mode. The report records each issue URL, final state, cleanup status, and
+cleanup error if one occurred.
 
 ## Kubernetes Rollout E2E
 
