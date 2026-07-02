@@ -16,6 +16,7 @@ package cli
 
 import (
 	"testing"
+	"time"
 )
 
 func TestRootCommand_HasUse(t *testing.T) {
@@ -56,5 +57,29 @@ func TestRunCommand_HasDefinitionFlag(t *testing.T) {
 	flag := runCmd.Flags().Lookup("definition")
 	if flag == nil {
 		t.Fatal("expected run command to expose --definition")
+	}
+}
+
+func TestParseOrchestrateSubtaskTimeout(t *testing.T) {
+	t.Setenv("AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT", "")
+	got, err := parseOrchestrateSubtaskTimeout("5m")
+	if err != nil {
+		t.Fatalf("parseOrchestrateSubtaskTimeout() error = %v", err)
+	}
+	if got != 5*time.Minute {
+		t.Fatalf("timeout = %s, want 5m", got)
+	}
+
+	t.Setenv("AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT", "2m")
+	got, err = parseOrchestrateSubtaskTimeout("")
+	if err != nil {
+		t.Fatalf("parseOrchestrateSubtaskTimeout(env) error = %v", err)
+	}
+	if got != 2*time.Minute {
+		t.Fatalf("env timeout = %s, want 2m", got)
+	}
+
+	if _, err := parseOrchestrateSubtaskTimeout("bad"); err == nil {
+		t.Fatal("parseOrchestrateSubtaskTimeout(bad) succeeded, want error")
 	}
 }
