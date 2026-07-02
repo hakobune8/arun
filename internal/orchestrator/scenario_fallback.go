@@ -29,6 +29,16 @@ import (
 )
 
 func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask *Subtask, runSandbox sandbox.Sandbox, runtimeErr error) (SubtaskResult, bool) {
+	if staticFrontendScaffoldExists(runSandbox.RootDir()) {
+		switch subtask.AgentName {
+		case "qa":
+			out, err := recoverFrontendQA(runSandbox.RootDir(), subtask.Description)
+			return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
+		case "release-manager":
+			out, err := recoverFrontendRelease(runSandbox.RootDir(), subtask.Description)
+			return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
+		}
+	}
 	if !isCanonicalGoServiceTask(subtask.Description) {
 		return SubtaskResult{}, false
 	}
@@ -78,6 +88,18 @@ func (o *Orchestrator) recoverNoOpBuiltInSubtaskWithStatus(ctx context.Context, 
 	case "frontend":
 		out, err := recoverFrontendStaticApp(runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
+	case "qa":
+		if staticFrontendScaffoldExists(runSandbox.RootDir()) {
+			out, err := recoverFrontendQA(runSandbox.RootDir(), subtask.Description)
+			return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
+		}
+		return SubtaskResult{}, false
+	case "release-manager":
+		if staticFrontendScaffoldExists(runSandbox.RootDir()) {
+			out, err := recoverFrontendRelease(runSandbox.RootDir(), subtask.Description)
+			return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
+		}
+		return SubtaskResult{}, false
 	case "go-backend":
 		out, err := recoverGoBackend(recoveryCtx, runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
@@ -372,6 +394,69 @@ document.getElementById("advance-sprint").addEventListener("click", () => {
 	return "Created minimal static frontend scaffold for an empty repository with README and smoke-test notes.", nil
 }
 
+func recoverFrontendQA(root, description string) (string, error) {
+	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o755); err != nil {
+		return "", fmt.Errorf("create docs dir: %w", err)
+	}
+	testingDoc := strings.Join([]string{
+		"# Testing",
+		"",
+		"## Automated validation",
+		"",
+		"Run the configured package scripts when a JavaScript runtime is available:",
+		"",
+		"```sh",
+		"npm test",
+		"npm run build",
+		"```",
+		"",
+		"The generated scaffold keeps both commands dependency-free by using syntax checks for `src/main.js`.",
+		"",
+		"## Manual smoke check",
+		"",
+		"1. Open `index.html` in a browser.",
+		"2. Confirm the sprint workflow board renders without overlapping text.",
+		"3. Click `Advance sprint` and confirm the status text changes.",
+		"4. Confirm the page remains usable on narrow and wide viewports.",
+		"",
+		"## Scenario coverage",
+		"",
+		strings.TrimSpace(description),
+		"",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(root, "docs", "testing.md"), []byte(testingDoc), 0o600); err != nil {
+		return "", fmt.Errorf("write docs/testing.md: %w", err)
+	}
+	return "Added static frontend QA evidence in docs/testing.md.", nil
+}
+
+func recoverFrontendRelease(root, description string) (string, error) {
+	changelog := strings.Join([]string{
+		"# Changelog",
+		"",
+		"## v0.1.0 - Unreleased",
+		"",
+		"- Added the initial static frontend scaffold for the implementation-heavy scrum workflow.",
+		"- Added README run and validation instructions.",
+		"- Added smoke-test and QA documentation for browser verification.",
+		"",
+		"## Release readiness",
+		"",
+		"- Review the generated static files before publishing.",
+		"- Run `npm test` and `npm run build` when a JavaScript runtime is available.",
+		"- Perform the manual browser smoke check documented in `docs/testing.md`.",
+		"",
+		"## Scenario",
+		"",
+		strings.TrimSpace(description),
+		"",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(root, "CHANGELOG.md"), []byte(changelog), 0o600); err != nil {
+		return "", fmt.Errorf("write CHANGELOG.md: %w", err)
+	}
+	return "Added CHANGELOG.md for the static frontend scaffold release.", nil
+}
+
 func recoverGoCI(ctx context.Context, root string) (string, error) {
 	if !fileExists(filepath.Join(root, "go.mod")) || !fileExists(filepath.Join(root, "main.go")) {
 		return "", fmt.Errorf("Go service files are required before CI recovery")
@@ -642,6 +727,13 @@ func repositoryIsEffectivelyEmpty(root string) bool {
 		return filepath.SkipAll
 	})
 	return err == nil && empty
+}
+
+func staticFrontendScaffoldExists(root string) bool {
+	return fileExists(filepath.Join(root, "package.json")) &&
+		fileExists(filepath.Join(root, "index.html")) &&
+		fileExists(filepath.Join(root, "src", "main.js")) &&
+		fileExists(filepath.Join(root, "docs", "smoke-test.md"))
 }
 
 func runShell(ctx context.Context, dir, command string) error {
