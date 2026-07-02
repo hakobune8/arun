@@ -29,7 +29,7 @@ func (c *Client) ListUserRepositories() ([]RepositorySummary, error) {
 	var repos []RepositorySummary
 	for page := 1; ; page++ {
 		var pageRepos []RepositorySummary
-		path := fmt.Sprintf("/user/repos?per_page=100&page=%d&sort=updated&affiliation=owner,collaborator,organization_member", page)
+		path := fmt.Sprintf("/user/repos?per_page=100&page=%d&sort=updated&visibility=all&affiliation=owner,collaborator,organization_member", page)
 		if err := c.doJSON("GET", path, nil, &pageRepos); err != nil {
 			return nil, err
 		}
