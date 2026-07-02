@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ButtonHTMLAttributes, Dispatch, FormEvent, ReactNode, SetStateAction } from 'react'
 import {
   Activity,
@@ -1095,8 +1095,45 @@ function Segment({ active, icon, children, onClick }: { active: boolean; icon?: 
 
 function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
   const { form, setForm } = props
+  const [templateValues, setTemplateValues] = useState<Record<string, string>>({})
   const update = (patch: Partial<typeof defaultForm>) => setForm((current) => ({ ...current, ...patch }))
   const selectedTemplate = props.templates.find((t) => t.id === form.scenarioTemplate)
+  const templateVariables = useMemo(() => (selectedTemplate?.variables ?? []) as Json[], [selectedTemplate])
+
+  useEffect(() => {
+    if (!selectedTemplate) {
+      setTemplateValues({})
+      return
+    }
+    setTemplateValues((current) => {
+      const next: Record<string, string> = {}
+      for (const variable of templateVariables) {
+        const name = String(variable.name ?? '')
+        if (!name || name === 'repo' || name === 'baseBranch') continue
+        next[name] = current[name] ?? String(variable.default ?? '')
+      }
+      return next
+    })
+  }, [selectedTemplate, templateVariables])
+
+  function templateVariableValue(variable: Json) {
+    const name = String(variable.name ?? '')
+    if (name === 'repo') return form.repo
+    if (name === 'baseBranch') return form.baseBranch || 'main'
+    return templateValues[name] ?? ''
+  }
+
+  function setTemplateVariable(name: string, value: string) {
+    if (name === 'repo') {
+      selectRepository(value)
+      return
+    }
+    if (name === 'baseBranch') {
+      update({ baseBranch: value })
+      return
+    }
+    setTemplateValues((current) => ({ ...current, [name]: value }))
+  }
 
   async function loadRepositoryAgents() {
     props.setStatus('Loading repository agents...')
@@ -1132,9 +1169,22 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
 
   function applyTemplate() {
     if (!selectedTemplate) return
+    const missing = templateVariables
+      .filter((variable) => Boolean(variable.required) && !templateVariableValue(variable).trim())
+      .map((variable) => String(variable.label || variable.name))
+    if (missing.length) {
+      props.setStatus(`Fill required template field(s): ${missing.join(', ')}`)
+      return
+    }
+    const values: Record<string, string> = {}
+    for (const variable of templateVariables) {
+      const name = String(variable.name ?? '')
+      if (name) values[name] = templateVariableValue(variable)
+    }
+    values.repo = values.repo ?? form.repo
+    values.baseBranch = values.baseBranch ?? (form.baseBranch || 'main')
     const task = renderTemplateText(String(selectedTemplate.taskTemplate ?? ''), {
-      repo: form.repo,
-      baseBranch: form.baseBranch || 'main',
+      ...values,
     })
     const limits = selectedTemplate.limits ?? {}
     update({
@@ -1208,6 +1258,26 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
             {selectedTemplate ? (
               <div className="rounded-os border border-line bg-void p-3">
                 <div className="mb-2 flex flex-wrap gap-2">{(selectedTemplate.agents ?? []).map((a: string) => <Tag key={a}>{a}</Tag>)}</div>
+                {templateVariables.length ? (
+                  <div className="mb-3 grid gap-3 sm:grid-cols-2">
+                    {templateVariables.map((variable) => {
+                      const name = String(variable.name ?? '')
+                      if (!name) return null
+                      const label = `${String(variable.label || name)}${variable.required ? ' *' : ''}`
+                      return (
+                        <Field key={name} label={label}>
+                          <input
+                            className={inputClass}
+                            required={Boolean(variable.required)}
+                            value={templateVariableValue(variable)}
+                            onChange={(e) => setTemplateVariable(name, e.target.value)}
+                            placeholder={String(variable.placeholder || variable.default || '')}
+                          />
+                        </Field>
+                      )
+                    })}
+                  </div>
+                ) : null}
                 <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs text-soft">{selectedTemplate.taskTemplate}</pre>
                 <IconButton type="button" className="mt-3" tone="secondary" icon={<Check className="size-4" />} onClick={applyTemplate}>Apply</IconButton>
               </div>
