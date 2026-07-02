@@ -156,6 +156,40 @@ image, rollback image, Helm revision and status, rollout duration, rollback
 note, and recent Kubernetes event snippets. Failure output includes recent
 events without printing configured auth cookies or GitHub tokens.
 
+## Real LLM Orchestration Smoke
+
+Real LLM smoke checks are opt-in and make live LiteLLM calls. They run a single
+bounded docs-agent orchestration against a disposable local repository and
+verify that the agent creates `AGENTOS_REAL_LLM_SMOKE.md` with the required
+smoke phrase and residual-risk section:
+
+```sh
+AGENTOS_EVAL_LIVE_LLM=true \
+AGENTOS_EVAL_LLM_REPO_ALLOWLIST=temp \
+AGENTOS_EVAL_LLM_MODEL=coder \
+AGENTOS_EVAL_LLM_TIMEOUT=2m \
+AGENTOS_EVAL_LLM_MAX_TOKENS=1024 \
+LITELLM_BASE_URL=http://litellm:4000 \
+LITELLM_API_KEY='<litellm-api-key>' \
+agentos evals \
+  --real-llm-smoke-e2e \
+  --scenario real-llm-orchestration-smoke \
+  --format markdown \
+  --output .agentos/evals/real-llm-smoke-report.md
+```
+
+The scenario is disabled by default and requires
+`AGENTOS_EVAL_LIVE_LLM=true`, an explicit `LITELLM_BASE_URL`, a model via
+`AGENTOS_EVAL_LLM_MODEL` or `AGENTOS_MODEL_CODER`, and an allowlist containing
+`temp`. The LLM wrapper caps each request at `AGENTOS_EVAL_LLM_MAX_TOKENS` and
+the orchestration context is bounded by `AGENTOS_EVAL_LLM_TIMEOUT`.
+
+The report records plan/subtask count, execution success/failure, required
+artifact status, quality-gate results, LLM request/response counts, token usage
+when the LiteLLM response includes it, the configured timeout/token budget, and
+residual risk. Cost is reported only when supplied externally through
+`AGENTOS_EVAL_LLM_COST_BUDGET`.
+
 ## Schedule Notification E2E
 
 Schedule notification checks are opt-in and require an authenticated API

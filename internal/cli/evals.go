@@ -50,6 +50,7 @@ var (
 	evalsScheduleNotifyE2E    bool
 	evalsGitHubWorkflowE2E    bool
 	evalsKubernetesRolloutE2E bool
+	evalsRealLLMSmokeE2E      bool
 )
 
 func init() {
@@ -65,6 +66,7 @@ func init() {
 	evalsCmd.Flags().BoolVar(&evalsScheduleNotifyE2E, "schedule-notification-e2e", false, "Include opt-in authenticated schedule execution notification checks")
 	evalsCmd.Flags().BoolVar(&evalsGitHubWorkflowE2E, "github-workflow-e2e", false, "Include opt-in live GitHub issue and PR workflow checks")
 	evalsCmd.Flags().BoolVar(&evalsKubernetesRolloutE2E, "kubernetes-rollout-e2e", false, "Include opt-in live Kubernetes rollout and rollback checks")
+	evalsCmd.Flags().BoolVar(&evalsRealLLMSmokeE2E, "real-llm-smoke-e2e", false, "Include opt-in real LLM orchestration smoke checks")
 }
 
 func runEvals(ctx context.Context) error {
@@ -89,6 +91,7 @@ func runEvals(ctx context.Context) error {
 		IncludeScheduleNotifyE2E:    evalsScheduleNotifyE2E,
 		IncludeGitHubWorkflowE2E:    evalsGitHubWorkflowE2E,
 		IncludeKubernetesRolloutE2E: evalsKubernetesRolloutE2E,
+		IncludeRealLLMSmokeE2E:      evalsRealLLMSmokeE2E,
 	})
 	if err != nil {
 		return err

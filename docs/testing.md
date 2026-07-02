@@ -34,6 +34,9 @@ smoke checks are opt-in with `agentos evals --live --live-url <url>`.
 - [ ] `agentos evals --kubernetes-rollout-e2e --scenario kubernetes-rollout-e2e`
   can install, upgrade, verify readiness, rollback, and clean up a disposable
   Helm release in an explicitly configured namespace
+- [ ] `agentos evals --real-llm-smoke-e2e --scenario real-llm-orchestration-smoke`
+  can run a bounded docs-agent orchestration against a disposable repository
+  with explicit LiteLLM and repo allowlist settings
 - [ ] `agentos evals --storage-cleanup-e2e --scenario storage-cleanup-e2e`
   can run against disposable storage fixtures scoped by repo and branch
 - [ ] Main navigation exposes Orchestrate, Agents, and Audit
