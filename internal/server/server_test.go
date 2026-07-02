@@ -1952,26 +1952,54 @@ func TestPublishOrchestrationBranch_CommitsAndPushes(t *testing.T) {
 		GitHub: &orchestrationGitHubState{
 			Repo:       "owner/repo",
 			BranchName: "agentos/run-0123456789abcdef",
+			PRBase:     "main",
 		},
 	}
 	if err := publishOrchestrationBranch(record); err != nil {
 		t.Fatalf("publishOrchestrationBranch() error = %v", err)
 	}
+	if err := runTestGit(repo, "ls-remote", "--exit-code", "origin", "refs/heads/main"); err != nil {
+		t.Fatalf("base branch was not pushed: %v", err)
+	}
 	if err := runTestGit(repo, "ls-remote", "--exit-code", "origin", "refs/heads/agentos/run-0123456789abcdef"); err != nil {
 		t.Fatalf("branch was not pushed: %v", err)
+	}
+	base, err := runTestGitOutput(remote, "rev-parse", "refs/heads/main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	headParent, err := runTestGitOutput(remote, "rev-parse", "refs/heads/agentos/run-0123456789abcdef^")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if headParent != base {
+		t.Fatalf("head parent = %s, want base %s", headParent, base)
 	}
 }
 
 func runTestGit(dir string, args ...string) error {
+	_, err := runTestGitCombinedOutput(dir, args...)
+	return err
+}
+
+func runTestGitOutput(dir string, args ...string) (string, error) {
+	out, err := runTestGitCombinedOutput(dir, args...)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func runTestGitCombinedOutput(dir string, args ...string) ([]byte, error) {
 	cmd := exec.Command("git", args...)
 	if dir != "" {
 		cmd.Dir = dir
 	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		return nil, fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}
-	return nil
+	return out, nil
 }
 
 func TestReadOrchestrationRecord_RejectsInvalidID(t *testing.T) {

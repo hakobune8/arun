@@ -64,6 +64,7 @@ var staticFS embed.FS
 var runIDPattern = regexp.MustCompile(`^run-[0-9a-f]{16}$`)
 var githubRepoPathPattern = regexp.MustCompile(`^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$`)
 var gitRefPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$`)
+var gitObjectPattern = regexp.MustCompile(`^[0-9a-f]{40,64}$`)
 var customAgentNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{1,62}$`)
 var scenarioVariableNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,62}$`)
 
@@ -2409,9 +2410,13 @@ func publishOrchestrationBranch(record *orchestrationRecord) error {
 	if err := validateGitRef(record.GitHub.BranchName); err != nil {
 		return err
 	}
+	if err := validateGitRef(record.GitHub.PRBase); err != nil {
+		return err
+	}
 	if err := gitAddAll(record.RepoPath, record.GitHubToken); err != nil {
 		return err
 	}
+	message := fmt.Sprintf("AgentOS orchestration %s", record.ID)
 	if !gitTreeClean(record.RepoPath, record.GitHubToken) {
 		if err := gitConfig(record.RepoPath, record.GitHubToken, "user.email", "agentos@example.invalid"); err != nil {
 			return err
@@ -2419,10 +2424,12 @@ func publishOrchestrationBranch(record *orchestrationRecord) error {
 		if err := gitConfig(record.RepoPath, record.GitHubToken, "user.name", "AgentOS"); err != nil {
 			return err
 		}
-		message := fmt.Sprintf("AgentOS orchestration %s", record.ID)
 		if err := gitCommit(record.RepoPath, record.GitHubToken, message); err != nil {
 			return err
 		}
+	}
+	if err := ensurePullRequestBaseBranch(record.RepoPath, record.GitHubToken, record.GitHub.PRBase, message); err != nil {
+		return err
 	}
 	if err := gitPushHead(record.RepoPath, record.GitHubToken, record.GitHub.BranchName); err != nil {
 		return err
@@ -2430,11 +2437,56 @@ func publishOrchestrationBranch(record *orchestrationRecord) error {
 	return nil
 }
 
+func ensurePullRequestBaseBranch(dir, token, baseBranch, message string) error {
+	baseBranch = strings.TrimSpace(baseBranch)
+	if baseBranch == "" {
+		return nil
+	}
+	exists, err := gitRemoteBranchExists(dir, token, baseBranch)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	baseCommit, err := gitCreateEmptyCommit(dir, token, "Initialize "+baseBranch+" for AgentOS orchestration PRs")
+	if err != nil {
+		return err
+	}
+	if err := gitPushCommitToBranch(dir, token, baseCommit, baseBranch); err != nil {
+		return err
+	}
+	headCommit, err := gitReparentHeadToCommit(dir, token, baseCommit, message)
+	if err != nil {
+		return err
+	}
+	return gitResetHard(dir, token, headCommit)
+}
+
 func gitTreeClean(dir, token string) bool {
 	cmd := exec.Command("git", "diff", "--cached", "--quiet")
 	cmd.Dir = dir
 	cmd.Env = gitCloneEnvWithToken([]string{"https://github.com/"}, token)
 	return cmd.Run() == nil
+}
+
+func gitRemoteBranchExists(dir, token, branch string) (bool, error) {
+	ref := "refs/heads/" + branch
+	// codeql[go/command-injection]
+	cmd := exec.Command("git", "ls-remote", "--heads", "origin")
+	cmd.Dir = dir
+	cmd.Env = gitCloneEnvWithToken([]string{"https://github.com/"}, token)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return false, fmt.Errorf("%s: %w: %s", strings.Join(cmd.Args, " "), err, strings.TrimSpace(string(out)))
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && fields[1] == ref {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func gitAddAll(dir, token string) error {
@@ -2455,6 +2507,56 @@ func gitCommit(dir, token, message string) error {
 	return runPreparedGitCommand(cmd, dir, token)
 }
 
+func gitCreateEmptyCommit(dir, token, message string) (string, error) {
+	// codeql[go/command-injection]
+	treeCmd := exec.Command("git", "mktree")
+	treeCmd.Stdin = strings.NewReader("")
+	tree, err := runPreparedGitCommandOutput(treeCmd, dir, token)
+	if err != nil {
+		return "", err
+	}
+	tree = strings.TrimSpace(tree)
+	if !gitObjectPattern.MatchString(tree) {
+		return "", fmt.Errorf("invalid git tree object: %s", tree)
+	}
+	// codeql[go/command-injection]
+	// #nosec G204 -- tree is validated as a git object id from git mktree.
+	commitCmd := exec.Command("git", "commit-tree", strings.TrimSpace(tree), "-m", message)
+	return runPreparedGitCommandOutput(commitCmd, dir, token)
+}
+
+func gitReparentHeadToCommit(dir, token, parentCommit, message string) (string, error) {
+	// codeql[go/command-injection]
+	treeCmd := exec.Command("git", "rev-parse", "HEAD^{tree}")
+	tree, err := runPreparedGitCommandOutput(treeCmd, dir, token)
+	if err != nil {
+		return "", err
+	}
+	tree = strings.TrimSpace(tree)
+	parentCommit = strings.TrimSpace(parentCommit)
+	if !gitObjectPattern.MatchString(tree) {
+		return "", fmt.Errorf("invalid git tree object: %s", tree)
+	}
+	if !gitObjectPattern.MatchString(parentCommit) {
+		return "", fmt.Errorf("invalid git parent object: %s", parentCommit)
+	}
+	// codeql[go/command-injection]
+	// #nosec G204 -- tree and parent commit are validated git object ids.
+	commitCmd := exec.Command("git", "commit-tree", tree, "-p", parentCommit, "-m", message)
+	return runPreparedGitCommandOutput(commitCmd, dir, token)
+}
+
+func gitResetHard(dir, token, commit string) error {
+	commit = strings.TrimSpace(commit)
+	if !gitObjectPattern.MatchString(commit) {
+		return fmt.Errorf("invalid git commit object: %s", commit)
+	}
+	// codeql[go/command-injection]
+	// #nosec G204 -- commit is validated as a git object id.
+	cmd := exec.Command("git", "reset", "--hard", commit)
+	return runPreparedGitCommand(cmd, dir, token)
+}
+
 func gitPushHead(dir, token, branch string) error {
 	refspec := "HEAD:refs/heads/" + branch
 	// codeql[go/command-injection]
@@ -2462,14 +2564,34 @@ func gitPushHead(dir, token, branch string) error {
 	return runPreparedGitCommand(cmd, dir, token)
 }
 
+func gitPushCommitToBranch(dir, token, commit, branch string) error {
+	refspec := strings.TrimSpace(commit) + ":refs/heads/" + branch
+	// codeql[go/command-injection]
+	cmd := exec.Command("git", "push", "origin", refspec)
+	return runPreparedGitCommand(cmd, dir, token)
+}
+
 func runPreparedGitCommand(cmd *exec.Cmd, dir, token string) error {
+	_, err := runPreparedGitCommandCombinedOutput(cmd, dir, token)
+	return err
+}
+
+func runPreparedGitCommandOutput(cmd *exec.Cmd, dir, token string) (string, error) {
+	out, err := runPreparedGitCommandCombinedOutput(cmd, dir, token)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func runPreparedGitCommandCombinedOutput(cmd *exec.Cmd, dir, token string) ([]byte, error) {
 	cmd.Dir = dir
 	cmd.Env = gitCloneEnvWithToken([]string{"https://github.com/"}, token)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%s: %w: %s", strings.Join(cmd.Args, " "), err, strings.TrimSpace(string(out)))
+		return nil, fmt.Errorf("%s: %w: %s", strings.Join(cmd.Args, " "), err, strings.TrimSpace(string(out)))
 	}
-	return nil
+	return out, nil
 }
 
 func (s *Server) postSourceIssueStartComment(record *orchestrationRecord) {
