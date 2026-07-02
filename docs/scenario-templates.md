@@ -17,9 +17,10 @@ Built-in templates cover:
 - Implementation-heavy scrum for new or sandbox repositories
 
 Selecting a template renders variable inputs and a preview of the generated task
-text. Applying the template fills the task description, recommended agents,
-strategy, and pull request preference. When an orchestration starts, AgentOS
-saves the selected template as `scenarioTemplate` on the orchestration record.
+text. Applying the template replaces declared `{{variableName}}` placeholders
+from those inputs and fills the task description, recommended agents, strategy,
+limits, and pull request preference. When an orchestration starts, AgentOS saves
+the selected template as `scenarioTemplate` on the orchestration record.
 
 ## Stage Presets
 
