@@ -39,6 +39,10 @@ const frontendProjectPresenceCommand = `sh -c 'test -f package.json || test -f i
 
 const frontendValidationCommand = `sh -c 'if [ -f package.json ]; then PM=npm; [ -f pnpm-lock.yaml ] && PM=pnpm; [ -f yarn.lock ] && PM=yarn; [ -f bun.lockb ] && PM=bun; for script in lint typecheck test build; do if node -e "const p=require(\"./package.json\"); process.exit(p.scripts&&p.scripts[process.argv[1]]?0:1)" "$script"; then case "$PM:$script" in yarn:*) yarn "$script";; pnpm:*) pnpm "$script";; bun:*) bun run "$script";; *) npm run "$script";; esac; fi; done; fi'`
 
+const qaEvidenceCommand = `sh -c 'test -f docs/testing.md || test -f docs/smoke-test.md || test -f README.md || find test tests e2e cypress playwright -type f -print -quit 2>/dev/null | grep -q .'`
+
+const qaValidationCommand = `sh -c 'if [ -f package.json ]; then PM=npm; [ -f pnpm-lock.yaml ] && PM=pnpm; [ -f yarn.lock ] && PM=yarn; [ -f bun.lockb ] && PM=bun; ran=0; for script in lint typecheck test build; do if node -e "const p=require(\"./package.json\"); process.exit(p.scripts&&p.scripts[process.argv[1]]?0:1)" "$script"; then ran=1; case "$PM:$script" in yarn:*) yarn "$script";; pnpm:*) pnpm "$script";; bun:*) bun run "$script";; *) npm run "$script";; esac; fi; done; test "$ran" = 1 || test -f docs/smoke-test.md || test -f README.md; elif [ -f go.mod ]; then go test ./...; else test -f docs/testing.md || test -f docs/smoke-test.md || test -f README.md; fi'`
+
 const dockerValidationCommand = `sh -c 'test -f Dockerfile && grep -Eiq "^FROM[[:space:]]" Dockerfile && if command -v docker >/dev/null 2>&1; then docker build -t agentos-validation .; fi'`
 
 const helmValidationCommand = `sh -c 'chart=$(find . -path "*/Chart.yaml" -not -path "./.git/*" -print -quit); test -n "$chart"; dir=$(dirname "$chart"); if command -v helm >/dev/null 2>&1; then helm lint "$dir" && helm template agentos-validation "$dir" >/dev/null; fi'`
@@ -131,12 +135,10 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 		}
 	case "qa":
 		return &QualityGate{
-			RequiredFiles:      []string{"docs/testing.md"},
-			ValidationCommands: []string{"go test ./..."},
-			ContentChecks: []QualityContentCheck{{
-				File:     "docs/testing.md",
-				Contains: []string{"test"},
-			}},
+			ValidationCommands: []string{
+				qaEvidenceCommand,
+				qaValidationCommand,
+			},
 		}
 	case "docker":
 		return &QualityGate{

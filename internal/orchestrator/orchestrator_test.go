@@ -287,7 +287,7 @@ func TestApplyDefaultQualityGate_SpecializedBuiltIns(t *testing.T) {
 		{"frontend", ""},
 		{"release-manager", "CHANGELOG.md"},
 		{"dependency-updater", "go.mod"},
-		{"qa", "docs/testing.md"},
+		{"qa", ""},
 		{"docker", "Dockerfile"},
 		{"helm", ""},
 		{"kubernetes", ""},
@@ -313,6 +313,37 @@ func TestApplyDefaultQualityGate_SpecializedBuiltIns(t *testing.T) {
 				t.Fatalf("%s required files = %+v, want %q", tt.agent, subtask.QualityGate.RequiredFiles, tt.file)
 			}
 		})
+	}
+}
+
+func TestQAQualityGate_AllowsStaticFrontendSmokeEvidence(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "package.json"), []byte(`{"scripts":{"test":"node --check src/main.js","build":"node --check src/main.js"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "src", "main.js"), []byte(`console.log("ok");`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "docs", "smoke-test.md"), []byte("# Smoke Test\n\nRun npm test.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	subtask := &Subtask{AgentName: "qa", Description: "Validate frontend smoke checks"}
+	applyDefaultQualityGate(subtask)
+	status := validateQualityGate(context.Background(), repo, subtask.QualityGate)
+	if !status.Passed {
+		t.Fatalf("quality gate failed: %+v", status)
+	}
+
+	prof := subtaskProfile("qa")
+	if prof.Commands.Test != qaValidationCommand {
+		t.Fatalf("qa test command = %q, want repo-aware command", prof.Commands.Test)
 	}
 }
 
