@@ -21,7 +21,23 @@ func (c *Client) ListRepositories() ([]RepositorySummary, error) {
 	if repos, err := c.listInstallationRepositories(); err == nil {
 		return repos, nil
 	}
-	return c.listUserRepositories()
+	return c.ListUserRepositories()
+}
+
+// ListUserRepositories lists repositories visible to a user OAuth token.
+func (c *Client) ListUserRepositories() ([]RepositorySummary, error) {
+	var repos []RepositorySummary
+	for page := 1; ; page++ {
+		var pageRepos []RepositorySummary
+		path := fmt.Sprintf("/user/repos?per_page=100&page=%d&sort=updated&affiliation=owner,collaborator,organization_member", page)
+		if err := c.doJSON("GET", path, nil, &pageRepos); err != nil {
+			return nil, err
+		}
+		repos = append(repos, pageRepos...)
+		if len(pageRepos) < 100 {
+			return repos, nil
+		}
+	}
 }
 
 func (c *Client) listInstallationRepositories() ([]RepositorySummary, error) {
@@ -36,21 +52,6 @@ func (c *Client) listInstallationRepositories() ([]RepositorySummary, error) {
 		}
 		repos = append(repos, installation.Repositories...)
 		if len(installation.Repositories) < 100 {
-			return repos, nil
-		}
-	}
-}
-
-func (c *Client) listUserRepositories() ([]RepositorySummary, error) {
-	var repos []RepositorySummary
-	for page := 1; ; page++ {
-		var pageRepos []RepositorySummary
-		path := fmt.Sprintf("/user/repos?per_page=100&page=%d&sort=updated&affiliation=owner,collaborator,organization_member", page)
-		if err := c.doJSON("GET", path, nil, &pageRepos); err != nil {
-			return nil, err
-		}
-		repos = append(repos, pageRepos...)
-		if len(pageRepos) < 100 {
 			return repos, nil
 		}
 	}
