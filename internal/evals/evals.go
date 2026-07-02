@@ -64,14 +64,15 @@ type Scenario struct {
 
 // Options controls a suite run.
 type Options struct {
-	ScenarioIDs              []string
-	WorkDir                  string
-	IncludeLive              bool
-	LiveURL                  string
-	IncludeAuthE2E           bool
-	IncludeStorageCleanupE2E bool
-	IncludeScheduleNotifyE2E bool
-	IncludeGitHubWorkflowE2E bool
+	ScenarioIDs                 []string
+	WorkDir                     string
+	IncludeLive                 bool
+	LiveURL                     string
+	IncludeAuthE2E              bool
+	IncludeStorageCleanupE2E    bool
+	IncludeScheduleNotifyE2E    bool
+	IncludeGitHubWorkflowE2E    bool
+	IncludeKubernetesRolloutE2E bool
 }
 
 // Report summarizes one eval suite run.
@@ -264,6 +265,18 @@ func GitHubWorkflowScenarios() []Scenario {
 	}}
 }
 
+// KubernetesRolloutScenarios returns opt-in checks that exercise a live Kubernetes rollout.
+func KubernetesRolloutScenarios() []Scenario {
+	return []Scenario{{
+		ID:             "kubernetes-rollout-e2e",
+		Name:           "Live Kubernetes rollout and rollback E2E",
+		Category:       "live-kubernetes",
+		Mode:           ModePlan,
+		FunctionalArea: []string{"kubernetes", "helm", "rollout", "rollback", "readiness", "cleanup"},
+		Live:           true,
+	}}
+}
+
 // Run executes the selected deterministic eval scenarios.
 func Run(ctx context.Context, opts Options) (*Report, error) {
 	started := time.Now().UTC()
@@ -282,6 +295,9 @@ func Run(ctx context.Context, opts Options) (*Report, error) {
 	}
 	if opts.IncludeGitHubWorkflowE2E {
 		scenarios = append(scenarios, filterScenarios(GitHubWorkflowScenarios(), opts.ScenarioIDs)...)
+	}
+	if opts.IncludeKubernetesRolloutE2E {
+		scenarios = append(scenarios, filterScenarios(KubernetesRolloutScenarios(), opts.ScenarioIDs)...)
 	}
 	if len(scenarios) == 0 {
 		return nil, fmt.Errorf("no eval scenarios selected")
@@ -422,6 +438,9 @@ func runLiveScenario(ctx context.Context, scenario *Scenario, liveURL string, re
 	}
 	if scenario.ID == "github-workflow-e2e" {
 		return runGitHubWorkflowScenario(ctx, result)
+	}
+	if scenario.ID == "kubernetes-rollout-e2e" {
+		return runKubernetesRolloutScenario(ctx, result)
 	}
 	base := strings.TrimRight(strings.TrimSpace(liveURL), "/")
 	if base == "" {
@@ -726,6 +745,323 @@ func splitGitHubRepo(repo string) (owner, name string, ok bool) {
 		return "", "", false
 	}
 	return owner, strings.TrimSuffix(name, ".git"), true
+}
+
+type kubernetesRolloutConfig struct {
+	Kubeconfig  string
+	Context     string
+	Namespace   string
+	Release     string
+	BaseImage   string
+	TargetImage string
+}
+
+type helmStatusResult struct {
+	Info struct {
+		Status string `json:"status"`
+	} `json:"info"`
+	Version int `json:"version"`
+}
+
+func runKubernetesRolloutScenario(ctx context.Context, result *ScenarioResult) *ScenarioResult {
+	cfg, err := kubernetesRolloutConfigFromEnv()
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, err.Error())
+		return result
+	}
+	if _, err := exec.LookPath("helm"); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "helm is required for Kubernetes rollout E2E: "+err.Error())
+		return result
+	}
+	if _, err := exec.LookPath("kubectl"); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "kubectl is required for Kubernetes rollout E2E: "+err.Error())
+		return result
+	}
+
+	chartDir, err := writeKubernetesEvalChart()
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "write Kubernetes eval chart: "+err.Error())
+		return result
+	}
+	defer os.RemoveAll(filepath.Dir(chartDir))
+
+	deployment := cfg.Release + "-agentos-eval"
+	keepRelease := strings.EqualFold(strings.TrimSpace(os.Getenv("AGENTOS_EVAL_KUBE_KEEP_RELEASE")), "true")
+	defer func() {
+		if !keepRelease {
+			_ = runHelm(ctx, cfg, "uninstall", cfg.Release, "--wait", "--timeout", "2m")
+		}
+	}()
+
+	if err := runHelm(ctx, cfg, "upgrade", "--install", cfg.Release, chartDir, "--set-string", "image="+cfg.BaseImage, "--wait", "--timeout", "2m"); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "helm baseline install: "+err.Error())
+		addKubernetesEventArtifacts(ctx, cfg, result)
+		return result
+	}
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "kubernetes", Action: "helm baseline install", Passed: true})
+	baseStatus, err := getHelmStatus(ctx, cfg)
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "helm baseline status: "+err.Error())
+		addKubernetesEventArtifacts(ctx, cfg, result)
+		return result
+	}
+
+	rolloutStarted := time.Now()
+	if err := runHelm(ctx, cfg, "upgrade", cfg.Release, chartDir, "--set-string", "image="+cfg.TargetImage, "--wait", "--timeout", "2m"); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "helm upgrade: "+err.Error())
+		addKubernetesEventArtifacts(ctx, cfg, result)
+		return result
+	}
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "kubernetes", Action: "helm upgrade", Passed: true})
+	if err := runKubectl(ctx, cfg, "rollout", "status", "deployment/"+deployment, "--timeout=120s"); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "rollout status: "+err.Error())
+		addKubernetesEventArtifacts(ctx, cfg, result)
+		return result
+	}
+	rolloutDuration := time.Since(rolloutStarted)
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "kubernetes", Action: "rollout status", Passed: true, DurationMS: rolloutDuration.Milliseconds()})
+	if err := runKubectl(ctx, cfg, "wait", "--for=condition=Available", "deployment/"+deployment, "--timeout=120s"); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "readiness: "+err.Error())
+		addKubernetesEventArtifacts(ctx, cfg, result)
+		return result
+	}
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "kubernetes", Action: "readiness", Passed: true})
+	deployedImage, err := kubectlOutput(ctx, cfg, "get", "deployment", deployment, "-o", "jsonpath={.spec.template.spec.containers[0].image}")
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "observe deployed image: "+err.Error())
+		addKubernetesEventArtifacts(ctx, cfg, result)
+		return result
+	}
+	deployedImage = strings.TrimSpace(deployedImage)
+	imageOK := deployedImage == cfg.TargetImage
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "kubernetes", Action: "image observation", Passed: imageOK})
+	if !imageOK {
+		result.FailureReasons = append(result.FailureReasons, fmt.Sprintf("deployed image = %q, want %q", deployedImage, cfg.TargetImage))
+	}
+	upgradedStatus, err := getHelmStatus(ctx, cfg)
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "helm upgraded status: "+err.Error())
+		addKubernetesEventArtifacts(ctx, cfg, result)
+		return result
+	}
+
+	if err := runHelm(ctx, cfg, "rollback", cfg.Release, fmt.Sprintf("%d", baseStatus.Version), "--wait", "--timeout", "2m"); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "helm rollback: "+err.Error())
+		addKubernetesEventArtifacts(ctx, cfg, result)
+		return result
+	}
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "kubernetes", Action: "helm rollback", Passed: true})
+	if err := runKubectl(ctx, cfg, "rollout", "status", "deployment/"+deployment, "--timeout=120s"); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "rollback rollout status: "+err.Error())
+		addKubernetesEventArtifacts(ctx, cfg, result)
+		return result
+	}
+	rollbackImage, err := kubectlOutput(ctx, cfg, "get", "deployment", deployment, "-o", "jsonpath={.spec.template.spec.containers[0].image}")
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "observe rollback image: "+err.Error())
+		addKubernetesEventArtifacts(ctx, cfg, result)
+		return result
+	}
+	rollbackImage = strings.TrimSpace(rollbackImage)
+	rollbackOK := rollbackImage == cfg.BaseImage
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "kubernetes", Action: "rollback image observation", Passed: rollbackOK})
+	if !rollbackOK {
+		result.FailureReasons = append(result.FailureReasons, fmt.Sprintf("rollback image = %q, want %q", rollbackImage, cfg.BaseImage))
+	}
+
+	events := kubernetesEventSnippet(ctx, cfg)
+	result.Artifacts = map[string]string{
+		"kubeContext":       cfg.Context,
+		"namespace":         cfg.Namespace,
+		"release":           cfg.Release,
+		"deployment":        deployment,
+		"baseImage":         cfg.BaseImage,
+		"targetImage":       cfg.TargetImage,
+		"deployedImage":     deployedImage,
+		"rollbackImage":     rollbackImage,
+		"helmStatus":        upgradedStatus.Info.Status,
+		"helmRevision":      fmt.Sprintf("%d", upgradedStatus.Version),
+		"rolloutDurationMs": fmt.Sprintf("%d", rolloutDuration.Milliseconds()),
+		"rollbackNote":      fmt.Sprintf("helm rollback %s %d completed and restored %s", cfg.Release, baseStatus.Version, cfg.BaseImage),
+		"events":            events,
+	}
+	return result
+}
+
+func kubernetesRolloutConfigFromEnv() (kubernetesRolloutConfig, error) {
+	cfg := kubernetesRolloutConfig{
+		Kubeconfig:  strings.TrimSpace(os.Getenv("AGENTOS_EVAL_KUBECONFIG")),
+		Context:     strings.TrimSpace(os.Getenv("AGENTOS_EVAL_KUBE_CONTEXT")),
+		Namespace:   strings.TrimSpace(os.Getenv("AGENTOS_EVAL_KUBE_NAMESPACE")),
+		Release:     strings.TrimSpace(os.Getenv("AGENTOS_EVAL_KUBE_RELEASE")),
+		BaseImage:   strings.TrimSpace(os.Getenv("AGENTOS_EVAL_KUBE_BASE_IMAGE")),
+		TargetImage: strings.TrimSpace(os.Getenv("AGENTOS_EVAL_KUBE_TARGET_IMAGE")),
+	}
+	var missing []string
+	for name, value := range map[string]string{
+		"AGENTOS_EVAL_KUBECONFIG":     cfg.Kubeconfig,
+		"AGENTOS_EVAL_KUBE_CONTEXT":   cfg.Context,
+		"AGENTOS_EVAL_KUBE_NAMESPACE": cfg.Namespace,
+	} {
+		if value == "" {
+			missing = append(missing, name)
+		}
+	}
+	slices.Sort(missing)
+	if len(missing) > 0 {
+		return cfg, fmt.Errorf("Kubernetes rollout E2E requires explicit %s", strings.Join(missing, ", "))
+	}
+	if cfg.Release == "" {
+		cfg.Release = "agentos-eval-rollout"
+	}
+	if cfg.BaseImage == "" {
+		cfg.BaseImage = "registry.k8s.io/pause:3.9"
+	}
+	if cfg.TargetImage == "" {
+		cfg.TargetImage = "registry.k8s.io/pause:3.10"
+	}
+	return cfg, nil
+}
+
+func writeKubernetesEvalChart() (string, error) {
+	root, err := os.MkdirTemp("", "agentos-kubernetes-eval-*")
+	if err != nil {
+		return "", err
+	}
+	chartDir := filepath.Join(root, "chart")
+	if err := os.MkdirAll(filepath.Join(chartDir, "templates"), 0o755); err != nil {
+		return "", err
+	}
+	files := map[string]string{
+		filepath.Join(chartDir, "Chart.yaml"): `apiVersion: v2
+name: agentos-rollout-eval
+description: AgentOS disposable rollout eval chart
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+`,
+		filepath.Join(chartDir, "values.yaml"): `image: registry.k8s.io/pause:3.9
+`,
+		filepath.Join(chartDir, "templates", "deployment.yaml"): `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-agentos-eval
+  labels:
+    app.kubernetes.io/name: agentos-rollout-eval
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agentos-rollout-eval
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agentos-rollout-eval
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: pause
+          image: {{ .Values.image | quote }}
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 1m
+              memory: 8Mi
+            limits:
+              cpu: 20m
+              memory: 32Mi
+`,
+	}
+	for path, content := range files {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			return "", err
+		}
+	}
+	return chartDir, nil
+}
+
+func runHelm(ctx context.Context, cfg kubernetesRolloutConfig, args ...string) error {
+	_, err := commandOutput(ctx, "", "helm", append(helmBaseArgs(cfg), args...)...)
+	return err
+}
+
+func getHelmStatus(ctx context.Context, cfg kubernetesRolloutConfig) (*helmStatusResult, error) {
+	out, err := commandOutput(ctx, "", "helm", append(helmBaseArgs(cfg), "status", cfg.Release, "--output", "json")...)
+	if err != nil {
+		return nil, err
+	}
+	var status helmStatusResult
+	if err := json.Unmarshal([]byte(out), &status); err != nil {
+		return nil, err
+	}
+	return &status, nil
+}
+
+func helmBaseArgs(cfg kubernetesRolloutConfig) []string {
+	args := []string{"--kubeconfig", cfg.Kubeconfig, "--kube-context", cfg.Context, "--namespace", cfg.Namespace}
+	return args
+}
+
+func runKubectl(ctx context.Context, cfg kubernetesRolloutConfig, args ...string) error {
+	_, err := kubectlOutput(ctx, cfg, args...)
+	return err
+}
+
+func kubectlOutput(ctx context.Context, cfg kubernetesRolloutConfig, args ...string) (string, error) {
+	base := []string{"--kubeconfig", cfg.Kubeconfig, "--context", cfg.Context, "-n", cfg.Namespace}
+	return commandOutput(ctx, "", "kubectl", append(base, args...)...)
+}
+
+func commandOutput(ctx context.Context, dir, name string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
+	var stderr bytes.Buffer
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		out := sanitizeKubernetesOutput(strings.TrimSpace(stdout.String() + "\n" + stderr.String()))
+		if out == "" {
+			out = err.Error()
+		}
+		return "", fmt.Errorf("%s %s: %s", name, strings.Join(args, " "), out)
+	}
+	return sanitizeKubernetesOutput(stdout.String()), nil
+}
+
+func addKubernetesEventArtifacts(ctx context.Context, cfg kubernetesRolloutConfig, result *ScenarioResult) {
+	if result.Artifacts == nil {
+		result.Artifacts = map[string]string{}
+	}
+	result.Artifacts["kubeContext"] = cfg.Context
+	result.Artifacts["namespace"] = cfg.Namespace
+	result.Artifacts["release"] = cfg.Release
+	result.Artifacts["events"] = kubernetesEventSnippet(ctx, cfg)
+}
+
+func kubernetesEventSnippet(ctx context.Context, cfg kubernetesRolloutConfig) string {
+	out, err := kubectlOutput(ctx, cfg, "get", "events", "--sort-by=.lastTimestamp", "-o", "custom-columns=LAST:.lastTimestamp,TYPE:.type,REASON:.reason,KIND:.involvedObject.kind,NAME:.involvedObject.name,MESSAGE:.message")
+	if err != nil {
+		return err.Error()
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) > 9 {
+		lines = append(lines[:1], lines[len(lines)-8:]...)
+	}
+	return sanitizeKubernetesOutput(strings.Join(lines, "\n"))
+}
+
+func sanitizeKubernetesOutput(out string) string {
+	for _, key := range []string{"AGENTOS_EVAL_AUTH_COOKIE", "GITHUB_TOKEN", "GH_TOKEN"} {
+		value := os.Getenv(key)
+		if value != "" {
+			out = strings.ReplaceAll(out, value, "[redacted]")
+		}
+	}
+	return out
 }
 
 type scheduleEvalDefinition struct {

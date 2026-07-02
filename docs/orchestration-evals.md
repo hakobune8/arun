@@ -92,7 +92,7 @@ configuration. They are not printed in eval reports. Set
 `AGENTOS_EVAL_AUTH_E2E_OUT` to capture optional desktop and mobile screenshots
 outside the repository.
 
-Real GitHub writes and Kubernetes rollout checks remain separate v1.4.x
+Real GitHub writes and Kubernetes rollout checks are separate v1.4.x
 operational scenarios. They are not part of the default CI eval suite.
 
 ## Live GitHub Workflow E2E
@@ -118,6 +118,43 @@ temporary branch, commits a small `.agentos-evals/` file, opens a draft pull
 request, looks up check runs and workflow runs for the base branch, then closes
 the PR and issue and deletes the branch. The report records the issue URL, PR
 URL, branch, file path, cleanup state, and check/workflow lookup counts.
+
+## Kubernetes Rollout E2E
+
+Kubernetes rollout checks are opt-in and require an explicit kubeconfig,
+context, and namespace. Run them only in a disposable namespace or another
+controlled canary target:
+
+```sh
+AGENTOS_EVAL_KUBECONFIG=/secure/path/kubeconfig.yaml \
+AGENTOS_EVAL_KUBE_CONTEXT=mgmt-k3s \
+AGENTOS_EVAL_KUBE_NAMESPACE=agentos-evals \
+agentos evals \
+  --kubernetes-rollout-e2e \
+  --scenario kubernetes-rollout-e2e \
+  --format markdown \
+  --output .agentos/evals/kubernetes-rollout-report.md
+```
+
+The scenario creates a small disposable Helm release
+(`AGENTOS_EVAL_KUBE_RELEASE`, default `agentos-eval-rollout`) using a generated
+chart, installs a baseline image, upgrades to a target image, waits for
+Deployment rollout and readiness, observes the deployed image, runs
+`helm rollback` to the baseline revision, observes the rollback image, and then
+uninstalls the test release. Set `AGENTOS_EVAL_KUBE_KEEP_RELEASE=true` only
+when you need to inspect the release after a failed run.
+
+Optional image overrides:
+
+```sh
+AGENTOS_EVAL_KUBE_BASE_IMAGE=registry.k8s.io/pause:3.9
+AGENTOS_EVAL_KUBE_TARGET_IMAGE=registry.k8s.io/pause:3.10
+```
+
+The report includes namespace, context, release, Deployment name, deployed
+image, rollback image, Helm revision and status, rollout duration, rollback
+note, and recent Kubernetes event snippets. Failure output includes recent
+events without printing configured auth cookies or GitHub tokens.
 
 ## Schedule Notification E2E
 

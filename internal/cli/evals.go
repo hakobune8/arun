@@ -39,16 +39,17 @@ artifacts, quality gates, and report generation.`,
 }
 
 var (
-	evalsFormat            string
-	evalsOutput            string
-	evalsScenarios         string
-	evalsWorkDir           string
-	evalsLive              bool
-	evalsLiveURL           string
-	evalsAuthE2E           bool
-	evalsStorageCleanupE2E bool
-	evalsScheduleNotifyE2E bool
-	evalsGitHubWorkflowE2E bool
+	evalsFormat               string
+	evalsOutput               string
+	evalsScenarios            string
+	evalsWorkDir              string
+	evalsLive                 bool
+	evalsLiveURL              string
+	evalsAuthE2E              bool
+	evalsStorageCleanupE2E    bool
+	evalsScheduleNotifyE2E    bool
+	evalsGitHubWorkflowE2E    bool
+	evalsKubernetesRolloutE2E bool
 )
 
 func init() {
@@ -63,6 +64,7 @@ func init() {
 	evalsCmd.Flags().BoolVar(&evalsStorageCleanupE2E, "storage-cleanup-e2e", false, "Include opt-in authenticated storage cleanup dry-run and execution checks")
 	evalsCmd.Flags().BoolVar(&evalsScheduleNotifyE2E, "schedule-notification-e2e", false, "Include opt-in authenticated schedule execution notification checks")
 	evalsCmd.Flags().BoolVar(&evalsGitHubWorkflowE2E, "github-workflow-e2e", false, "Include opt-in live GitHub issue and PR workflow checks")
+	evalsCmd.Flags().BoolVar(&evalsKubernetesRolloutE2E, "kubernetes-rollout-e2e", false, "Include opt-in live Kubernetes rollout and rollback checks")
 }
 
 func runEvals(ctx context.Context) error {
@@ -78,14 +80,15 @@ func runEvals(ctx context.Context) error {
 		output = evals.DefaultOutputPath(format)
 	}
 	report, err := evals.Run(ctx, evals.Options{
-		ScenarioIDs:              splitComma(evalsScenarios),
-		WorkDir:                  evalsWorkDir,
-		IncludeLive:              evalsLive,
-		LiveURL:                  evalsLiveURL,
-		IncludeAuthE2E:           evalsAuthE2E,
-		IncludeStorageCleanupE2E: evalsStorageCleanupE2E,
-		IncludeScheduleNotifyE2E: evalsScheduleNotifyE2E,
-		IncludeGitHubWorkflowE2E: evalsGitHubWorkflowE2E,
+		ScenarioIDs:                 splitComma(evalsScenarios),
+		WorkDir:                     evalsWorkDir,
+		IncludeLive:                 evalsLive,
+		LiveURL:                     evalsLiveURL,
+		IncludeAuthE2E:              evalsAuthE2E,
+		IncludeStorageCleanupE2E:    evalsStorageCleanupE2E,
+		IncludeScheduleNotifyE2E:    evalsScheduleNotifyE2E,
+		IncludeGitHubWorkflowE2E:    evalsGitHubWorkflowE2E,
+		IncludeKubernetesRolloutE2E: evalsKubernetesRolloutE2E,
 	})
 	if err != nil {
 		return err

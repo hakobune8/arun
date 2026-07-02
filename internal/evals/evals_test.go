@@ -151,11 +151,42 @@ func TestRun_GitHubWorkflowE2ERequiresRepo(t *testing.T) {
 	}
 }
 
+func TestRun_KubernetesRolloutE2ERequiresExplicitConfig(t *testing.T) {
+	t.Setenv("AGENTOS_EVAL_KUBECONFIG", "")
+	t.Setenv("AGENTOS_EVAL_KUBE_CONTEXT", "")
+	t.Setenv("AGENTOS_EVAL_KUBE_NAMESPACE", "")
+	report, err := Run(context.Background(), Options{
+		WorkDir:                     t.TempDir(),
+		ScenarioIDs:                 []string{"kubernetes-rollout-e2e"},
+		IncludeKubernetesRolloutE2E: true,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if report.Total != 1 || report.Passed != 0 || report.Failed != 1 {
+		t.Fatalf("report = %+v, want one failing Kubernetes rollout scenario", report)
+	}
+	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
+	for _, want := range []string{"AGENTOS_EVAL_KUBECONFIG", "AGENTOS_EVAL_KUBE_CONTEXT", "AGENTOS_EVAL_KUBE_NAMESPACE"} {
+		if !strings.Contains(reasons, want) {
+			t.Fatalf("failure reasons = %q, want %s", reasons, want)
+		}
+	}
+}
+
 func TestSanitizeAuthE2EOutput(t *testing.T) {
 	t.Setenv("AGENTOS_EVAL_AUTH_COOKIE", "agentos_session=secret")
 	got := sanitizeAuthE2EOutput("failed with agentos_session=secret")
 	if strings.Contains(got, "secret") || !strings.Contains(got, "[redacted]") {
 		t.Fatalf("sanitizeAuthE2EOutput() = %q", got)
+	}
+}
+
+func TestSanitizeKubernetesOutput(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "ghp_secret")
+	got := sanitizeKubernetesOutput("event included ghp_secret")
+	if strings.Contains(got, "ghp_secret") || !strings.Contains(got, "[redacted]") {
+		t.Fatalf("sanitizeKubernetesOutput() = %q", got)
 	}
 }
 
