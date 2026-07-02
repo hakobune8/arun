@@ -15,6 +15,7 @@
 package github
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -364,6 +365,128 @@ func TestClient_CreatePR_Error(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestClient_ClosePR(t *testing.T) {
+	t.Parallel()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			t.Errorf("method = %s, want PATCH", r.Method)
+		}
+		if r.URL.Path != "/repos/owner/repo/pulls/3" {
+			t.Errorf("path = %s, want /repos/owner/repo/pulls/3", r.URL.Path)
+		}
+		var req UpdatePRRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if req.State != "closed" {
+			t.Fatalf("request = %+v", req)
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck // test helper
+			"number":   3,
+			"title":    "Closed PR",
+			"html_url": "https://github.com/owner/repo/pull/3",
+			"state":    "closed",
+		})
+	}))
+	defer ts.Close()
+
+	c := &Client{
+		BaseURL:   ts.URL,
+		Token:     "test-token",
+		RepoOwner: "owner",
+		RepoName:  "repo",
+		http:      ts.Client(),
+	}
+	pr, err := c.ClosePR(3)
+	if err != nil {
+		t.Fatalf("ClosePR() error = %v", err)
+	}
+	if pr.State != "closed" || pr.Number != 3 {
+		t.Fatalf("pr = %+v", pr)
+	}
+}
+
+func TestClient_BranchRefs(t *testing.T) {
+	t.Parallel()
+	var created bool
+	var deleted bool
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo/git/ref/heads/main":
+			_, _ = w.Write([]byte(`{"ref":"refs/heads/main","object":{"sha":"abc123"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/repos/owner/repo/git/refs":
+			var req CreateRefRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode create ref: %v", err)
+			}
+			if req.Ref != "refs/heads/agentos-eval/test" || req.SHA != "abc123" {
+				t.Fatalf("create ref request = %+v", req)
+			}
+			created = true
+			w.WriteHeader(http.StatusCreated)
+		case r.Method == http.MethodDelete && r.URL.Path == "/repos/owner/repo/git/refs/heads/agentos-eval/test":
+			deleted = true
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	c := &Client{BaseURL: ts.URL, Token: "test-token", RepoOwner: "owner", RepoName: "repo", http: ts.Client()}
+	sha, err := c.GetBranchSHA("main")
+	if err != nil {
+		t.Fatalf("GetBranchSHA() error = %v", err)
+	}
+	if sha != "abc123" {
+		t.Fatalf("sha = %q, want abc123", sha)
+	}
+	if err := c.CreateBranch("agentos-eval/test", sha); err != nil {
+		t.Fatalf("CreateBranch() error = %v", err)
+	}
+	if err := c.DeleteBranch("agentos-eval/test"); err != nil {
+		t.Fatalf("DeleteBranch() error = %v", err)
+	}
+	if !created || !deleted {
+		t.Fatalf("created=%v deleted=%v", created, deleted)
+	}
+}
+
+func TestClient_PutFile(t *testing.T) {
+	t.Parallel()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Errorf("method = %s, want PUT", r.Method)
+		}
+		if r.URL.Path != "/repos/owner/repo/contents/.agentos-evals/live-github.md" {
+			t.Errorf("path = %s, want content path", r.URL.Path)
+		}
+		var req PutFileRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		content, err := base64.StdEncoding.DecodeString(req.Content)
+		if err != nil {
+			t.Fatalf("decode content: %v", err)
+		}
+		if string(content) != "hello\n" || req.Branch != "agentos-eval/test" || req.Message == "" {
+			t.Fatalf("request = %+v content=%q", req, string(content))
+		}
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer ts.Close()
+
+	c := &Client{BaseURL: ts.URL, Token: "test-token", RepoOwner: "owner", RepoName: "repo", http: ts.Client()}
+	if err := c.PutFile(".agentos-evals/live-github.md", PutFileRequest{
+		Message: "add eval file",
+		Content: "hello\n",
+		Branch:  "agentos-eval/test",
+	}); err != nil {
+		t.Fatalf("PutFile() error = %v", err)
 	}
 }
 

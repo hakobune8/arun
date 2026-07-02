@@ -132,6 +132,25 @@ func TestRun_ScheduleNotificationE2ERequiresCookie(t *testing.T) {
 	}
 }
 
+func TestRun_GitHubWorkflowE2ERequiresRepo(t *testing.T) {
+	t.Setenv("AGENTOS_EVAL_GITHUB_REPO", "")
+	report, err := Run(context.Background(), Options{
+		WorkDir:                  t.TempDir(),
+		ScenarioIDs:              []string{"github-workflow-e2e"},
+		IncludeGitHubWorkflowE2E: true,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if report.Total != 1 || report.Passed != 0 || report.Failed != 1 {
+		t.Fatalf("report = %+v, want one failing GitHub workflow E2E scenario", report)
+	}
+	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
+	if !strings.Contains(reasons, "AGENTOS_EVAL_GITHUB_REPO") {
+		t.Fatalf("failure reasons = %q, want missing repo", reasons)
+	}
+}
+
 func TestSanitizeAuthE2EOutput(t *testing.T) {
 	t.Setenv("AGENTOS_EVAL_AUTH_COOKIE", "agentos_session=secret")
 	got := sanitizeAuthE2EOutput("failed with agentos_session=secret")
@@ -147,6 +166,16 @@ func TestHasInboxDelivery(t *testing.T) {
 	}
 	if hasInboxDelivery([]notificationEvalDelivery{{Destination: "webhook", Status: "success"}}) {
 		t.Fatal("hasInboxDelivery() = true for non-inbox delivery, want false")
+	}
+}
+
+func TestSplitGitHubRepo(t *testing.T) {
+	owner, name, ok := splitGitHubRepo("owner/repo.git")
+	if !ok || owner != "owner" || name != "repo" {
+		t.Fatalf("splitGitHubRepo() = %q %q %v, want owner repo true", owner, name, ok)
+	}
+	if _, _, ok := splitGitHubRepo("owner/repo/extra"); ok {
+		t.Fatal("splitGitHubRepo() accepted nested path")
 	}
 }
 

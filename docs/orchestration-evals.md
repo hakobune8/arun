@@ -95,6 +95,30 @@ outside the repository.
 Real GitHub writes and Kubernetes rollout checks remain separate v1.4.x
 operational scenarios. They are not part of the default CI eval suite.
 
+## Live GitHub Workflow E2E
+
+Live GitHub workflow checks are opt-in and create real GitHub artifacts. Run
+them only against a dedicated test repository that already has the configured
+base branch, with a token or GitHub App installation that can create issues,
+branches, files, and pull requests:
+
+```sh
+AGENTOS_EVAL_GITHUB_REPO='owner/test-repo' \
+AGENTOS_EVAL_GITHUB_BASE_BRANCH='main' \
+GITHUB_TOKEN='<token-with-repo-access>' \
+agentos evals \
+  --github-workflow-e2e \
+  --scenario github-workflow-e2e \
+  --format markdown \
+  --output .agentos/evals/github-workflow-report.md
+```
+
+The scenario creates a titled `[AgentOS Eval]` issue, comments on it, creates a
+temporary branch, commits a small `.agentos-evals/` file, opens a draft pull
+request, looks up check runs and workflow runs for the base branch, then closes
+the PR and issue and deletes the branch. The report records the issue URL, PR
+URL, branch, file path, cleanup state, and check/workflow lookup counts.
+
 ## Schedule Notification E2E
 
 Schedule notification checks are opt-in and require an authenticated API
