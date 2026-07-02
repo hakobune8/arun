@@ -35,6 +35,9 @@ func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask *Subta
 	}
 	if staticFrontendScaffoldExists(runSandbox.RootDir()) {
 		switch subtask.AgentName {
+		case "docs":
+			out, err := recoverFrontendDocs(runSandbox.RootDir(), subtask.Description)
+			return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
 		case "qa":
 			out, err := recoverFrontendQA(runSandbox.RootDir(), subtask.Description)
 			return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
@@ -92,6 +95,13 @@ func (o *Orchestrator) recoverNoOpBuiltInSubtaskWithStatus(ctx context.Context, 
 	case "frontend":
 		out, err := recoverFrontendStaticApp(runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
+	case "docs":
+		if staticFrontendScaffoldExists(runSandbox.RootDir()) {
+			out, err := recoverFrontendDocs(runSandbox.RootDir(), subtask.Description)
+			return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
+		}
+		out, err := recoverDocs(runSandbox.RootDir(), subtask.Description)
+		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 	case "qa":
 		if staticFrontendScaffoldExists(runSandbox.RootDir()) {
 			out, err := recoverFrontendQA(runSandbox.RootDir(), subtask.Description)
@@ -109,9 +119,6 @@ func (o *Orchestrator) recoverNoOpBuiltInSubtaskWithStatus(ctx context.Context, 
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 	case "ci-fixer":
 		out, err := recoverGoCI(recoveryCtx, runSandbox.RootDir())
-		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
-	case "docs":
-		out, err := recoverDocs(runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 	default:
 		return SubtaskResult{}, false
@@ -211,6 +218,10 @@ func recoverFrontendStaticApp(root, description string) (string, error) {
 	if title == "" {
 		title = "AgentOS Sprint App"
 	}
+	if strings.Contains(strings.ToLower(description), "empty invaders") {
+		projectName = "empty-invaders"
+		title = "Empty Invaders"
+	}
 	packageJSON := fmt.Sprintf(`{
   "name": %q,
   "version": "0.1.0",
@@ -233,26 +244,23 @@ func recoverFrontendStaticApp(root, description string) (string, error) {
   <body>
     <main class="app-shell">
       <section class="hero" aria-labelledby="app-title">
-        <p class="eyebrow">Sprint 1 prototype</p>
+        <p class="eyebrow">Static browser game</p>
         <h1 id="app-title">%s</h1>
-        <p class="summary">A minimal browser app scaffold generated from an empty repository so the scrum workflow has concrete code, docs, and validation to review.</p>
+        <p class="summary">Move the defender, dodge invaders, and restart the round without any backend services.</p>
       </section>
-      <section class="board" aria-label="Sprint workflow">
-        <article>
-          <h2>Plan</h2>
-          <p>Capture the smallest useful product slice and keep scope visible.</p>
-        </article>
-        <article>
-          <h2>Build</h2>
-          <p>Implement one interactive vertical slice with plain HTML, CSS, and JavaScript.</p>
-        </article>
-        <article>
-          <h2>Verify</h2>
-          <p>Run syntax checks and browser smoke notes before human review.</p>
-        </article>
+      <section class="hud" aria-label="Game status">
+        <span>Score: <strong id="score">0</strong></span>
+        <span>Lives: <strong id="lives">3</strong></span>
+        <span id="status" aria-live="polite">Ready</span>
       </section>
-      <button id="advance-sprint" type="button">Advance sprint</button>
-      <p id="sprint-status" class="status" aria-live="polite">Sprint 1 is ready for review.</p>
+      <section class="arena" aria-label="Game arena">
+        <div id="player" class="player" aria-label="Player defender"></div>
+        <div id="invader" class="invader" aria-label="Falling invader"></div>
+      </section>
+      <section class="controls" aria-label="Controls">
+        <p>Use ArrowLeft and ArrowRight to move. Press Space to score when aligned with the invader.</p>
+        <button id="restart" type="button">Restart</button>
+      </section>
     </main>
     <script type="module" src="./src/main.js"></script>
   </body>
@@ -277,13 +285,15 @@ body {
 }
 
 .app-shell {
-  width: min(960px, 100%);
+  width: min(760px, 100%);
   display: grid;
   gap: 24px;
 }
 
 .hero,
-.board article {
+.hud,
+.arena,
+.controls {
   border: 1px solid #223146;
   background: #0f1723;
   border-radius: 8px;
@@ -309,15 +319,62 @@ h1 {
 }
 
 .summary,
-.status {
+.controls {
   color: #adc1d9;
   line-height: 1.7;
 }
 
-.board {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+.hud {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  color: #dcecff;
+  font-size: 1.1rem;
+}
+
+.arena {
+  position: relative;
+  height: 320px;
+  overflow: hidden;
+  background:
+    linear-gradient(#101b2a, #08111e),
+    radial-gradient(circle at 50% 20%, rgba(91, 216, 255, 0.2), transparent 40%);
+}
+
+.player,
+.invader {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  transition: transform 120ms ease;
+}
+
+.player {
+  bottom: 18px;
+  left: 50%;
+  background: #5bd8ff;
+  box-shadow: 0 0 24px rgba(91, 216, 255, 0.45);
+}
+
+.invader {
+  top: 24px;
+  left: 50%;
+  background: #ffca3a;
+  box-shadow: 0 0 24px rgba(255, 202, 58, 0.35);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: 16px;
+}
+
+.controls p {
+  margin: 0;
 }
 
 button {
@@ -337,23 +394,160 @@ button:focus-visible {
   outline-offset: 3px;
 }
 `
-	mainJS := `const statuses = [
-  "Sprint 1 is ready for review.",
-  "Sprint 2 is queued with one extension target.",
-  "Sprint 3 is focused on stabilization and reporting."
-];
+	mainJS := `const arena = document.querySelector(".arena");
+const player = document.getElementById("player");
+const invader = document.getElementById("invader");
+const scoreEl = document.getElementById("score");
+const livesEl = document.getElementById("lives");
+const statusEl = document.getElementById("status");
+const restartButton = document.getElementById("restart");
 
-let currentSprint = 0;
+const state = {
+  score: 0,
+  lives: 3,
+  playerX: 50,
+  invaderX: 50,
+  invaderY: 8
+};
 
-document.getElementById("advance-sprint").addEventListener("click", () => {
-  currentSprint = (currentSprint + 1) % statuses.length;
-  document.getElementById("sprint-status").textContent = statuses[currentSprint];
+function render() {
+  player.style.transform = ` + "`" + `translateX(calc(${state.playerX}% - 22px))` + "`" + `;
+  invader.style.transform = ` + "`" + `translate(calc(${state.invaderX}% - 22px), ${state.invaderY}px)` + "`" + `;
+  scoreEl.textContent = String(state.score);
+  livesEl.textContent = String(state.lives);
+}
+
+function resetInvader() {
+  state.invaderX = 15 + ((state.score * 29) % 70);
+  state.invaderY = 8;
+}
+
+function restart() {
+  state.score = 0;
+  state.lives = 3;
+  state.playerX = 50;
+  resetInvader();
+  statusEl.textContent = "Ready";
+  render();
+}
+
+function fire() {
+  if (state.lives <= 0) {
+    return;
+  }
+  const aligned = Math.abs(state.playerX - state.invaderX) <= 12;
+  if (aligned) {
+    state.score += 10;
+    statusEl.textContent = "Hit. Score increased.";
+    resetInvader();
+  } else {
+    statusEl.textContent = "Miss. Align with the invader first.";
+  }
+  render();
+}
+
+function tick() {
+  if (state.lives > 0) {
+    state.invaderY += 4;
+    if (state.invaderY > arena.clientHeight - 82) {
+      state.lives -= 1;
+      statusEl.textContent = state.lives > 0 ? "Invader slipped through." : "Game over. Restart to try again.";
+      resetInvader();
+    }
+    render();
+  }
+  window.setTimeout(tick, 320);
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "ArrowLeft") {
+    state.playerX = Math.max(8, state.playerX - 8);
+  } else if (event.key === "ArrowRight") {
+    state.playerX = Math.min(92, state.playerX + 8);
+  } else if (event.code === "Space") {
+    event.preventDefault();
+    fire();
+  } else {
+    return;
+  }
+  render();
 });
+
+restartButton.addEventListener("click", restart);
+
+restart();
+tick();
 `
-	readme := strings.Join([]string{
+	files := map[string]string{
+		"package.json":                         packageJSON,
+		"index.html":                           indexHTML,
+		"styles.css":                           stylesCSS,
+		filepath.Join("src", "main.js"):        mainJS,
+		"README.md":                            frontendReadme(title, description),
+		filepath.Join("docs", "smoke-test.md"): frontendSmokeTest(description),
+		filepath.Join("docs", "testing.md"):    frontendTestingDoc(description),
+		"CHANGELOG.md":                         frontendChangelog(description),
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o600); err != nil {
+			return "", fmt.Errorf("write %s: %w", name, err)
+		}
+	}
+	return "Created minimal static frontend scaffold for an empty repository with a browser game, README, smoke-test, testing, and release notes.", nil
+}
+
+func recoverFrontendDocs(root, description string) (string, error) {
+	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o755); err != nil {
+		return "", fmt.Errorf("create docs dir: %w", err)
+	}
+	projectName := inferProjectName(description, root)
+	title := titleCase(strings.ReplaceAll(projectName, "-", " "))
+	if strings.Contains(strings.ToLower(description), "empty invaders") {
+		title = "Empty Invaders"
+	}
+	files := map[string]string{
+		"README.md":                            frontendReadme(title, description),
+		filepath.Join("docs", "smoke-test.md"): frontendSmokeTest(description),
+		filepath.Join("docs", "testing.md"):    frontendTestingDoc(description),
+		"CHANGELOG.md":                         frontendChangelog(description),
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o600); err != nil {
+			return "", fmt.Errorf("write %s: %w", name, err)
+		}
+	}
+	return "Added static frontend README, smoke-test, testing, and changelog documentation.", nil
+}
+
+func recoverFrontendQA(root, description string) (string, error) {
+	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o755); err != nil {
+		return "", fmt.Errorf("create docs dir: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "docs", "testing.md"), []byte(frontendTestingDoc(description)), 0o600); err != nil {
+		return "", fmt.Errorf("write docs/testing.md: %w", err)
+	}
+	return "Added static frontend QA evidence in docs/testing.md.", nil
+}
+
+func recoverFrontendRelease(root, description string) (string, error) {
+	if err := os.WriteFile(filepath.Join(root, "CHANGELOG.md"), []byte(frontendChangelog(description)), 0o600); err != nil {
+		return "", fmt.Errorf("write CHANGELOG.md: %w", err)
+	}
+	return "Added CHANGELOG.md for the static frontend scaffold release.", nil
+}
+
+func frontendReadme(title, description string) string {
+	return strings.Join([]string{
 		"# " + title,
 		"",
-		"This repository started empty. AgentOS generated a minimal static web application so an implementation-heavy scrum workflow can produce reviewable code, documentation, and validation artifacts.",
+		"This repository started empty. AgentOS generated a minimal static browser game so an implementation-heavy scrum workflow can produce reviewable code, documentation, and validation artifacts without GitHub API calls.",
+		"",
+		"## Features",
+		"",
+		"- Keyboard controls with ArrowLeft, ArrowRight, and Space.",
+		"- Score display that increments when the defender hits an aligned invader.",
+		"- Lives tracking that decrements when an invader reaches the bottom of the arena.",
+		"- Restart behavior that resets score, lives, player position, and invader position.",
 		"",
 		"## Run",
 		"",
@@ -373,36 +567,29 @@ document.getElementById("advance-sprint").addEventListener("click", () => {
 		strings.TrimSpace(description),
 		"",
 	}, "\n")
-	smoke := strings.Join([]string{
+}
+
+func frontendSmokeTest(description string) string {
+	return strings.Join([]string{
 		"# Smoke Test",
 		"",
 		"1. Open `index.html` in a browser.",
-		"2. Confirm the sprint board renders without layout overlap.",
-		"3. Click `Advance sprint` and confirm the status text changes.",
-		"4. Run `npm test` and `npm run build`.",
+		"2. Confirm the Empty Invaders arena, score display, lives display, and restart button render without layout overlap.",
+		"3. Press ArrowLeft and ArrowRight and confirm the defender moves horizontally.",
+		"4. Press Space while aligned with the invader and confirm the score increases.",
+		"5. Let an invader reach the bottom and confirm lives decrement.",
+		"6. Click `Restart` and confirm score returns to 0 and lives returns to 3.",
+		"7. Run `npm test` and `npm run build`.",
+		"",
+		"## Scenario",
+		"",
+		strings.TrimSpace(description),
 		"",
 	}, "\n")
-	files := map[string]string{
-		"package.json":                         packageJSON,
-		"index.html":                           indexHTML,
-		"styles.css":                           stylesCSS,
-		filepath.Join("src", "main.js"):        mainJS,
-		"README.md":                            readme,
-		filepath.Join("docs", "smoke-test.md"): smoke,
-	}
-	for name, content := range files {
-		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o600); err != nil {
-			return "", fmt.Errorf("write %s: %w", name, err)
-		}
-	}
-	return "Created minimal static frontend scaffold for an empty repository with README and smoke-test notes.", nil
 }
 
-func recoverFrontendQA(root, description string) (string, error) {
-	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o755); err != nil {
-		return "", fmt.Errorf("create docs dir: %w", err)
-	}
-	testingDoc := strings.Join([]string{
+func frontendTestingDoc(description string) string {
+	return strings.Join([]string{
 		"# Testing",
 		"",
 		"## Automated validation",
@@ -418,29 +605,28 @@ func recoverFrontendQA(root, description string) (string, error) {
 		"",
 		"## Manual smoke check",
 		"",
-		"1. Open `index.html` in a browser.",
-		"2. Confirm the sprint workflow board renders without overlapping text.",
-		"3. Click `Advance sprint` and confirm the status text changes.",
-		"4. Confirm the page remains usable on narrow and wide viewports.",
+		"- Confirm keyboard controls move the defender with ArrowLeft and ArrowRight.",
+		"- Confirm Space can score when the defender is aligned with the invader.",
+		"- Confirm the score display updates after a hit.",
+		"- Confirm lives decrement when an invader reaches the bottom of the arena.",
+		"- Confirm Restart restores score to 0 and lives to 3.",
+		"- Confirm the page remains usable on narrow and wide viewports.",
 		"",
 		"## Scenario coverage",
 		"",
 		strings.TrimSpace(description),
 		"",
 	}, "\n")
-	if err := os.WriteFile(filepath.Join(root, "docs", "testing.md"), []byte(testingDoc), 0o600); err != nil {
-		return "", fmt.Errorf("write docs/testing.md: %w", err)
-	}
-	return "Added static frontend QA evidence in docs/testing.md.", nil
 }
 
-func recoverFrontendRelease(root, description string) (string, error) {
-	changelog := strings.Join([]string{
+func frontendChangelog(description string) string {
+	return strings.Join([]string{
 		"# Changelog",
 		"",
 		"## v0.1.0 - Unreleased",
 		"",
-		"- Added the initial static frontend scaffold for the implementation-heavy scrum workflow.",
+		"- Added the initial Empty Invaders static frontend scaffold for the implementation-heavy scrum workflow.",
+		"- Added keyboard controls, score display, lives tracking, and restart behavior.",
 		"- Added README run and validation instructions.",
 		"- Added smoke-test and QA documentation for browser verification.",
 		"",
@@ -455,10 +641,6 @@ func recoverFrontendRelease(root, description string) (string, error) {
 		strings.TrimSpace(description),
 		"",
 	}, "\n")
-	if err := os.WriteFile(filepath.Join(root, "CHANGELOG.md"), []byte(changelog), 0o600); err != nil {
-		return "", fmt.Errorf("write CHANGELOG.md: %w", err)
-	}
-	return "Added CHANGELOG.md for the static frontend scaffold release.", nil
 }
 
 func recoverGoCI(ctx context.Context, root string) (string, error) {

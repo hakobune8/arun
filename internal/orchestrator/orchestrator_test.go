@@ -703,7 +703,7 @@ func TestExecuteSubtask_FrontendRecoversEmptyRepositoryNoOp(t *testing.T) {
 	if !strings.Contains(result.Output, "static frontend scaffold") {
 		t.Fatalf("output = %q, want frontend fallback detail", result.Output)
 	}
-	for _, file := range []string{"package.json", "index.html", "styles.css", filepath.Join("src", "main.js"), "README.md", filepath.Join("docs", "smoke-test.md")} {
+	for _, file := range []string{"package.json", "index.html", "styles.css", filepath.Join("src", "main.js"), "README.md", filepath.Join("docs", "smoke-test.md"), filepath.Join("docs", "testing.md"), "CHANGELOG.md"} {
 		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
 			t.Fatalf("%s not created: %v", file, err)
 		}
