@@ -228,6 +228,27 @@ func TestRun_ScrumGitHubE2ERequiresAllowlist(t *testing.T) {
 	}
 }
 
+func TestRun_ScrumGitHubE2ERejectsInvalidCleanupMode(t *testing.T) {
+	t.Setenv("AGENTOS_EVAL_GITHUB_REPO", "owner/repo")
+	t.Setenv("AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST", "owner/repo")
+	t.Setenv("AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP", "delete")
+	report, err := Run(context.Background(), Options{
+		WorkDir:               t.TempDir(),
+		ScenarioIDs:           []string{"three-sprint-scrum-github-e2e"},
+		IncludeScrumGitHubE2E: true,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if report.Total != 1 || report.Passed != 0 || report.Failed != 1 {
+		t.Fatalf("report = %+v, want one failing scrum GitHub E2E scenario", report)
+	}
+	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
+	if !strings.Contains(reasons, "AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP") {
+		t.Fatalf("failure reasons = %q, want invalid cleanup mode", reasons)
+	}
+}
+
 func TestRun_KubernetesRolloutE2ERequiresExplicitConfig(t *testing.T) {
 	t.Setenv("AGENTOS_EVAL_KUBECONFIG", "")
 	t.Setenv("AGENTOS_EVAL_KUBE_CONTEXT", "")
@@ -390,6 +411,46 @@ func TestGitHubRepoAllowed(t *testing.T) {
 	}
 	if githubRepoAllowed("owner/repo", "owner/repo-extra") {
 		t.Fatal("githubRepoAllowed() accepted partial match")
+	}
+}
+
+func TestScrumGitHubCleanupMode(t *testing.T) {
+	t.Setenv("AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP", "")
+	if got := scrumGitHubCleanupMode(); got != "close" {
+		t.Fatalf("scrumGitHubCleanupMode() = %q, want close", got)
+	}
+	t.Setenv("AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP", "keep")
+	if got := scrumGitHubCleanupMode(); got != "keep" {
+		t.Fatalf("scrumGitHubCleanupMode() = %q, want keep", got)
+	}
+	t.Setenv("AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP", "delete")
+	if got := scrumGitHubCleanupMode(); got != "" {
+		t.Fatalf("scrumGitHubCleanupMode() = %q, want empty invalid mode", got)
+	}
+}
+
+func TestScrumIssueIDFromTitle(t *testing.T) {
+	got := scrumIssueIDFromTitle("[AgentOS Eval][20260702T060704] AOS-106 Investigate flaky live LLM smoke")
+	if got != "AOS-106" {
+		t.Fatalf("scrumIssueIDFromTitle() = %q, want AOS-106", got)
+	}
+	if got := scrumIssueIDFromTitle("[AgentOS Eval] missing id"); got != "" {
+		t.Fatalf("scrumIssueIDFromTitle() = %q, want empty", got)
+	}
+}
+
+func TestScrumCleanupSucceeded(t *testing.T) {
+	closed := []scrumGitHubArtifact{{CleanupStatus: "closed", FinalState: "closed"}, {CleanupStatus: "already-closed", FinalState: "closed"}}
+	if !scrumCleanupSucceeded(closed, "close") {
+		t.Fatal("scrumCleanupSucceeded(close) = false, want true")
+	}
+	kept := []scrumGitHubArtifact{{CleanupStatus: "kept", FinalState: "open"}}
+	if !scrumCleanupSucceeded(kept, "keep") {
+		t.Fatal("scrumCleanupSucceeded(keep) = false, want true")
+	}
+	failed := []scrumGitHubArtifact{{CleanupStatus: "failed", FinalState: "open"}}
+	if scrumCleanupSucceeded(failed, "close") {
+		t.Fatal("scrumCleanupSucceeded(failed close) = true, want false")
 	}
 }
 

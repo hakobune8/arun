@@ -1135,14 +1135,16 @@ func runGitHubWorkflowScenario(ctx context.Context, result *ScenarioResult) *Sce
 }
 
 type scrumGitHubArtifact struct {
-	ID         string   `json:"id"`
-	Issue      int      `json:"issue"`
-	URL        string   `json:"url"`
-	Sprint     int      `json:"sprint"`
-	Completed  int      `json:"completed,omitempty"`
-	Carried    bool     `json:"carried,omitempty"`
-	Blockers   []string `json:"blockers,omitempty"`
-	FinalState string   `json:"finalState"`
+	ID            string   `json:"id"`
+	Issue         int      `json:"issue"`
+	URL           string   `json:"url"`
+	Sprint        int      `json:"sprint"`
+	Completed     int      `json:"completed,omitempty"`
+	Carried       bool     `json:"carried,omitempty"`
+	Blockers      []string `json:"blockers,omitempty"`
+	FinalState    string   `json:"finalState"`
+	CleanupStatus string   `json:"cleanupStatus"`
+	CleanupError  string   `json:"cleanupError,omitempty"`
 }
 
 type scrumGitHubSprint struct {
@@ -1168,6 +1170,11 @@ func runScrumGitHubScenario(ctx context.Context, result *ScenarioResult) *Scenar
 		result.FailureReasons = append(result.FailureReasons, "AGENTOS_EVAL_GITHUB_REPO must be explicitly listed in AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST")
 		return result
 	}
+	cleanupMode := scrumGitHubCleanupMode()
+	if cleanupMode == "" {
+		result.FailureReasons = append(result.FailureReasons, "AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP must be keep or close")
+		return result
+	}
 	token, err := agentosgh.TokenFromEnv(ctx)
 	if err != nil {
 		result.FailureReasons = append(result.FailureReasons, "GitHub token: "+err.Error())
@@ -1178,32 +1185,32 @@ func runScrumGitHubScenario(ctx context.Context, result *ScenarioResult) *Scenar
 		return result
 	}
 
-	runID := time.Now().UTC().Format("20060102T150405")
+	runID := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_SCRUM_GITHUB_RUN_ID"))
+	if runID == "" {
+		runID = time.Now().UTC().Format("20060102T150405")
+	}
 	client := agentosgh.NewClient(owner, name)
 	backlog := scrumGitHubBacklog()
 	issues := map[string]*agentosgh.Issue{}
-	artifacts := make([]scrumGitHubArtifact, 0, len(backlog))
-	cleanup := map[int]bool{}
-	defer func() {
-		for _, issue := range issues {
-			if issue != nil && issue.Number > 0 && !cleanup[issue.Number] {
-				_, _ = client.CloseIssue(issue.Number)
-			}
-		}
-	}()
+	existing, err := findScrumGitHubIssues(client, runID)
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "find existing scrum issues: "+err.Error())
+		return result
+	}
+	reconciledExisting := len(existing) > 0
+	for id, issue := range existing {
+		issues[id] = issue
+	}
 
-	for i := range backlog {
-		item := &backlog[i]
-		issue, err := client.CreateIssue(agentosgh.CreateIssueRequest{
-			Title: fmt.Sprintf("[AgentOS Eval][%s] %s %s", runID, item.ID, item.Title),
-			Body:  renderScrumGitHubIssueBody(runID, item, "backlog"),
-		})
+	if len(existing) == 0 {
+		created, err := createScrumGitHubIssues(client, backlog, runID, result)
 		if err != nil {
-			result.FailureReasons = append(result.FailureReasons, "create backlog issue "+item.ID+": "+err.Error())
+			result.FailureReasons = append(result.FailureReasons, err.Error())
 			return result
 		}
-		issues[item.ID] = issue
-		result.Checks = append(result.Checks, ScenarioCheck{Page: "github-scrum", Action: "create issue " + item.ID, Passed: issue.Number > 0 && issue.HTMLURL != ""})
+		issues = created
+	} else {
+		result.Checks = append(result.Checks, ScenarioCheck{Page: "github-scrum", Action: "discover existing run", Passed: true})
 	}
 
 	sprints := []scrumGitHubSprint{
@@ -1211,72 +1218,181 @@ func runScrumGitHubScenario(ctx context.Context, result *ScenarioResult) *Scenar
 		{Sprint: 2, Planned: []string{"AOS-104", "AOS-105", "AOS-106"}, Completed: []string{"AOS-104", "AOS-105"}, Carried: []string{"AOS-106"}, Blockers: []string{"AOS-106 waiting on LiteLLM operations preset confirmation"}},
 		{Sprint: 3, Planned: []string{"AOS-106", "AOS-107"}, Completed: []string{"AOS-106", "AOS-107"}},
 	}
-	for _, sprint := range sprints {
-		if err := commentScrumSprint(client, issues, runID, &sprint); err != nil {
-			result.FailureReasons = append(result.FailureReasons, fmt.Sprintf("sprint %d comment: %s", sprint.Sprint, err))
-			return result
-		}
-		for _, id := range sprint.Completed {
-			issue := issues[id]
-			if issue == nil {
-				result.FailureReasons = append(result.FailureReasons, "missing issue for completed item "+id)
+	if !reconciledExisting {
+		for _, sprint := range sprints {
+			if err := commentScrumSprint(client, issues, runID, &sprint); err != nil {
+				result.FailureReasons = append(result.FailureReasons, fmt.Sprintf("sprint %d comment: %s", sprint.Sprint, err))
 				return result
 			}
-			closed, err := client.CloseIssue(issue.Number)
-			if err != nil {
-				result.FailureReasons = append(result.FailureReasons, "close completed issue "+id+": "+err.Error())
-				return result
-			}
-			issues[id] = closed
-			cleanup[closed.Number] = true
+			result.Checks = append(result.Checks, ScenarioCheck{
+				Page:   "github-scrum",
+				Action: fmt.Sprintf("sprint %d update", sprint.Sprint),
+				Passed: true,
+			})
 		}
-		result.Checks = append(result.Checks, ScenarioCheck{
-			Page:   "github-scrum",
-			Action: fmt.Sprintf("sprint %d update", sprint.Sprint),
-			Passed: true,
-		})
 	}
+	artifacts := cleanupScrumGitHubIssues(client, issues, backlog, cleanupMode)
+	encodedArtifacts, _ := json.Marshal(artifacts)
+	encodedSprints, _ := json.Marshal(sprints)
+	cleanupOK := scrumCleanupSucceeded(artifacts, cleanupMode)
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "github-scrum", Action: "cleanup artifacts", Passed: cleanupOK})
+	result.Successes = len(sprints)
+	result.Artifacts = map[string]string{
+		"repo":                  repo,
+		"runID":                 runID,
+		"issueCount":            fmt.Sprintf("%d", len(artifacts)),
+		"sprintCount":           fmt.Sprintf("%d", len(sprints)),
+		"completedWork":         "7",
+		"carriedWork":           "1",
+		"blockerCount":          "1",
+		"cleanupMode":           cleanupMode,
+		"cleanupSucceeded":      fmt.Sprintf("%t", cleanupOK),
+		"reconciledExistingRun": fmt.Sprintf("%t", reconciledExisting),
+		"artifacts":             string(encodedArtifacts),
+		"sprints":               string(encodedSprints),
+		"artifactPrefix":        "[AgentOS Eval]",
+		"repoAllowlistUsed":     strings.TrimSpace(os.Getenv("AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST")),
+	}
+	if !cleanupOK {
+		result.FailureReasons = append(result.FailureReasons, "scrum GitHub cleanup did not complete successfully")
+	}
+	return result
+}
 
+func scrumGitHubCleanupMode() string {
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP")))
+	if mode == "" {
+		return "close"
+	}
+	switch mode {
+	case "keep", "close":
+		return mode
+	default:
+		return ""
+	}
+}
+
+func createScrumGitHubIssues(client *agentosgh.Client, backlog []scrumBacklogItem, runID string, result *ScenarioResult) (map[string]*agentosgh.Issue, error) {
+	issues := map[string]*agentosgh.Issue{}
+	for i := range backlog {
+		item := &backlog[i]
+		issue, err := client.CreateIssue(agentosgh.CreateIssueRequest{
+			Title: fmt.Sprintf("[AgentOS Eval][%s] %s %s", runID, item.ID, item.Title),
+			Body:  renderScrumGitHubIssueBody(runID, item, "backlog"),
+		})
+		if err != nil {
+			return issues, fmt.Errorf("create backlog issue %s: %w", item.ID, err)
+		}
+		issues[item.ID] = issue
+		result.Checks = append(result.Checks, ScenarioCheck{Page: "github-scrum", Action: "create issue " + item.ID, Passed: issue.Number > 0 && issue.HTMLURL != ""})
+	}
+	return issues, nil
+}
+
+func findScrumGitHubIssues(client *agentosgh.Client, runID string) (map[string]*agentosgh.Issue, error) {
+	if strings.TrimSpace(runID) == "" {
+		return nil, nil
+	}
+	issues, err := client.ListIssues("all")
+	if err != nil {
+		return nil, err
+	}
+	found := map[string]*agentosgh.Issue{}
+	marker := "[AgentOS Eval][" + runID + "]"
+	for i := range issues {
+		issue := &issues[i]
+		if !strings.Contains(issue.Title, marker) {
+			continue
+		}
+		if id := scrumIssueIDFromTitle(issue.Title); id != "" {
+			found[id] = issue
+		}
+	}
+	return found, nil
+}
+
+func cleanupScrumGitHubIssues(client *agentosgh.Client, issues map[string]*agentosgh.Issue, backlog []scrumBacklogItem, mode string) []scrumGitHubArtifact {
+	artifacts := make([]scrumGitHubArtifact, 0, len(backlog))
 	for i := range backlog {
 		item := &backlog[i]
 		issue := issues[item.ID]
-		completedIn := item.CompletedIn
-		if completedIn == 0 {
-			completedIn = item.Sprint
+		artifact := scrumGitHubArtifact{
+			ID:       item.ID,
+			Sprint:   item.Sprint,
+			Carried:  item.ID == "AOS-106",
+			Blockers: issueBlockers(item),
 		}
-		artifacts = append(artifacts, scrumGitHubArtifact{
-			ID:         item.ID,
-			Issue:      issue.Number,
-			URL:        issue.HTMLURL,
-			Sprint:     item.Sprint,
-			Completed:  completedIn,
-			Carried:    item.ID == "AOS-106",
-			Blockers:   issueBlockers(item),
-			FinalState: issue.State,
-		})
+		if item.CompletedIn > 0 {
+			artifact.Completed = item.CompletedIn
+		} else {
+			artifact.Completed = item.Sprint
+		}
+		if issue == nil {
+			artifact.CleanupStatus = "missing"
+			artifact.CleanupError = "issue was not created or discovered"
+			artifacts = append(artifacts, artifact)
+			continue
+		}
+		artifact.Issue = issue.Number
+		artifact.URL = issue.HTMLURL
+		artifact.FinalState = issue.State
+		switch mode {
+		case "keep":
+			artifact.CleanupStatus = "kept"
+		case "close":
+			if strings.EqualFold(issue.State, "closed") {
+				artifact.CleanupStatus = "already-closed"
+			} else {
+				closed, err := client.CloseIssue(issue.Number)
+				if err != nil {
+					artifact.CleanupStatus = "failed"
+					artifact.CleanupError = err.Error()
+				} else {
+					artifact.CleanupStatus = "closed"
+					artifact.FinalState = closed.State
+				}
+			}
+		default:
+			artifact.CleanupStatus = "failed"
+			artifact.CleanupError = "unsupported cleanup mode"
+		}
+		artifacts = append(artifacts, artifact)
 	}
-	encodedArtifacts, _ := json.Marshal(artifacts)
-	encodedSprints, _ := json.Marshal(sprints)
-	result.Checks = append(result.Checks, ScenarioCheck{Page: "github-scrum", Action: "all backlog issues closed", Passed: allScrumIssuesClosed(issues)})
-	result.Successes = len(sprints)
-	result.Artifacts = map[string]string{
-		"repo":              repo,
-		"runID":             runID,
-		"issueCount":        fmt.Sprintf("%d", len(artifacts)),
-		"sprintCount":       fmt.Sprintf("%d", len(sprints)),
-		"completedWork":     "7",
-		"carriedWork":       "1",
-		"blockerCount":      "1",
-		"cleanupMode":       "close-issues",
-		"artifacts":         string(encodedArtifacts),
-		"sprints":           string(encodedSprints),
-		"artifactPrefix":    "[AgentOS Eval]",
-		"repoAllowlistUsed": strings.TrimSpace(os.Getenv("AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST")),
+	return artifacts
+}
+
+func scrumIssueIDFromTitle(title string) string {
+	for _, field := range strings.Fields(title) {
+		if strings.HasPrefix(field, "AOS-") {
+			return strings.Trim(field, "[]")
+		}
 	}
-	if !allScrumIssuesClosed(issues) {
-		result.FailureReasons = append(result.FailureReasons, "not all scrum eval issues reached closed state")
+	return ""
+}
+
+func scrumCleanupSucceeded(artifacts []scrumGitHubArtifact, mode string) bool {
+	if len(artifacts) == 0 {
+		return false
 	}
-	return result
+	for i := range artifacts {
+		artifact := &artifacts[i]
+		switch mode {
+		case "keep":
+			if artifact.CleanupStatus != "kept" {
+				return false
+			}
+		case "close":
+			if artifact.CleanupStatus != "closed" && artifact.CleanupStatus != "already-closed" {
+				return false
+			}
+			if !strings.EqualFold(artifact.FinalState, "closed") {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func scrumGitHubBacklog() []scrumBacklogItem {
@@ -1345,18 +1461,6 @@ func issueBlockers(item *scrumBacklogItem) []string {
 		return nil
 	}
 	return []string{item.BlockedBy}
-}
-
-func allScrumIssuesClosed(issues map[string]*agentosgh.Issue) bool {
-	if len(issues) == 0 {
-		return false
-	}
-	for _, issue := range issues {
-		if issue == nil || !strings.EqualFold(issue.State, "closed") {
-			return false
-		}
-	}
-	return true
 }
 
 func splitGitHubRepo(repo string) (owner, name string, ok bool) {
