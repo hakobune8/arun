@@ -261,17 +261,17 @@ func (s *Server) handleOrchestrateTemplates(w http.ResponseWriter, r *http.Reque
 
 	templates := builtInScenarioTemplates(s.agentReg)
 	if req.Repo != "" {
-		repoPath, err := resolveOrchestrateRepo(req.Repo, req.BaseBranch)
+		repoPath, err := resolveOrchestrateRepoWithToken(req.Repo, req.BaseBranch, userGitHubToken(user))
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
+			slog.Warn("skip repository scenario templates", "repo", req.Repo, "error", err)
+		} else {
+			repoTemplates, err := loadRepositoryScenarioTemplates(repoPath, s.agentReg)
+			if err != nil {
+				slog.Warn("skip invalid repository scenario templates", "repo", req.Repo, "error", err)
+			} else {
+				templates = append(templates, repoTemplates...)
+			}
 		}
-		repoTemplates, err := loadRepositoryScenarioTemplates(repoPath, s.agentReg)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		templates = append(templates, repoTemplates...)
 	}
 	_ = json.NewEncoder(w).Encode(templates) //nolint:errcheck // best-effort
 }
@@ -645,9 +645,10 @@ type orchestrateRequest struct {
 }
 
 type orchestrationStartOptions struct {
-	Source     *orchestrationSourceIssue
-	ScheduleID string
-	Actor      string
+	Source      *orchestrationSourceIssue
+	ScheduleID  string
+	Actor       string
+	GitHubToken string
 }
 
 type orchestrateGitHubRequest struct {
@@ -937,7 +938,7 @@ func (s *Server) startOrchestration(w http.ResponseWriter, r *http.Request, user
 	if !s.requireAutomationPermission(w, r, user, "orchestrate.create", "orchestration", reqRepo(req), "") {
 		return
 	}
-	record, err := s.createOrchestration(req, orchestrationStartOptions{Source: source, Actor: actorLogin(user)})
+	record, err := s.createOrchestration(req, orchestrationStartOptions{Source: source, Actor: actorLogin(user), GitHubToken: userGitHubToken(user)})
 	if err != nil {
 		http.Error(w, err.Error(), orchestrationStartStatus(err))
 		return
@@ -975,7 +976,7 @@ func (s *Server) createOrchestration(req *orchestrateRequest, opts orchestration
 		return nil, err
 	}
 
-	repoPath, err := resolveOrchestrateRepo(req.Repo, req.BaseBranch)
+	repoPath, err := resolveOrchestrateRepoWithToken(req.Repo, req.BaseBranch, opts.GitHubToken)
 	if err != nil {
 		return nil, err
 	}
@@ -1675,6 +1676,10 @@ func orchestratePlanTimeout() time.Duration {
 }
 
 func resolveOrchestrateRepo(repo, baseBranch string) (string, error) {
+	return resolveOrchestrateRepoWithToken(repo, baseBranch, "")
+}
+
+func resolveOrchestrateRepoWithToken(repo, baseBranch, token string) (string, error) {
 	if repo == "" {
 		repo = "."
 	}
@@ -1683,7 +1688,7 @@ func resolveOrchestrateRepo(repo, baseBranch string) (string, error) {
 	}
 
 	if cloneURL, ok := normalizeRemoteRepo(repo); ok {
-		return cloneRemoteRepo(cloneURL, defaultBaseBranch(baseBranch))
+		return cloneRemoteRepoWithToken(cloneURL, defaultBaseBranch(baseBranch), token)
 	}
 	if repo != "." {
 		return "", fmt.Errorf("repo must be a GitHub HTTPS URL, owner/repo, or .")
@@ -1810,7 +1815,7 @@ func normalizeRemoteRepo(repo string) (string, bool) {
 	return "", false
 }
 
-func cloneRemoteRepo(cloneURL, baseBranch string) (string, error) {
+func cloneRemoteRepoWithToken(cloneURL, baseBranch, token string) (string, error) {
 	root := filepath.Join(apphome.Dir(), "workspaces", "orchestrate")
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return "", fmt.Errorf("create workspace root: %w", err)
@@ -1818,11 +1823,11 @@ func cloneRemoteRepo(cloneURL, baseBranch string) (string, error) {
 
 	dest := filepath.Join(root, fmt.Sprintf("%s-%s-%s", time.Now().UTC().Format("20060102T150405"), generateID(), safeRepoSlug(cloneURL)))
 	args := gitCloneArgs(cloneURL, baseBranch, dest)
-	out, err := runGitClone(args)
+	out, err := runGitCloneWithToken(args, token)
 	if err != nil && shouldRetryCloneWithoutBranch(string(out)) {
 		_ = os.RemoveAll(dest)
 		args = gitCloneArgs(cloneURL, "", dest)
-		out, err = runGitClone(args)
+		out, err = runGitCloneWithToken(args, token)
 	}
 	if err != nil {
 		return "", fmt.Errorf("clone repo: %w: %s", err, strings.TrimSpace(string(out)))
@@ -1830,11 +1835,11 @@ func cloneRemoteRepo(cloneURL, baseBranch string) (string, error) {
 	return dest, nil
 }
 
-func runGitClone(args []string) ([]byte, error) {
+func runGitCloneWithToken(args []string, token string) ([]byte, error) {
 	// Inputs are constrained to HTTPS github.com owner/repo URLs and validated refs before args are built.
 	// codeql[go/command-injection]
 	cmd := exec.Command("git", args...)
-	cmd.Env = gitCloneEnv(args)
+	cmd.Env = gitCloneEnvWithToken(args, token)
 	return cmd.CombinedOutput()
 }
 
@@ -1858,9 +1863,19 @@ func validateGitRef(ref string) error {
 }
 
 func gitCloneEnv(args []string) []string {
+	return gitCloneEnvWithToken(args, "")
+}
+
+func gitCloneEnvWithToken(args []string, token string) []string {
 	env := os.Environ()
-	token, err := agentosgh.TokenFromEnv(context.Background())
-	if err != nil || token == "" || !cloneArgsUseGitHubHTTPS(args) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		envToken, err := agentosgh.TokenFromEnv(context.Background())
+		if err == nil {
+			token = envToken
+		}
+	}
+	if token == "" || !cloneArgsUseGitHubHTTPS(args) {
 		return env
 	}
 
@@ -2274,6 +2289,13 @@ func actorLogin(user *authUser) string {
 		return "system"
 	}
 	return user.Login
+}
+
+func userGitHubToken(user *authUser) string {
+	if user == nil {
+		return ""
+	}
+	return strings.TrimSpace(user.AccessToken)
 }
 
 func (s *Server) auditOrchestrationOutcome(record *orchestrationRecord, outcome auditOutcome, message string) {
