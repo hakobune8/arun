@@ -1190,6 +1190,7 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
     update({
       task: task.trim() || form.task,
       strategy: selectedTemplate.strategy ?? form.strategy,
+      createIssue: Boolean(selectedTemplate.createIssue),
       createPullRequest: Boolean(selectedTemplate.createPullRequest),
       maxDuration: limits.maxDuration ? String(limits.maxDuration) : form.maxDuration,
       maxSubtasks: limits.maxSubtasks ? String(limits.maxSubtasks) : form.maxSubtasks,
