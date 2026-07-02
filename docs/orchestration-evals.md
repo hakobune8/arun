@@ -16,6 +16,9 @@ It validates:
 
 - fallback planning and agent routing
 - deterministic empty-repository Go service recovery
+- three-sprint agile scrum continuity across backlog refinement, sprint
+  planning, execution, QA, review, reporting, retrospective, and next-sprint
+  planning
 - required artifacts such as `go.mod`, tests, workflow YAML, README, and review notes
 - quality gate pass/fail reporting
 - scenario duration and failure reasons
@@ -27,12 +30,32 @@ Run a single scenario:
 agentos evals --scenario empty-go-service-bootstrap --format json --output -
 ```
 
+Run the three-sprint scrum simulation:
+
+```sh
+agentos evals \
+  --scenario three-sprint-agile-scrum \
+  --format markdown \
+  --output .agentos/evals/three-sprint-scrum-report.md
+```
+
+The scrum scenario is deterministic by default. It models three iterations with
+backlog refinement, sprint planning, execution, QA, review, reporting,
+retrospective notes, and next-sprint planning. The report includes
+sprint-by-sprint planned work, completed work, carried work, blockers, stage
+checks, required reports, and functional coverage. Set
+`AGENTOS_EVAL_SCRUM_LIVE=true` only when live GitHub and LiteLLM preset
+configuration is ready; in that mode the scenario makes missing
+`AGENTOS_EVAL_GITHUB_REPO` and `AGENTOS_EVAL_LLM_PRESET_MATRIX` /
+`AGENTOS_LLM_PRESETS` settings fail the run.
+
 ## Functional Coverage
 
 The report includes functional coverage, not only Go line coverage. Areas
 include planning, agent routing, fallback execution, quality gates, required
 artifacts, frontend, CI workflow, Docker, Helm, Kubernetes, reporting,
-release-readiness, and GitHub workflow routing.
+release-readiness, backlog refinement, sprint execution, retrospective,
+memory continuity, and GitHub workflow routing.
 
 Coverage is counted by scenario. A failed scenario does not count as covered
 for its areas, which makes release regressions visible by feature instead of
