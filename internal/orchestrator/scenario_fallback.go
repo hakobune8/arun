@@ -33,7 +33,7 @@ func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask *Subta
 		out, err := recoverFrontendStaticApp(runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
 	}
-	if staticFrontendScaffoldExists(runSandbox.RootDir()) {
+	if staticFrontendProjectExists(runSandbox.RootDir()) {
 		switch subtask.AgentName {
 		case "docs":
 			out, err := recoverFrontendDocs(runSandbox.RootDir(), subtask.Description)
@@ -96,20 +96,20 @@ func (o *Orchestrator) recoverNoOpBuiltInSubtaskWithStatus(ctx context.Context, 
 		out, err := recoverFrontendStaticApp(runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 	case "docs":
-		if staticFrontendScaffoldExists(runSandbox.RootDir()) {
+		if staticFrontendProjectExists(runSandbox.RootDir()) {
 			out, err := recoverFrontendDocs(runSandbox.RootDir(), subtask.Description)
 			return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 		}
 		out, err := recoverDocs(runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 	case "qa":
-		if staticFrontendScaffoldExists(runSandbox.RootDir()) {
+		if staticFrontendProjectExists(runSandbox.RootDir()) {
 			out, err := recoverFrontendQA(runSandbox.RootDir(), subtask.Description)
 			return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 		}
 		return SubtaskResult{}, false
 	case "release-manager":
-		if staticFrontendScaffoldExists(runSandbox.RootDir()) {
+		if staticFrontendProjectExists(runSandbox.RootDir()) {
 			out, err := recoverFrontendRelease(runSandbox.RootDir(), subtask.Description)
 			return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 		}
@@ -523,10 +523,13 @@ func recoverFrontendQA(root, description string) (string, error) {
 	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o755); err != nil {
 		return "", fmt.Errorf("create docs dir: %w", err)
 	}
+	if err := os.WriteFile(filepath.Join(root, "docs", "smoke-test.md"), []byte(frontendSmokeTest(description)), 0o600); err != nil {
+		return "", fmt.Errorf("write docs/smoke-test.md: %w", err)
+	}
 	if err := os.WriteFile(filepath.Join(root, "docs", "testing.md"), []byte(frontendTestingDoc(description)), 0o600); err != nil {
 		return "", fmt.Errorf("write docs/testing.md: %w", err)
 	}
-	return "Added static frontend QA evidence in docs/testing.md.", nil
+	return "Added static frontend QA evidence in docs/smoke-test.md and docs/testing.md.", nil
 }
 
 func recoverFrontendRelease(root, description string) (string, error) {
@@ -915,11 +918,10 @@ func repositoryIsEffectivelyEmpty(root string) bool {
 	return err == nil && empty
 }
 
-func staticFrontendScaffoldExists(root string) bool {
+func staticFrontendProjectExists(root string) bool {
 	return fileExists(filepath.Join(root, "package.json")) &&
 		fileExists(filepath.Join(root, "index.html")) &&
-		fileExists(filepath.Join(root, "src", "main.js")) &&
-		fileExists(filepath.Join(root, "docs", "smoke-test.md"))
+		fileExists(filepath.Join(root, "src", "main.js"))
 }
 
 func shouldRecoverEmptyFrontendScaffold(root, description string) bool {

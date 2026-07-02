@@ -928,6 +928,49 @@ func TestRecoverBuiltInSubtask_StaticFrontendQAAndRelease(t *testing.T) {
 	}
 }
 
+func TestRecoverBuiltInSubtask_PartialStaticFrontendQA(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"package.json":                  `{"scripts":{"test":"node --check src/main.js"}}`,
+		"index.html":                    `<script type="module" src="./src/main.js"></script>`,
+		filepath.Join("src", "main.js"): `console.log("empty invaders");`,
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-partial-static-step"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"qa": &recordingAgent{name: "qa"}},
+		&runtime.Config{},
+	)
+
+	result, ok := o.recoverBuiltInSubtask(context.Background(), &Subtask{
+		ID:          "step-2",
+		AgentName:   "qa",
+		Description: "Add deterministic Empty Invaders smoke tests and manual QA notes.",
+	}, runSandbox, errors.New("validation failed after 3 retries: tests"))
+	if !ok || !result.Success {
+		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
+	}
+	for _, file := range []string{filepath.Join("docs", "smoke-test.md"), filepath.Join("docs", "testing.md")} {
+		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
+			t.Fatalf("%s not created: %v", file, err)
+		}
+	}
+}
+
 func TestRecoverBuiltInSubtask_UsesFreshContextAfterTimeout(t *testing.T) {
 	t.Parallel()
 
