@@ -94,3 +94,39 @@ outside the repository.
 
 Real GitHub writes and Kubernetes rollout checks remain separate v1.4.x
 operational scenarios. They are not part of the default CI eval suite.
+
+## Storage Cleanup E2E
+
+Storage cleanup checks are opt-in and require disposable fixtures that are
+scoped by repository and base branch. Do not run this scenario against broad
+production data. Seed test orchestration records first, then run:
+
+```sh
+AGENTOS_EVAL_AUTH_COOKIE='agentos_session=<signed-session-cookie>' \
+AGENTOS_EVAL_STORAGE_REPO='agentos-evals/storage-cleanup' \
+AGENTOS_EVAL_STORAGE_BASE_BRANCH='agentos-eval-storage-cleanup' \
+agentos evals \
+  --storage-cleanup-e2e \
+  --scenario storage-cleanup-e2e \
+  --live-url https://agentos.nakanoshima.hakobune8.com \
+  --format markdown \
+  --output .agentos/evals/storage-cleanup-report.md
+```
+
+The scenario calls authenticated `/api/storage/cleanup` with a policy that
+matches only the configured repo and branch. Use one recent retained record,
+one old unlinked record, and one old GitHub-linked record for the same repo and
+branch. It verifies:
+
+- `/api/storage` usage can be read before cleanup
+- dry-run preview selects disposable cleanup targets
+- dry-run preview skips a protected target, such as a GitHub-linked record
+- cleanup execution archives or deletes selected targets
+- `/api/storage` usage can be read after cleanup
+- a successful `storage.cleanup` audit event matches the execution summary
+- post-cleanup preview has no remaining selected targets
+
+The report includes selected, archived, deleted, skipped, and byte counts for
+dry-run, execution, and post-cleanup preview. It also includes before/after
+usage snapshots, matching audit events, and the fixture IDs returned by the
+cleanup API.

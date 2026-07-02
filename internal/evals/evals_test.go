@@ -92,11 +92,47 @@ func TestRun_AuthenticatedE2ERequiresSessionMaterial(t *testing.T) {
 	}
 }
 
+func TestRun_StorageCleanupE2ERequiresCookie(t *testing.T) {
+	t.Setenv("AGENTOS_EVAL_AUTH_COOKIE", "")
+	report, err := Run(context.Background(), Options{
+		WorkDir:                  t.TempDir(),
+		ScenarioIDs:              []string{"storage-cleanup-e2e"},
+		IncludeStorageCleanupE2E: true,
+		LiveURL:                  "https://agentos.example.invalid",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if report.Total != 1 || report.Passed != 0 || report.Failed != 1 {
+		t.Fatalf("report = %+v, want one failing storage cleanup E2E scenario", report)
+	}
+	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
+	if !strings.Contains(reasons, "AGENTOS_EVAL_AUTH_COOKIE") {
+		t.Fatalf("failure reasons = %q, want missing cookie", reasons)
+	}
+}
+
 func TestSanitizeAuthE2EOutput(t *testing.T) {
 	t.Setenv("AGENTOS_EVAL_AUTH_COOKIE", "agentos_session=secret")
 	got := sanitizeAuthE2EOutput("failed with agentos_session=secret")
 	if strings.Contains(got, "secret") || !strings.Contains(got, "[redacted]") {
 		t.Fatalf("sanitizeAuthE2EOutput() = %q", got)
+	}
+}
+
+func TestHasCleanupAuditEvent(t *testing.T) {
+	summary := storageCleanupEvalSummary{Selected: 1, Archived: 1, Deleted: 0, Skipped: 1}
+	events := []storageAuditEvalEvent{{
+		Action:  "storage.cleanup",
+		Outcome: "success",
+		Target:  "storage",
+		Message: "selected=1 archived=1 deleted=0 skipped=1",
+	}}
+	if !hasCleanupAuditEvent(events, summary) {
+		t.Fatal("hasCleanupAuditEvent() = false, want true")
+	}
+	if hasCleanupAuditEvent(events, storageCleanupEvalSummary{Selected: 2, Archived: 1, Deleted: 0, Skipped: 1}) {
+		t.Fatal("hasCleanupAuditEvent() = true for mismatched summary, want false")
 	}
 }
 

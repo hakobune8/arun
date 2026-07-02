@@ -39,13 +39,14 @@ artifacts, quality gates, and report generation.`,
 }
 
 var (
-	evalsFormat    string
-	evalsOutput    string
-	evalsScenarios string
-	evalsWorkDir   string
-	evalsLive      bool
-	evalsLiveURL   string
-	evalsAuthE2E   bool
+	evalsFormat            string
+	evalsOutput            string
+	evalsScenarios         string
+	evalsWorkDir           string
+	evalsLive              bool
+	evalsLiveURL           string
+	evalsAuthE2E           bool
+	evalsStorageCleanupE2E bool
 )
 
 func init() {
@@ -57,6 +58,7 @@ func init() {
 	evalsCmd.Flags().BoolVar(&evalsLive, "live", false, "Include opt-in live deployment smoke checks")
 	evalsCmd.Flags().StringVar(&evalsLiveURL, "live-url", "", "Base URL for live smoke checks; defaults to AGENTOS_EVAL_LIVE_URL")
 	evalsCmd.Flags().BoolVar(&evalsAuthE2E, "auth-e2e", false, "Include opt-in authenticated Web UI browser E2E checks")
+	evalsCmd.Flags().BoolVar(&evalsStorageCleanupE2E, "storage-cleanup-e2e", false, "Include opt-in authenticated storage cleanup dry-run and execution checks")
 }
 
 func runEvals(ctx context.Context) error {
@@ -72,11 +74,12 @@ func runEvals(ctx context.Context) error {
 		output = evals.DefaultOutputPath(format)
 	}
 	report, err := evals.Run(ctx, evals.Options{
-		ScenarioIDs:    splitComma(evalsScenarios),
-		WorkDir:        evalsWorkDir,
-		IncludeLive:    evalsLive,
-		LiveURL:        evalsLiveURL,
-		IncludeAuthE2E: evalsAuthE2E,
+		ScenarioIDs:              splitComma(evalsScenarios),
+		WorkDir:                  evalsWorkDir,
+		IncludeLive:              evalsLive,
+		LiveURL:                  evalsLiveURL,
+		IncludeAuthE2E:           evalsAuthE2E,
+		IncludeStorageCleanupE2E: evalsStorageCleanupE2E,
 	})
 	if err != nil {
 		return err

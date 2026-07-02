@@ -63,11 +63,12 @@ type Scenario struct {
 
 // Options controls a suite run.
 type Options struct {
-	ScenarioIDs    []string
-	WorkDir        string
-	IncludeLive    bool
-	LiveURL        string
-	IncludeAuthE2E bool
+	ScenarioIDs              []string
+	WorkDir                  string
+	IncludeLive              bool
+	LiveURL                  string
+	IncludeAuthE2E           bool
+	IncludeStorageCleanupE2E bool
 }
 
 // Report summarizes one eval suite run.
@@ -224,6 +225,18 @@ func AuthenticatedWebUIScenarios() []Scenario {
 	}}
 }
 
+// StorageCleanupScenarios returns opt-in checks that require disposable fixtures.
+func StorageCleanupScenarios() []Scenario {
+	return []Scenario{{
+		ID:             "storage-cleanup-e2e",
+		Name:           "Storage cleanup dry-run and execution E2E",
+		Category:       "live-auth",
+		Mode:           ModePlan,
+		FunctionalArea: []string{"live-smoke", "storage-usage", "storage-cleanup", "retention-policy", "archive-before-delete", "audit", "auth-boundary"},
+		Live:           true,
+	}}
+}
+
 // Run executes the selected deterministic eval scenarios.
 func Run(ctx context.Context, opts Options) (*Report, error) {
 	started := time.Now().UTC()
@@ -233,6 +246,9 @@ func Run(ctx context.Context, opts Options) (*Report, error) {
 	}
 	if opts.IncludeAuthE2E {
 		scenarios = append(scenarios, filterScenarios(AuthenticatedWebUIScenarios(), opts.ScenarioIDs)...)
+	}
+	if opts.IncludeStorageCleanupE2E {
+		scenarios = append(scenarios, filterScenarios(StorageCleanupScenarios(), opts.ScenarioIDs)...)
 	}
 	if len(scenarios) == 0 {
 		return nil, fmt.Errorf("no eval scenarios selected")
@@ -365,6 +381,9 @@ func runLiveScenario(ctx context.Context, scenario *Scenario, liveURL string, re
 	if scenario.ID == "authenticated-webui-e2e" {
 		return runAuthenticatedWebUIScenario(ctx, liveURL, result)
 	}
+	if scenario.ID == "storage-cleanup-e2e" {
+		return runStorageCleanupScenario(ctx, liveURL, result)
+	}
 	base := strings.TrimRight(strings.TrimSpace(liveURL), "/")
 	if base == "" {
 		base = strings.TrimRight(os.Getenv("AGENTOS_EVAL_LIVE_URL"), "/")
@@ -466,8 +485,11 @@ func runAuthenticatedWebUIScenario(ctx context.Context, liveURL string, result *
 }
 
 func authE2EConfigured() bool {
-	return strings.TrimSpace(os.Getenv("AGENTOS_EVAL_AUTH_STORAGE_STATE")) != "" ||
-		strings.TrimSpace(os.Getenv("AGENTOS_EVAL_AUTH_COOKIE")) != ""
+	return strings.TrimSpace(os.Getenv("AGENTOS_EVAL_AUTH_STORAGE_STATE")) != "" || authCookieConfigured()
+}
+
+func authCookieConfigured() bool {
+	return strings.TrimSpace(os.Getenv("AGENTOS_EVAL_AUTH_COOKIE")) != ""
 }
 
 func findAuthE2EScript() (string, error) {
@@ -503,6 +525,236 @@ func sanitizeAuthE2EOutput(out string) string {
 		}
 	}
 	return out
+}
+
+type storageCleanupEvalResult struct {
+	Summary storageCleanupEvalSummary `json:"summary"`
+	Items   []storageCleanupEvalItem  `json:"items"`
+}
+
+type storageCleanupEvalSummary struct {
+	Selected int   `json:"selected"`
+	Archived int   `json:"archived"`
+	Deleted  int   `json:"deleted"`
+	Skipped  int   `json:"skipped"`
+	Bytes    int64 `json:"bytes"`
+}
+
+type storageCleanupEvalItem struct {
+	Type    string `json:"type"`
+	ID      string `json:"id"`
+	Action  string `json:"action"`
+	Skipped bool   `json:"skipped"`
+	Reason  string `json:"reason"`
+}
+
+type storageUsageEvalResult struct {
+	Usage map[string]any `json:"usage"`
+}
+
+type storageAuditEvalEvent struct {
+	Action  string `json:"action"`
+	Outcome string `json:"outcome"`
+	Target  string `json:"target"`
+	Message string `json:"message"`
+}
+
+func runStorageCleanupScenario(ctx context.Context, liveURL string, result *ScenarioResult) *ScenarioResult {
+	base := strings.TrimRight(strings.TrimSpace(liveURL), "/")
+	if base == "" {
+		base = strings.TrimRight(os.Getenv("AGENTOS_EVAL_LIVE_URL"), "/")
+	}
+	if base == "" {
+		result.FailureReasons = append(result.FailureReasons, "live URL is required via --live-url or AGENTOS_EVAL_LIVE_URL")
+		return result
+	}
+	if !authCookieConfigured() {
+		result.FailureReasons = append(result.FailureReasons, "authenticated API session cookie is required via AGENTOS_EVAL_AUTH_COOKIE")
+		return result
+	}
+	repo := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_STORAGE_REPO"))
+	if repo == "" {
+		repo = "agentos-evals/storage-cleanup"
+	}
+	branch := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_STORAGE_BASE_BRANCH"))
+	if branch == "" {
+		branch = "agentos-eval-storage-cleanup"
+	}
+	policy := map[string]any{
+		"repo":                     repo,
+		"baseBranch":               branch,
+		"orchestrationRetention":   "1h",
+		"runArtifactRetention":     "0",
+		"workspaceRetention":       "0",
+		"memoryRetention":          "0",
+		"guidelineRetention":       "0",
+		"keepLastOrchestrations":   1,
+		"archiveBeforeDelete":      true,
+		"allowLinkedGitHubCleanup": false,
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	usageBefore, err := getStorageUsage(ctx, client, base)
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "storage usage before cleanup: "+err.Error())
+		return result
+	}
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "storage", Action: "usage before cleanup", Passed: usageBefore.Usage != nil})
+	dryRun, err := postStorageCleanup(ctx, client, base, true, policy)
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "storage dry-run: "+err.Error())
+		return result
+	}
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "storage", Action: "dry-run preview", Passed: dryRun.Summary.Selected > 0 && dryRun.Summary.Skipped > 0})
+	if dryRun.Summary.Selected == 0 {
+		result.FailureReasons = append(result.FailureReasons, "storage dry-run selected 0 cleanup targets; seed disposable fixtures for "+repo+" "+branch)
+	}
+	if dryRun.Summary.Skipped == 0 {
+		result.FailureReasons = append(result.FailureReasons, "storage dry-run skipped 0 protected targets; seed an active or GitHub-linked fixture")
+	}
+	executed, err := postStorageCleanup(ctx, client, base, false, policy)
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "storage cleanup execution: "+err.Error())
+		return result
+	}
+	applied := executed.Summary.Archived + executed.Summary.Deleted
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "storage", Action: "cleanup execution", Passed: applied > 0 && executed.Summary.Skipped > 0})
+	if applied == 0 {
+		result.FailureReasons = append(result.FailureReasons, "storage cleanup archived/deleted 0 targets")
+	}
+	if executed.Summary.Skipped == 0 {
+		result.FailureReasons = append(result.FailureReasons, "storage cleanup skipped 0 protected targets")
+	}
+	usageAfter, err := getStorageUsage(ctx, client, base)
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "storage usage after cleanup: "+err.Error())
+		return result
+	}
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "storage", Action: "usage after cleanup", Passed: usageAfter.Usage != nil})
+	auditEvents, err := getStorageAuditEvents(ctx, client, base)
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "storage cleanup audit: "+err.Error())
+		return result
+	}
+	auditMatched := hasCleanupAuditEvent(auditEvents, executed.Summary)
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "audit", Action: "cleanup audit event", Passed: auditMatched})
+	if !auditMatched {
+		result.FailureReasons = append(result.FailureReasons, "storage cleanup audit event not found")
+	}
+	postRun, err := postStorageCleanup(ctx, client, base, true, policy)
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "storage post-cleanup dry-run: "+err.Error())
+		return result
+	}
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "storage", Action: "post-cleanup preview", Passed: postRun.Summary.Selected == 0})
+	if postRun.Summary.Selected != 0 {
+		result.FailureReasons = append(result.FailureReasons, fmt.Sprintf("post-cleanup selected = %d, want 0", postRun.Summary.Selected))
+	}
+	result.Artifacts = map[string]string{
+		"url":            base,
+		"repo":           repo,
+		"baseBranch":     branch,
+		"usageBefore":    mustJSON(usageBefore.Usage),
+		"usageAfter":     mustJSON(usageAfter.Usage),
+		"dryRunSummary":  mustJSON(dryRun.Summary),
+		"executeSummary": mustJSON(executed.Summary),
+		"postRunSummary": mustJSON(postRun.Summary),
+		"dryRunItemIDs":  cleanupItemIDs(dryRun.Items),
+		"executeItemIDs": cleanupItemIDs(executed.Items),
+		"auditEvents":    mustJSON(auditEvents),
+	}
+	return result
+}
+
+func getStorageUsage(ctx context.Context, client *http.Client, base string) (*storageUsageEvalResult, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/storage", http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+	addAuthHeaders(req)
+	var usage storageUsageEvalResult
+	if err := doJSON(client, req, &usage); err != nil {
+		return nil, err
+	}
+	return &usage, nil
+}
+
+func postStorageCleanup(ctx context.Context, client *http.Client, base string, dryRun bool, policy map[string]any) (*storageCleanupEvalResult, error) {
+	body, err := json.Marshal(map[string]any{"dryRun": dryRun, "policy": policy})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/storage/cleanup", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	addAuthHeaders(req)
+	var result storageCleanupEvalResult
+	if err := doJSON(client, req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func getStorageAuditEvents(ctx context.Context, client *http.Client, base string) ([]storageAuditEvalEvent, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/audit", http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+	addAuthHeaders(req)
+	var events []storageAuditEvalEvent
+	if err := doJSON(client, req, &events); err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+func doJSON(client *http.Client, req *http.Request, into any) error {
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
+	}
+	return json.Unmarshal(data, into)
+}
+
+func addAuthHeaders(req *http.Request) {
+	if cookie := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_AUTH_COOKIE")); cookie != "" {
+		req.Header.Set("Cookie", cookie)
+	}
+}
+
+func mustJSON(value any) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return "{}"
+	}
+	return string(data)
+}
+
+func hasCleanupAuditEvent(events []storageAuditEvalEvent, summary storageCleanupEvalSummary) bool {
+	want := fmt.Sprintf("selected=%d archived=%d deleted=%d skipped=%d", summary.Selected, summary.Archived, summary.Deleted, summary.Skipped)
+	for _, event := range events {
+		if event.Action == "storage.cleanup" && event.Outcome == "success" && event.Target == "storage" && event.Message == want {
+			return true
+		}
+	}
+	return false
+}
+
+func cleanupItemIDs(items []storageCleanupEvalItem) string {
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	return strings.Join(ids, ",")
 }
 
 func getText(ctx context.Context, client *http.Client, url string) (string, error) {
