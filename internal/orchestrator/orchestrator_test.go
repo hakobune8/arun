@@ -713,6 +713,37 @@ func TestExecuteSubtask_FrontendRecoversEmptyRepositoryNoOp(t *testing.T) {
 	}
 }
 
+func TestRecoverBuiltInSubtask_FrontendTimeoutRecoversEmptyRepository(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repo, "run.log"), []byte("runtime started\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-step-1"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"frontend": &recordingAgent{name: "frontend"}},
+		&runtime.Config{},
+	)
+
+	result, ok := o.recoverBuiltInSubtask(context.Background(), &Subtask{
+		ID:          "step-1",
+		AgentName:   "frontend",
+		Description: "For an empty repository, create an initial minimal app scaffold.",
+	}, runSandbox, errors.New("subtask timed out after 5m"))
+	if !ok || !result.Success {
+		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
+	}
+	for _, file := range []string{"package.json", "index.html", filepath.Join("src", "main.js"), filepath.Join("docs", "smoke-test.md")} {
+		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
+			t.Fatalf("%s not created: %v", file, err)
+		}
+	}
+}
+
 func TestValidateQualityGate_RequiredCommandAndContent(t *testing.T) {
 	repo := t.TempDir()
 	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("run go test ./...\n"), 0o600); err != nil {

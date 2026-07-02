@@ -29,6 +29,10 @@ import (
 )
 
 func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask *Subtask, runSandbox sandbox.Sandbox, runtimeErr error) (SubtaskResult, bool) {
+	if subtask.AgentName == "frontend" && shouldRecoverEmptyFrontendScaffold(runSandbox.RootDir(), subtask.Description) {
+		out, err := recoverFrontendStaticApp(runSandbox.RootDir(), subtask.Description)
+		return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
+	}
 	if staticFrontendScaffoldExists(runSandbox.RootDir()) {
 		switch subtask.AgentName {
 		case "qa":
@@ -734,6 +738,16 @@ func staticFrontendScaffoldExists(root string) bool {
 		fileExists(filepath.Join(root, "index.html")) &&
 		fileExists(filepath.Join(root, "src", "main.js")) &&
 		fileExists(filepath.Join(root, "docs", "smoke-test.md"))
+}
+
+func shouldRecoverEmptyFrontendScaffold(root, description string) bool {
+	desc := strings.ToLower(description)
+	if !strings.Contains(desc, "empty repositor") && !strings.Contains(desc, "completely empty") && !strings.Contains(desc, "initial minimal app scaffold") {
+		return false
+	}
+	return !fileExists(filepath.Join(root, "package.json")) &&
+		!fileExists(filepath.Join(root, "index.html")) &&
+		!fileExists(filepath.Join(root, "src", "main.js"))
 }
 
 func runShell(ctx context.Context, dir, command string) error {
