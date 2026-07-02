@@ -14,6 +14,7 @@ Built-in templates cover:
 - Release preparation
 - Frontend UI change
 - Three-sprint agile scrum simulation
+- Implementation-heavy scrum for new or sandbox repositories
 
 Selecting a template renders variable inputs and a preview of the generated task
 text. Applying the template fills the task description, recommended agents,

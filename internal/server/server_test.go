@@ -1135,8 +1135,8 @@ func TestServer_OrchestrateTemplates_ReturnsBuiltIns(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &templates); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if len(templates) < 8 {
-		t.Fatalf("templates = %d, want at least 8", len(templates))
+	if len(templates) < 9 {
+		t.Fatalf("templates = %d, want at least 9", len(templates))
 	}
 	if templates[0].ID == "" || templates[0].TaskTemplate == "" || len(templates[0].Agents) == 0 {
 		t.Fatalf("template missing required fields: %+v", templates[0])
@@ -1160,6 +1160,28 @@ func TestServer_OrchestrateTemplates_ReturnsBuiltIns(t *testing.T) {
 	for _, want := range []string{"analyst", "release-manager", "reviewer", "qa", "reporter"} {
 		if !containsString(scrum.Agents, want) {
 			t.Fatalf("scrum agents = %+v, want %s", scrum.Agents, want)
+		}
+	}
+
+	var heavy *scenarioTemplate
+	for i := range templates {
+		if templates[i].ID == "implementation-heavy-scrum" {
+			heavy = &templates[i]
+			break
+		}
+	}
+	if heavy == nil {
+		t.Fatalf("implementation-heavy-scrum template not found: %+v", templates)
+	}
+	if !heavy.CreatePullRequest || heavy.Strategy != "sequential" || !strings.Contains(heavy.TaskTemplate, "build-first") {
+		t.Fatalf("implementation-heavy-scrum defaults = %+v", heavy)
+	}
+	if heavy.Limits.MaxDuration != "60m" || heavy.Limits.MaxSubtasks != 24 || heavy.Limits.MaxConcurrentRepoRun != 1 {
+		t.Fatalf("implementation-heavy-scrum limits = %+v, want 60m/24/1", heavy.Limits)
+	}
+	for _, want := range []string{"analyst", "go-backend", "frontend", "docs", "qa", "reviewer", "release-manager"} {
+		if !containsString(heavy.Agents, want) {
+			t.Fatalf("implementation-heavy-scrum agents = %+v, want %s", heavy.Agents, want)
 		}
 	}
 }
