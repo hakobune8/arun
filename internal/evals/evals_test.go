@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/kazyamaz200/agentos/internal/llm"
 )
 
 func TestRun_DefaultSuite(t *testing.T) {
@@ -171,6 +173,42 @@ func TestRun_KubernetesRolloutE2ERequiresExplicitConfig(t *testing.T) {
 		if !strings.Contains(reasons, want) {
 			t.Fatalf("failure reasons = %q, want %s", reasons, want)
 		}
+	}
+}
+
+func TestRun_RealLLMSmokeRequiresOptIn(t *testing.T) {
+	t.Setenv("AGENTOS_EVAL_LIVE_LLM", "")
+	report, err := Run(context.Background(), Options{
+		WorkDir:                t.TempDir(),
+		ScenarioIDs:            []string{"real-llm-orchestration-smoke"},
+		IncludeRealLLMSmokeE2E: true,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if report.Total != 1 || report.Passed != 0 || report.Failed != 1 {
+		t.Fatalf("report = %+v, want one failing real LLM smoke scenario", report)
+	}
+	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
+	if !strings.Contains(reasons, "AGENTOS_EVAL_LIVE_LLM=true") {
+		t.Fatalf("failure reasons = %q, want missing live LLM opt-in", reasons)
+	}
+}
+
+func TestCountingLLMClientCapsMaxTokens(t *testing.T) {
+	inner := llm.NewMockLLMClient([]llm.ChatResponse{{
+		Choices: []llm.Choice{{Message: llm.Message{Role: llm.RoleAssistant, Content: "{}"}}},
+		Usage:   &llm.Usage{PromptTokens: 2, CompletionTokens: 3, TotalTokens: 5},
+	}})
+	client := &countingLLMClient{inner: inner, maxTokens: 128}
+	if _, err := client.Chat(context.Background(), llm.ChatRequest{Model: "test", MaxTokens: 4096}); err != nil {
+		t.Fatalf("Chat() error = %v", err)
+	}
+	if got := inner.Requests[0].MaxTokens; got != 128 {
+		t.Fatalf("MaxTokens = %d, want 128", got)
+	}
+	if client.requests != 1 || client.successfulResponses != 1 || client.totalTokens != 5 {
+		t.Fatalf("client counters = %+v", client)
 	}
 }
 

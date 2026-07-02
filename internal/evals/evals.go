@@ -36,6 +36,7 @@ import (
 	"github.com/kazyamaz200/agentos/internal/orchestrator"
 	"github.com/kazyamaz200/agentos/internal/runtime"
 	"github.com/kazyamaz200/agentos/internal/sandbox"
+	"github.com/kazyamaz200/agentos/internal/tools"
 )
 
 // Mode controls how much of a scenario is exercised.
@@ -73,6 +74,7 @@ type Options struct {
 	IncludeScheduleNotifyE2E    bool
 	IncludeGitHubWorkflowE2E    bool
 	IncludeKubernetesRolloutE2E bool
+	IncludeRealLLMSmokeE2E      bool
 }
 
 // Report summarizes one eval suite run.
@@ -277,6 +279,18 @@ func KubernetesRolloutScenarios() []Scenario {
 	}}
 }
 
+// RealLLMSmokeScenarios returns opt-in checks that exercise a real LLM orchestration.
+func RealLLMSmokeScenarios() []Scenario {
+	return []Scenario{{
+		ID:             "real-llm-orchestration-smoke",
+		Name:           "Real LLM orchestration smoke",
+		Category:       "live-llm",
+		Mode:           ModeExecute,
+		FunctionalArea: []string{"llm", "planning", "fallback-execution", "quality-gates", "required-artifacts", "governance-limits"},
+		Live:           true,
+	}}
+}
+
 // Run executes the selected deterministic eval scenarios.
 func Run(ctx context.Context, opts Options) (*Report, error) {
 	started := time.Now().UTC()
@@ -298,6 +312,9 @@ func Run(ctx context.Context, opts Options) (*Report, error) {
 	}
 	if opts.IncludeKubernetesRolloutE2E {
 		scenarios = append(scenarios, filterScenarios(KubernetesRolloutScenarios(), opts.ScenarioIDs)...)
+	}
+	if opts.IncludeRealLLMSmokeE2E {
+		scenarios = append(scenarios, filterScenarios(RealLLMSmokeScenarios(), opts.ScenarioIDs)...)
 	}
 	if len(scenarios) == 0 {
 		return nil, fmt.Errorf("no eval scenarios selected")
@@ -441,6 +458,9 @@ func runLiveScenario(ctx context.Context, scenario *Scenario, liveURL string, re
 	}
 	if scenario.ID == "kubernetes-rollout-e2e" {
 		return runKubernetesRolloutScenario(ctx, result)
+	}
+	if scenario.ID == "real-llm-orchestration-smoke" {
+		return runRealLLMSmokeScenario(ctx, result)
 	}
 	base := strings.TrimRight(strings.TrimSpace(liveURL), "/")
 	if base == "" {
@@ -1062,6 +1082,287 @@ func sanitizeKubernetesOutput(out string) string {
 		}
 	}
 	return out
+}
+
+type realLLMSmokeConfig struct {
+	RepoAllowlist string
+	Timeout       time.Duration
+	MaxTokens     int
+	Model         string
+}
+
+type countingLLMClient struct {
+	inner               llm.LLMClient
+	maxTokens           int
+	requests            int
+	successfulResponses int
+	promptTokens        int
+	completionTokens    int
+	totalTokens         int
+}
+
+func (c *countingLLMClient) Chat(ctx context.Context, req llm.ChatRequest) (*llm.ChatResponse, error) {
+	c.requests++
+	if c.maxTokens > 0 && (req.MaxTokens == 0 || req.MaxTokens > c.maxTokens) {
+		req.MaxTokens = c.maxTokens
+	}
+	resp, err := c.inner.Chat(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	c.successfulResponses++
+	if resp.Usage != nil {
+		c.promptTokens += resp.Usage.PromptTokens
+		c.completionTokens += resp.Usage.CompletionTokens
+		c.totalTokens += resp.Usage.TotalTokens
+	}
+	return resp, nil
+}
+
+func (c *countingLLMClient) ModelName() string {
+	return c.inner.ModelName()
+}
+
+func runRealLLMSmokeScenario(ctx context.Context, result *ScenarioResult) *ScenarioResult {
+	cfg, err := realLLMSmokeConfigFromEnv()
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, err.Error())
+		return result
+	}
+	repo, err := os.MkdirTemp("", "agentos-real-llm-smoke-*")
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "create disposable repo: "+err.Error())
+		return result
+	}
+	if err := realLLMRepoAllowed(repo, cfg.RepoAllowlist); err != nil {
+		result.FailureReasons = append(result.FailureReasons, err.Error())
+		return result
+	}
+	if err := initRepo(repo); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "init disposable repo: "+err.Error())
+		return result
+	}
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("# AgentOS Real LLM Smoke\n\nDisposable eval repository.\n"), 0o600); err != nil {
+		result.FailureReasons = append(result.FailureReasons, "seed disposable repo: "+err.Error())
+		return result
+	}
+
+	llmCfg := llm.DefaultConfig()
+	llmCfg.Timeout = cfg.Timeout
+	llmCfg.ModelCoder = cfg.Model
+	client := &countingLLMClient{inner: llm.NewLiteLLMClient(llmCfg), maxTokens: cfg.MaxTokens}
+	docsAgent := &realLLMSmokeAgent{llm: client}
+	orch := orchestrator.NewOrchestrator(client, sandbox.NewLocalSandbox(repo), map[string]runtime.Agent{"docs": docsAgent}, &runtime.Config{})
+	orch.SetRunID("real-llm-orchestration-smoke")
+	orch.SetSubtaskTimeout(cfg.Timeout)
+	orch.SetMaxRetries(1)
+
+	runCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
+	taskText := "Use the docs agent to create AGENTOS_REAL_LLM_SMOKE.md with a short Markdown report. The file must contain the exact phrase AgentOS real LLM smoke passed and a Residual risk section. Do not modify any other files."
+	plan, err := orch.Plan(runCtx, taskText)
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "plan: "+err.Error())
+		return result
+	}
+	result.Subtasks = len(plan.Subtasks)
+	result.Checks = append(result.Checks, ScenarioCheck{Page: "llm", Action: "plan creation", Passed: len(plan.Subtasks) > 0})
+	if len(plan.Subtasks) == 0 {
+		result.FailureReasons = append(result.FailureReasons, "real LLM plan contained no subtasks")
+		return result
+	}
+	plan.Subtasks = []orchestrator.Subtask{plan.Subtasks[0]}
+	plan.Subtasks[0].AgentName = "docs"
+	plan.Subtasks[0].Description = taskText
+	plan.Subtasks[0].QualityGate = &orchestrator.QualityGate{
+		RequiredFiles: []string{"AGENTOS_REAL_LLM_SMOKE.md"},
+		ContentChecks: []orchestrator.QualityContentCheck{{
+			File:     "AGENTOS_REAL_LLM_SMOKE.md",
+			Contains: []string{"AgentOS real LLM smoke passed", "Residual risk"},
+		}},
+	}
+	result.Subtasks = len(plan.Subtasks)
+	result.Agents = []string{"docs"}
+
+	executed, err := orch.Execute(runCtx, plan)
+	if err != nil {
+		result.FailureReasons = append(result.FailureReasons, "execute: "+err.Error())
+	}
+	for _, subtask := range executed {
+		if subtask.Success {
+			result.Successes++
+		} else {
+			result.Failures++
+			if subtask.Error != "" {
+				result.FailureReasons = append(result.FailureReasons, subtask.SubtaskID+": "+subtask.Error)
+			}
+		}
+		if subtask.QualityGate != nil {
+			result.QualityGates = append(result.QualityGates, QualityGateCheck{SubtaskID: subtask.SubtaskID, Passed: subtask.QualityGate.Passed})
+		}
+	}
+	artifactPath := filepath.Join(repo, "AGENTOS_REAL_LLM_SMOKE.md")
+	_, statErr := os.Stat(artifactPath)
+	artifactExists := statErr == nil
+	result.RequiredFiles = append(result.RequiredFiles, FileCheck{Path: "AGENTOS_REAL_LLM_SMOKE.md", Exists: artifactExists})
+	result.Checks = append(result.Checks,
+		ScenarioCheck{Page: "llm", Action: "subtask execution", Passed: len(executed) > 0 && result.Failures == 0},
+		ScenarioCheck{Page: "llm", Action: "artifact recording", Passed: artifactExists},
+		ScenarioCheck{Page: "llm", Action: "real LLM responses", Passed: client.successfulResponses > 0},
+	)
+	if !artifactExists {
+		result.FailureReasons = append(result.FailureReasons, "missing AGENTOS_REAL_LLM_SMOKE.md")
+	}
+	if client.successfulResponses == 0 {
+		result.FailureReasons = append(result.FailureReasons, "real LLM smoke recorded 0 successful LLM responses")
+	}
+	result.Artifacts = map[string]string{
+		"repository":          repo,
+		"model":               client.ModelName(),
+		"baseURL":             llmCfg.BaseURL,
+		"timeout":             cfg.Timeout.String(),
+		"maxTokens":           fmt.Sprintf("%d", cfg.MaxTokens),
+		"repoAllowlist":       cfg.RepoAllowlist,
+		"planSubtasks":        fmt.Sprintf("%d", len(plan.Subtasks)),
+		"successes":           fmt.Sprintf("%d", result.Successes),
+		"failures":            fmt.Sprintf("%d", result.Failures),
+		"llmRequests":         fmt.Sprintf("%d", client.requests),
+		"llmResponses":        fmt.Sprintf("%d", client.successfulResponses),
+		"promptTokens":        fmt.Sprintf("%d", client.promptTokens),
+		"completionTokens":    fmt.Sprintf("%d", client.completionTokens),
+		"totalTokens":         fmt.Sprintf("%d", client.totalTokens),
+		"costBudget":          strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LLM_COST_BUDGET")),
+		"residualRisk":        "LLM output quality is model-dependent; this smoke only validates a bounded docs artifact flow.",
+		"requiredArtifact":    "AGENTOS_REAL_LLM_SMOKE.md",
+		"requiredArtifactSet": fmt.Sprintf("%t", artifactExists),
+		"diff":                gitDiff(ctx, repo),
+	}
+	return result
+}
+
+func realLLMSmokeConfigFromEnv() (realLLMSmokeConfig, error) {
+	var cfg realLLMSmokeConfig
+	if !strings.EqualFold(strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LIVE_LLM")), "true") {
+		return cfg, fmt.Errorf("real LLM smoke requires AGENTOS_EVAL_LIVE_LLM=true")
+	}
+	if strings.TrimSpace(os.Getenv("LITELLM_BASE_URL")) == "" {
+		return cfg, fmt.Errorf("real LLM smoke requires explicit LITELLM_BASE_URL")
+	}
+	cfg.RepoAllowlist = strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LLM_REPO_ALLOWLIST"))
+	if cfg.RepoAllowlist == "" {
+		return cfg, fmt.Errorf("real LLM smoke requires AGENTOS_EVAL_LLM_REPO_ALLOWLIST containing temp")
+	}
+	timeout := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LLM_TIMEOUT"))
+	if timeout == "" {
+		timeout = "2m"
+	}
+	parsedTimeout, err := time.ParseDuration(timeout)
+	if err != nil {
+		return cfg, fmt.Errorf("AGENTOS_EVAL_LLM_TIMEOUT: %w", err)
+	}
+	cfg.Timeout = parsedTimeout
+	cfg.MaxTokens = 1024
+	if raw := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LLM_MAX_TOKENS")); raw != "" {
+		if _, err := fmt.Sscanf(raw, "%d", &cfg.MaxTokens); err != nil {
+			return cfg, fmt.Errorf("AGENTOS_EVAL_LLM_MAX_TOKENS must be an integer")
+		}
+	}
+	if cfg.MaxTokens <= 0 {
+		return cfg, fmt.Errorf("AGENTOS_EVAL_LLM_MAX_TOKENS must be positive")
+	}
+	cfg.Model = strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LLM_MODEL"))
+	if cfg.Model == "" {
+		cfg.Model = strings.TrimSpace(os.Getenv("AGENTOS_MODEL_CODER"))
+	}
+	if cfg.Model == "" {
+		return cfg, fmt.Errorf("real LLM smoke requires AGENTOS_EVAL_LLM_MODEL or AGENTOS_MODEL_CODER")
+	}
+	return cfg, nil
+}
+
+func realLLMRepoAllowed(repo, allowlist string) error {
+	for _, item := range strings.Split(allowlist, ",") {
+		item = strings.TrimSpace(item)
+		if item == "temp" || item == repo {
+			return nil
+		}
+	}
+	return fmt.Errorf("disposable repo %q is not allowed by AGENTOS_EVAL_LLM_REPO_ALLOWLIST", repo)
+}
+
+type realLLMSmokeAgent struct {
+	llm llm.LLMClient
+}
+
+func (a *realLLMSmokeAgent) Name() string { return "docs" }
+
+func (a *realLLMSmokeAgent) Plan(ctx *runtime.RunContext) (*runtime.Plan, error) {
+	resp, err := a.llm.Chat(ctx.Context, llm.ChatRequest{
+		Model: a.llm.ModelName(),
+		Messages: []llm.Message{
+			{Role: llm.RoleSystem, Content: "You are a bounded AgentOS smoke-test planner. Return a concise plan summary for the requested documentation artifact."},
+			{Role: llm.RoleUser, Content: ctx.Task.Description},
+		},
+		Temperature: 0.1,
+		MaxTokens:   512,
+	})
+	if err != nil {
+		return nil, err
+	}
+	summary := strings.TrimSpace(resp.Choices[0].Message.Content)
+	if summary == "" {
+		summary = "Create the required real LLM smoke artifact."
+	}
+	return &runtime.Plan{
+		Summary:               summary,
+		EstimatedFilesChanged: 1,
+		Steps: []runtime.Step{{
+			StepNumber:  1,
+			Action:      "edit",
+			Description: "Create AGENTOS_REAL_LLM_SMOKE.md with smoke status and residual risk.",
+			TargetFiles: []string{"AGENTOS_REAL_LLM_SMOKE.md"},
+			Reasoning:   "Bounded smoke scenario requires a deterministic artifact while still exercising live LLM planning.",
+		}},
+	}, nil
+}
+
+func (a *realLLMSmokeAgent) Execute(ctx *runtime.RunContext, plan *runtime.Plan) (*runtime.ExecutionResult, error) {
+	started := time.Now()
+	content := "# AgentOS Real LLM Smoke\n\nAgentOS real LLM smoke passed.\n\n## Residual risk\n\nLLM behavior remains model-dependent; this smoke validates a bounded docs artifact flow.\n"
+	tool, ok := ctx.Registry.Get("write_file")
+	if !ok {
+		return &runtime.ExecutionResult{Success: false, Error: "write_file tool not found"}, fmt.Errorf("write_file tool not found")
+	}
+	output := tool.Run(ctx.Context, tools.ToolInput{"file": "AGENTOS_REAL_LLM_SMOKE.md", "content": content})
+	step := runtime.StepResult{StepNumber: 1, Action: "edit", Duration: time.Since(started)}
+	if output.Success {
+		step.Success = true
+		step.Output = "created AGENTOS_REAL_LLM_SMOKE.md"
+		return &runtime.ExecutionResult{
+			StepResults: []runtime.StepResult{step},
+			Diff:        gitDiff(ctx.Context, ctx.Workspace.RootDir()),
+			Success:     true,
+		}, nil
+	}
+	step.Error = output.Error
+	result := &runtime.ExecutionResult{StepResults: []runtime.StepResult{step}, Success: false, Error: output.Error}
+	return result, fmt.Errorf("%s", output.Error)
+}
+
+func (a *realLLMSmokeAgent) Review(ctx *runtime.RunContext, result *runtime.ExecutionResult) (*runtime.ReviewResult, error) {
+	resp, err := a.llm.Chat(ctx.Context, llm.ChatRequest{
+		Model: a.llm.ModelName(),
+		Messages: []llm.Message{
+			{Role: llm.RoleSystem, Content: "You are reviewing a bounded AgentOS real LLM smoke artifact. Reply with a concise approval summary."},
+			{Role: llm.RoleUser, Content: result.Diff},
+		},
+		Temperature: 0.1,
+		MaxTokens:   512,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &runtime.ReviewResult{Approved: true, Summary: strings.TrimSpace(resp.Choices[0].Message.Content)}, nil
 }
 
 type scheduleEvalDefinition struct {
