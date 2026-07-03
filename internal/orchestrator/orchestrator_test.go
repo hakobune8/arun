@@ -1261,6 +1261,49 @@ func TestRecoverBuiltInSubtask_PartialStaticFrontendQA(t *testing.T) {
 	}
 }
 
+func TestRecoverBuiltInSubtask_AnalystEmptyPlanningOutput(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-planning-step"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"analyst": &recordingAgent{name: "analyst"}},
+		&runtime.Config{},
+	)
+
+	result, ok := o.recoverBuiltInSubtask(context.Background(), &Subtask{
+		ID:        "sprint-1-plan",
+		AgentName: "analyst",
+		Description: `Sprint 1 planning: inspect the repository state.
+
+Target baseline:
+- Minimal Go net/http server.
+- Health endpoint /healthz.
+- Run go test ./... and go vet ./...`,
+	}, runSandbox, errors.New("create plan: parse plan JSON: unexpected end of JSON input\ncontent: "))
+	if !ok || !result.Success {
+		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
+	}
+	planPath := filepath.Join(repo, "docs", "sprint-planning", "sprint-1-plan.md")
+	body, err := os.ReadFile(planPath)
+	if err != nil {
+		t.Fatalf("planning artifact not created: %v", err)
+	}
+	for _, want := range []string{"Recovery Plan", "net/http", "/healthz", "go test ./..."} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("planning artifact missing %q:\n%s", want, body)
+		}
+	}
+	if result.QualityGate == nil || !result.QualityGate.Passed {
+		t.Fatalf("quality gate = %+v, want passed", result.QualityGate)
+	}
+}
+
 func TestRecoverBuiltInSubtask_GoQAValidationFailure(t *testing.T) {
 	t.Parallel()
 
