@@ -317,6 +317,24 @@ func TestApplyDefaultQualityGate_SpecializedBuiltIns(t *testing.T) {
 	}
 }
 
+func TestSubtaskProfile_ReportOnlyAgentsDoNotRequireGoValidation(t *testing.T) {
+	t.Parallel()
+
+	for _, agent := range []string{"analyst", "reporter", "reviewer", "release-manager"} {
+		t.Run(agent, func(t *testing.T) {
+			prof := subtaskProfile(agent)
+			if prof.Commands.Test != "" {
+				t.Fatalf("%s test command = %q, want empty", agent, prof.Commands.Test)
+			}
+			for _, tool := range prof.Tools.Allow {
+				if tool == "test" {
+					t.Fatalf("%s tools = %+v, want no test tool", agent, prof.Tools.Allow)
+				}
+			}
+		})
+	}
+}
+
 func TestQAQualityGate_AllowsStaticFrontendSmokeEvidence(t *testing.T) {
 	repo := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(repo, "docs"), 0o755); err != nil {

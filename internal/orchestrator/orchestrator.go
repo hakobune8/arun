@@ -955,6 +955,20 @@ func subtaskProfile(agentName string) profile.Profile {
 		prof.Commands.Test = frontendValidationCommand
 		prof.Commands.Lint = ""
 		prof.Commands.Build = ""
+	case "analyst":
+		prof.Role = "Repository analysis and planning agent"
+		prof.Tools.Allow = []string{"read_file", "search", "shell", "git"}
+		prof.Commands.Test = ""
+		prof.Commands.Lint = ""
+		prof.Limits.MaxRetries = 1
+		prof.Limits.MaxIterations = 3
+	case "reporter":
+		prof.Role = "Evidence reporting agent"
+		prof.Tools.Allow = []string{"read_file", "search", "shell", "git"}
+		prof.Commands.Test = ""
+		prof.Commands.Lint = ""
+		prof.Limits.MaxRetries = 1
+		prof.Limits.MaxIterations = 3
 	case "ci-fixer":
 		prof.Role = "CI configuration fix agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git", "test"}
