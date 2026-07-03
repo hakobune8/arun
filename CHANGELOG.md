@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [v1.5.5] - 2026-07-03
+
+### Fixed
+- Added deterministic recovery for implementation-heavy frontend validation
+  failures after a canonical Go service has already been generated.
+- Prevented Go-service frontend/static stage validation failures from cascading
+  all remaining scrum subtasks.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.5.
+
 ## [v1.5.4] - 2026-07-03
 
 ### Fixed

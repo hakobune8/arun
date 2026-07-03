@@ -258,6 +258,8 @@ release that changes `charts/arun/**`, update both `version` and
 `appVersion` in `charts/arun/Chart.yaml` intentionally so chart-releaser can
 publish a new immutable chart release.
 
+- [v1.5.5 release notes](docs/release-v1.5.5.md) — Go-service frontend
+  validation recovery.
 - [v1.5.4 release notes](docs/release-v1.5.4.md) — Japanese scrum Go QA
   recovery detection.
 - [v1.5.3 release notes](docs/release-v1.5.3.md) — empty scrum planning output
