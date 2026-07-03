@@ -101,4 +101,25 @@ entries:
     urls:
     - https://github.com/kazyamaz200/agentos/releases/download/agentos-1.0.0/agentos-1.0.0.tgz
     version: 1.0.0
-generated: "2026-07-03T07:51:03.371712135Z"
+  arun:
+  - apiVersion: v2
+    appVersion: v1.5.0
+    created: "2026-07-03T09:53:55.706701496Z"
+    description: A Go runtime for autonomous coding agents — Web UI server
+    digest: 429b7e974ee91d6586865ec3069e2a1acef846651eaeaca657362e4c941c269a
+    home: https://github.com/hakobune8/arun
+    keywords:
+    - arun
+    - coding-agent
+    - ai
+    maintainers:
+    - name: ARUN maintainers
+      url: https://github.com/hakobune8/arun
+    name: arun
+    sources:
+    - https://github.com/hakobune8/arun
+    type: application
+    urls:
+    - https://github.com/hakobune8/arun/releases/download/arun-1.5.0/arun-1.5.0.tgz
+    version: 1.5.0
+generated: "2026-07-03T09:53:55.706715943Z"
