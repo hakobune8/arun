@@ -8,6 +8,7 @@ import {
   Boxes,
   CalendarClock,
   Check,
+  ChevronDown,
   ChevronRight,
   CircleStop,
   ClipboardList,
@@ -342,6 +343,12 @@ const translations: Record<UILanguage, Record<string, string>> = {
     Actor: '実行者',
     Outcome: '結果',
     Message: 'メッセージ',
+    'Show details': '詳細を表示',
+    'Hide details': '詳細を隠す',
+    'Parent task': '親タスク',
+    'Depends on': '依存元',
+    Start: '開始',
+    Output: '出力',
     Cancel: 'キャンセル',
     Reject: '却下',
     No: 'なし',
@@ -475,6 +482,15 @@ function readableTask(value: unknown) {
     .trim()
 }
 
+function splitParentTask(value: unknown) {
+  const text = String(value ?? '').trim()
+  const match = text.match(/\n\n(Parent orchestration task|Parent task):\n/)
+  if (!match || match.index === undefined) return { body: text, parent: '' }
+  const body = text.slice(0, match.index).trim()
+  const parent = text.slice(match.index + match[0].length).trim()
+  return { body, parent }
+}
+
 function numberOrUndefined(value: string) {
   const trimmed = value.trim()
   if (!trimmed) return undefined
@@ -574,6 +590,42 @@ const textareaClass = `${inputClass} min-h-28 resize-y py-2`
 
 function Panel({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <section className={cx('min-w-0 overflow-hidden rounded-os border border-line bg-panel/95 p-4 shadow-[0_16px_60px_rgb(0_0_0/0.24)]', className)}>{children}</section>
+}
+
+function CollapsibleText({
+  value,
+  previewSize = 240,
+  className = '',
+  textClassName = '',
+  buttonClassName = '',
+}: {
+  value: unknown
+  previewSize?: number
+  className?: string
+  textClassName?: string
+  buttonClassName?: string
+}) {
+  const t = useT()
+  const [expanded, setExpanded] = useState(false)
+  const text = String(value ?? '').trim()
+  const collapsible = text.length > previewSize
+  const shown = !collapsible || expanded ? text : shortText(text, previewSize)
+  if (!text) return null
+  return (
+    <div className={className}>
+      <pre className={cx('whitespace-pre-wrap break-words font-sans', textClassName)}>{shown}</pre>
+      {collapsible ? (
+        <button
+          className={cx('mt-2 inline-flex items-center gap-1 text-xs font-medium text-cyan-os hover:underline', buttonClassName)}
+          onClick={() => setExpanded((value) => !value)}
+          type="button"
+        >
+          {expanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+          {expanded ? t('Hide details') : t('Show details')}
+        </button>
+      ) : null}
+    </div>
+  )
 }
 
 function App() {
@@ -1709,7 +1761,12 @@ function OrchestrationDetail({ current, selectedID, tab, setTab, refresh }: { cu
             <IconButton tone="secondary" icon={<RefreshCw className="size-4" />} onClick={refresh}>Refresh</IconButton>
           </div>
         </div>
-        <pre className="mt-3 whitespace-pre-wrap break-words font-sans text-sm leading-6 text-soft">{readableTask(current.task)}</pre>
+        <CollapsibleText
+          value={readableTask(current.task)}
+          previewSize={420}
+          className="mt-3"
+          textClassName="text-sm leading-6 text-soft"
+        />
         {current.error ? <p className="mt-3 break-words text-sm text-red-os">{current.error}</p> : null}
       </Panel>
       <Panel className="p-2">
@@ -1754,6 +1811,13 @@ function subtaskSucceeded(subtask: Json, result: Json = {}) {
 function subtaskFailed(subtask: Json, result: Json = {}) {
   const status = subtaskStatus(subtask, result)
   return status === 'failed' || result.success === false
+}
+
+function subtaskDependencies(subtask: Json) {
+  const value = subtask.dependencies ?? subtask.deps ?? subtask.dependsOn ?? subtask.depends_on
+  if (Array.isArray(value)) return value.map((item) => String(item)).filter(Boolean)
+  if (typeof value === 'string') return value.split(',').map((item) => item.trim()).filter(Boolean)
+  return []
 }
 
 function stagePresetValues(item: Json) {
@@ -1845,6 +1909,7 @@ function Stat({ label, value, tone = 'text-cyan-os' }: { label: string; value: n
 }
 
 function RunsTab({ record, refresh }: { record: Orchestration; refresh: () => void }) {
+  const t = useT()
   const [agent, setAgent] = useState(record.agents?.[0] ?? '')
   const [task, setTask] = useState('')
   const [description, setDescription] = useState('')
@@ -1887,13 +1952,46 @@ function RunsTab({ record, refresh }: { record: Orchestration; refresh: () => vo
       <Panel className="p-0">
         <div className="divide-y divide-line">
           {states.length === 0 ? <div className="p-4 text-sm text-soft">No runs.</div> : null}
-          {states.map((s) => {
+          {states.map((s, index) => {
             const result = subtaskResultFor(record, s)
+            const description = splitParentTask(s.description)
+            const dependencies = subtaskDependencies(s)
+            const resultText = [result.error, result.output, result.diff].filter(Boolean).join('\n')
+            const status = subtaskStatus(s, result)
+            const nodeTone = subtaskFailed(s, result)
+              ? 'border-red-os/60 bg-red-os/15 text-red-os'
+              : subtaskSucceeded(s, result)
+                ? 'border-green-os/60 bg-green-os/15 text-green-os'
+                : status.includes('run') || status.includes('plan')
+                  ? 'border-amber-os/60 bg-amber-os/15 text-amber-os'
+                  : 'border-line bg-panel-2 text-soft'
             return (
-              <div key={s.id} className="grid gap-2 p-4">
-                <div className="flex flex-wrap items-center gap-2"><Status value={subtaskStatus(s, result)} /><Tag>{s.agent_type ?? s.agentName ?? '-'}</Tag><span className="text-xs text-soft">{s.id}</span></div>
-                <p className="whitespace-pre-wrap break-words text-sm leading-6 text-ink">{s.description}</p>
-                {result.output || result.error || result.diff ? <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-os bg-void p-3 text-xs text-soft">{[result.error, result.output, result.diff].filter(Boolean).join('\n')}</pre> : null}
+              <div key={s.id} className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3 p-4">
+                <div className="relative grid justify-items-center">
+                  {index > 0 ? <span className="absolute top-0 h-4 w-px bg-line" /> : null}
+                  {index < states.length - 1 ? <span className="absolute bottom-0 top-8 w-px bg-line" /> : null}
+                  <div className={cx('z-10 grid size-7 place-items-center rounded-full border text-[11px] font-semibold', nodeTone)}>{index + 1}</div>
+                </div>
+                <div className="grid min-w-0 gap-2">
+                  <div className="flex flex-wrap items-center gap-2"><Status value={status} /><Tag>{s.agent_type ?? s.agentName ?? '-'}</Tag><span className="text-xs text-soft">{s.id}</span></div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-soft">
+                    {dependencies.length ? <span>{t('Depends on')}</span> : <span>{t('Start')}</span>}
+                    {dependencies.map((dependency) => <Tag key={dependency}>{dependency}</Tag>)}
+                  </div>
+                  <CollapsibleText value={description.body} previewSize={260} textClassName="text-sm leading-6 text-ink" />
+                  {description.parent ? (
+                    <div className="rounded-os border border-line bg-void p-3">
+                      <div className="mb-1 text-xs font-semibold text-soft">{t('Parent task')}</div>
+                      <CollapsibleText value={description.parent} previewSize={180} textClassName="text-xs leading-5 text-soft" />
+                    </div>
+                  ) : null}
+                  {resultText ? (
+                    <div className="rounded-os bg-void p-3">
+                      <div className="mb-1 text-xs font-semibold text-soft">{t('Output')}</div>
+                      <CollapsibleText value={resultText} previewSize={260} textClassName="max-h-96 overflow-auto text-xs text-soft" />
+                    </div>
+                  ) : null}
+                </div>
               </div>
             )
           })}
