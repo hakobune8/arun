@@ -338,6 +338,15 @@ func TestSubtaskProfile_ReportOnlyAgentsDoNotRequireGoValidation(t *testing.T) {
 	}
 }
 
+func TestIsCanonicalGoServiceTask_AllowsHealthEndpointWording(t *testing.T) {
+	t.Parallel()
+
+	description := "Create a minimal Go net/http server with a health endpoint and tests."
+	if !isCanonicalGoServiceTask(description) {
+		t.Fatalf("isCanonicalGoServiceTask(%q) = false, want true", description)
+	}
+}
+
 func containsTestString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
