@@ -249,9 +249,18 @@ func (r *Runtime) Run(ctx context.Context, tk *task.Task) error {
 	reviewResult, err := r.Agent.Review(rctx, result)
 	if err != nil {
 		_ = r.Logger.Log("warn", "runtime", "review failed", err.Error()) //nolint:errcheck // best-effort log
+		reviewResult = &ReviewResult{
+			Approved: false,
+			Summary:  "Review failed: " + err.Error(),
+		}
+	} else if reviewResult == nil {
+		reviewResult = &ReviewResult{
+			Approved: false,
+			Summary:  "Review did not return a result.",
+		}
 	}
 	r.emit(ctx, tk.ID, event.TypeReviewFinished, map[string]interface{}{
-		"approved": reviewResult != nil && reviewResult.Approved,
+		"approved": reviewResult.Approved,
 		"summary":  reviewResult.Summary,
 	})
 
