@@ -257,6 +257,11 @@ release that changes `charts/agentos/**`, update both `version` and
 `appVersion` in `charts/agentos/Chart.yaml` intentionally so chart-releaser can
 publish a new immutable chart release.
 
+- [v1.4.1 release notes](docs/release-v1.4.1.md) — Web UI polish,
+  implementation-heavy scrum hardening, and changes since v1.4.0
+- [v1.4.0 release notes](docs/release-v1.4.0.md) — Governance limits, storage
+  retention and cleanup, and orchestration evals
+
 ## Roadmap
 
 ### v1.5+ — Scale, Integrations, and Productization
@@ -265,6 +270,9 @@ publish a new immutable chart release.
 - [ ] Continue hardening release automation, deployment safety, and rollback evidence capture
 
 ### v1.4.x — Operational Flow Hardening
+- [x] v1.4.1 patch release for implementation-heavy scrum completion,
+  production Web UI flow verification, Stage Presets readability, and
+  completed-subtask pass counts
 - [ ] Authenticated Web UI E2E smoke coverage
 - [ ] Live GitHub issue and pull request workflow scenarios
 - [ ] Live Kubernetes rollout and rollback scenarios

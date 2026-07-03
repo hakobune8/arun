@@ -1226,6 +1226,9 @@ func TestServer_OrchestrateTemplates_ReturnsBuiltIns(t *testing.T) {
 	if scrum.CreatePullRequest || scrum.Strategy != "sequential" || !strings.Contains(scrum.TaskTemplate, "Sprint 3") {
 		t.Fatalf("scrum template defaults = %+v", scrum)
 	}
+	if strings.Contains(scrum.TaskTemplate, "Japanese stakeholder report") {
+		t.Fatalf("scrum template should not force a Japanese stakeholder report")
+	}
 	if scrum.Limits.MaxDuration != "45m" || scrum.Limits.MaxSubtasks != 18 || scrum.Limits.MaxConcurrentRepoRun != 1 {
 		t.Fatalf("scrum limits = %+v, want 45m/18/1", scrum.Limits)
 	}
@@ -1248,6 +1251,9 @@ func TestServer_OrchestrateTemplates_ReturnsBuiltIns(t *testing.T) {
 	}
 	if !heavy.CreateIssue || !heavy.CreatePullRequest || heavy.Strategy != "sequential" || !strings.Contains(heavy.TaskTemplate, "build-first") {
 		t.Fatalf("implementation-heavy-scrum defaults = %+v", heavy)
+	}
+	if strings.Contains(heavy.TaskTemplate, "Japanese stakeholder report") {
+		t.Fatalf("implementation-heavy-scrum template should not force a Japanese stakeholder report")
 	}
 	for _, want := range []string{"Go HTTP server", "Helm chart", "Kubernetes manifests", "GitHub Actions CI"} {
 		if !strings.Contains(heavy.TaskTemplate, want) {
