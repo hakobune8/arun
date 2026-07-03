@@ -464,11 +464,31 @@ func repairStepNumberLine(line string) string {
 	if !strings.HasPrefix(trimmed, `"step_number"`) {
 		return line
 	}
-	repaired := strings.Replace(trimmed, `",`, `,`, 1)
+	repaired := trimmed
+	prefix := `"step_number": "`
+	if strings.HasPrefix(trimmed, prefix) {
+		rest := strings.TrimPrefix(trimmed, prefix)
+		digits := strings.TrimRight(rest, `",`)
+		if digits != rest && digits != "" && allASCIIChars(digits, '0', '9') {
+			repaired = prefix[:len(prefix)-1] + digits + trimmed[len(prefix)+len(digits)+1:]
+		}
+	}
+	if repaired == trimmed {
+		repaired = strings.Replace(trimmed, `",`, `,`, 1)
+	}
 	if repaired == trimmed {
 		return line
 	}
 	return leadingWhitespace(line) + repaired
+}
+
+func allASCIIChars(value string, low, high byte) bool {
+	for i := 0; i < len(value); i++ {
+		if value[i] < low || value[i] > high {
+			return false
+		}
+	}
+	return true
 }
 
 func previousNonEmptyLine(lines []string) string {
