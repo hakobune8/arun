@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -869,6 +870,9 @@ func TestRecoverGoBackend_CreatesValidService(t *testing.T) {
 }
 
 func TestRecoverGoBackend_AllowsMissingGoToolchain(t *testing.T) {
+	if goruntime.GOOS == "windows" {
+		t.Skip("PATH-limited POSIX shell validation is covered on Unix runners")
+	}
 	repo := t.TempDir()
 	bin := t.TempDir()
 	if err := os.Symlink("/bin/sh", filepath.Join(bin, "sh")); err != nil {
