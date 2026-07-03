@@ -182,7 +182,39 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	agents := s.agentReg.List()
+	agents = localizeAgentInfos(agents, r.URL.Query().Get("uiLanguage"))
 	_ = json.NewEncoder(w).Encode(agents) //nolint:errcheck // best-effort
+}
+
+func localizeAgentInfos(agents []agent.Info, language string) []agent.Info {
+	if strings.TrimSpace(language) != "ja" {
+		return agents
+	}
+	descriptions := map[string]string{
+		"analyst":            "Analyst agent — logs、runs、artifacts、GitHub context、repository evidence を調査し、findings と next actions を整理します",
+		"ci-fixer":           "CI fix agent — CI failure を分析し、GitHub Actions と validation の修正を行います",
+		"dependency-updater": "Dependency updater agent — Go modules、lockfiles、GitHub Actions versions を互換性確認付きで更新します",
+		"devops":             "DevOps agent — Docker、Helm、Kubernetes、deployment debugging、release hardening を横断調整します",
+		"docker":             "Docker ops agent — Dockerfile、image build、.dockerignore、runtime config、container safety defaults を保守します",
+		"docs":               "Documentation agent — 既存 style に合わせて実用的な repository documentation を作成・更新します",
+		"frontend":           "Frontend agent — UI 実装、layout、responsive、accessibility、frontend validation を担当します",
+		"go-backend":         "Go backend agent — 既存構成を保ちながら Go の設計、実装、テスト、lint を担当します",
+		"helm":               "Helm ops agent — charts、templates、values、schema、chart linting、release-safe packaging を保守します",
+		"kubernetes":         "Kubernetes ops agent — manifests、deployments、services、ingress、probes、resources、rollout checks を保守します",
+		"qa":                 "QA agent — scenario tests、smoke checks、regression coverage、manual verification notes を追加します",
+		"release-manager":    "Release manager agent — changelog、release notes、checklist、readiness validation を準備します",
+		"reporter":           "Reporter agent — findings を Markdown reports、stakeholder summaries、GitHub-ready updates に整理します",
+		"reviewer":           "Review agent — correctness、tests、security、maintainability、release readiness の観点で diff をレビューします",
+		"security":           "Security agent — dependencies、auth/session、secrets、security-sensitive diffs をレビューします",
+	}
+	localized := make([]agent.Info, len(agents))
+	copy(localized, agents)
+	for i := range localized {
+		if description, ok := descriptions[localized[i].Name]; ok {
+			localized[i].Description = description
+		}
+	}
+	return localized
 }
 
 type repositoryAgentsRequest struct {
@@ -3267,6 +3299,7 @@ Expected output:
 type localizedScenarioTemplate struct {
 	Name        string
 	Description string
+	Task        string
 }
 
 func localizeScenarioTemplates(templates []scenarioTemplate, language string) {
@@ -3277,46 +3310,158 @@ func localizeScenarioTemplates(templates []scenarioTemplate, language string) {
 		"go-http-service-bootstrap": {
 			Name:        "Go HTTP サービス作成",
 			Description: "既存構成を保ちながら Go HTTP サービスを作成または拡張します。",
+			Task: `{{repo}} の {{baseBranch}} 上で Go HTTP サービスを作成または拡張してください。
+
+対象 package または module: {{packageName}}
+Endpoint または handler: {{endpoints}}
+
+既存の repository layout と conventions を維持してください。テストを追加または更新し、サービスの実行方法を文書化し、検証結果を要約してください。`,
 		},
 		"bug-fix-with-tests": {
 			Name:        "テスト付きバグ修正",
 			Description: "不具合を修正し、回帰テストを追加してレビューします。",
+			Task: `{{repo}} の {{baseBranch}} 上で bug を修正してください。
+
+Bug または issue: {{targetIssue}}
+期待される挙動: {{expectedBehavior}}
+関連 file または component: {{scope}}
+
+焦点を絞った regression test を追加し、変更を最小限に保ち、検証結果を含めてください。`,
 		},
 		"documentation-only-update": {
 			Name:        "ドキュメント更新のみ",
 			Description: "コード変更を最小限に抑え、README または docs を更新します。",
+			Task: `{{repo}} の {{baseBranch}} 上で documentation を更新してください。
+
+Documentation target: {{docTarget}}
+Audience または use case: {{audience}}
+必要な詳細: {{details}}
+
+既存 documentation style に合わせてください。コマンドは copy-paste 可能にし、無関係な code change は避けてください。`,
 		},
 		"ci-failure-fixer": {
 			Name:        "CI 失敗修正",
 			Description: "CI 失敗を診断し、ローカル検証付きで修正します。",
+			Task: `{{repo}} の {{baseBranch}} 上で CI failure を修正してください。
+
+Workflow または check: {{workflow}}
+Failure URL または log excerpt: {{failure}}
+
+既存 workflow の意図を維持し、可能な範囲で CI validation をローカルでも再現し、root cause を要約してください。`,
 		},
 		"security-remediation": {
 			Name:        "セキュリティ修正",
 			Description: "セキュリティまたはコードスキャンの指摘を検証付きで修正します。",
+			Task: `{{repo}} の {{baseBranch}} 上で security finding を修正してください。
+
+Finding: {{finding}}
+Affected area: {{scope}}
+必要な制約: {{constraints}}
+
+狭く防御的な修正を優先し、テストまたは manual verification notes を追加し、残存 risk を文書化してください。`,
 		},
 		"release-preparation": {
 			Name:        "リリース準備",
 			Description: "CHANGELOG、チェックリスト、リリース準備資料を更新します。",
+			Task: `{{repo}} の {{baseBranch}} 上で release material を準備してください。
+
+Release version: {{version}}
+Scope since: {{since}}
+必要な artifact: {{artifacts}}
+
+Repository conventions に従って changelog または release docs を更新してください。validation、known gaps、rollback considerations を含めてください。`,
 		},
 		"frontend-ui-change": {
 			Name:        "フロントエンド UI 変更",
 			Description: "レスポンシブとアクセシビリティを確認しながら UI 変更を実装します。",
+			Task: `{{repo}} の {{baseBranch}} 上で frontend UI change を実装してください。
+
+Screen または flow: {{screen}}
+依頼された変更: {{change}}
+Validation target: {{validation}}
+
+既存 frontend conventions に従い、text と controls が responsive に収まるようにし、browser または build verification notes を含めてください。`,
 		},
 		"three-sprint-agile-scrum": {
 			Name:        "3 スプリント Agile Scrum",
 			Description: "計画、実装、レビュー、スモーク、報告を含む 3 スプリントの scrum ワークフローを実行します。",
+			Task: `{{repo}} の {{baseBranch}} 上で 3 スプリントの agile scrum simulation を実行してください。
+
+Operating mode: report-first。破壊的な変更は行わないでください。Repository state が小さく安全な変更を明確に必要としていない限り、code change よりも Markdown report、sprint plan、review notes、smoke-test notes を優先してください。
+
+Sprint 1:
+- Repository context から狭い product increment を計画してください。
+- Acceptance criteria、likely files、risks、validation を特定してください。
+- 作業が low risk かつ明確に scoped されている場合のみ実装してください。
+- 結果を review し、軽量な smoke check を実行してください。
+
+Sprint 2:
+- Sprint 1 findings から継続してください。
+- Review と smoke-test evidence に基づいて scope を調整してください。
+- 安全な incremental changes のみ実装してください。
+- 再度 review と smoke test を行ってください。
+
+Sprint 3:
+- Outcome を安定化してください。
+- 何を作ったか、何を作らなかったか、validation results、risks、recommended backlog を要約してください。
+- 選択された output language または repository の通常言語で final stakeholder report を作成してください。
+
+Expected output:
+- Sprint 1、Sprint 2、Sprint 3 sections。
+- 各 sprint の planning、coding、review、smoke、reporting notes。
+- Repository changes がある場合は明確な list。
+- 次の human review step に向けた final recommendation。`,
 		},
 		"implementation-heavy-scrum": {
 			Name:        "実装重視 Scrum",
 			Description: "新規または sandbox リポジトリ向けに、アプリ、CI/CD、Kubernetes、レビュー、スモーク、報告成果物を作成します。",
+			Task: `{{repo}} の {{baseBranch}} 上で implementation-heavy agile scrum workflow を実行してください。
+
+Operating mode: 新規または sandbox repository 向けの build-first。安全な範囲で、review 可能な具体的 repository artifacts を作成してください。広く未完成な scaffold より、小さな vertical slice を優先してください。無関係な既存 work は書き換えないでください。Repository が完全に空、または commit がまだ無い場合は、拡張前に初期の minimal product scaffold を作成してください。
+
+新規 repository の target baseline:
+- Health endpoint と小さな product API または static asset handler を持つ minimal Go HTTP server。
+- Repository goal に合う場合の minimal Web UI または static frontend slice。
+- Dockerfile と local validation commands。
+- ARUN と同じ Kubernetes environment に deploy できる Helm chart と Kubernetes manifests。Service と Deployment を含めてください。Ingress は不要です。
+- Tests、lint または smoke checks、build validation を実行する GitHub Actions CI。
+- Setup、local run、Kubernetes deploy notes、validation commands、operational follow-up backlog を含む README documentation。
+
+Sprint 1:
+- Repository state を調査し、最小で一貫した product increment を選んでください。
+- 空 repository の場合は、外部 service なしで開いて review/validation できる minimal Go server と lightweight frontend または static response から始めてください。
+- Repository evidence から primary implementation path を決めてください。Backend、frontend、documentation、またはその組み合わせは repository に合う場合のみ使ってください。
+- Setup または usage documentation を含む minimal working slice を実装してください。
+- Slice を review し、smoke test してください。
+
+Sprint 2:
+- Slice に意味のある capability、test、CI check、containerization、または Kubernetes integration を 1 つ追加してください。
+- 変更を cohesive で review しやすく保ってください。
+- Documentation を更新し、validation を実行してください。
+- Risks、gaps、follow-up work を review してください。
+
+Sprint 3:
+- Result を安定化し、developer ergonomics を改善し、Helm/Kubernetes deploy artifacts を追加または調整し、明らかな rough edges を取り除いてください。
+- README または docs で実行方法と検証方法を説明してください。
+- 選択された output language または repository の通常言語で final review、smoke-test notes、stakeholder report を作成してください。
+
+Expected output:
+- Concrete file changes、または安全な implementation が不可能だった理由の明確な explanation。
+- Sprint 1、Sprint 2、Sprint 3 sections。
+- Implementation、documentation、review、smoke、CI/CD、Kubernetes、release-readiness notes。
+- 実行した commands と validation results。
+- 次の human-led sprint の final backlog。`,
 		},
 	}
-	const japaneseOutputInstruction = "\n\nOutput language: Japanese. Write generated reports, issue/PR bodies, user-facing summaries, and stakeholder notes in Japanese unless repository conventions require otherwise."
+	const japaneseOutputInstruction = "\n\n出力言語: 日本語。Repository conventions が別言語を明確に要求しない限り、生成する reports、issue/PR bodies、user-facing summaries、stakeholder notes は日本語で書いてください。"
 	for i := range templates {
 		if localized, ok := names[templates[i].ID]; ok && templates[i].Source == "built-in" {
 			templates[i].Name = localized.Name
 			templates[i].Description = localized.Description
-			if !strings.Contains(templates[i].TaskTemplate, "Output language: Japanese.") {
+			if localized.Task != "" {
+				templates[i].TaskTemplate = localized.Task
+			}
+			if !strings.Contains(templates[i].TaskTemplate, "出力言語: 日本語。") {
 				templates[i].TaskTemplate += japaneseOutputInstruction
 			}
 		}

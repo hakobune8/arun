@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [v1.5.1] - 2026-07-03
+
+### Changed
+- Localized built-in scenario task-template bodies for Japanese Web UI mode.
+- Localized built-in agent descriptions when the Web UI is set to Japanese.
+- Refreshed the README Web UI screenshot after the ARUN production rollout.
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.1.
+
 ## [v1.5.0] - 2026-07-03
 
 ### Added
@@ -11,7 +20,8 @@
   language, and task-template output instructions.
 
 ### Changed
-- Transferred the repository from `hakobune8/arun` to `hakobune8/arun`.
+- Transferred the repository from `kazyamaz200/agentos` to
+  `hakobune8/arun`.
 - Updated release, Docker image, Helm chart, GitHub Pages chart repository, and
   public documentation defaults for the new repository location.
 - Kept the Go module path, CLI name, Helm chart name, environment variables,
