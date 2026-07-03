@@ -397,6 +397,41 @@ func TestParsePlan_RepairsQuotedStepNumber(t *testing.T) {
 	}
 }
 
+func TestParsePlan_RepairsStringStepNumber(t *testing.T) {
+	t.Parallel()
+
+	resp := &llm.ChatResponse{
+		Choices: []llm.Choice{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					Content: `{
+  "plan_summary": "Review plan",
+  "steps": [
+    {
+      "step_number": "5",
+      "action": "edit",
+      "description": "Fix backend",
+      "target_files": ["main.go"],
+      "reasoning": "Need a valid step"
+    }
+  ],
+  "estimated_files_changed": 1
+}`,
+				},
+			},
+		},
+	}
+
+	plan, err := ParsePlan(resp)
+	if err != nil {
+		t.Fatalf("ParsePlan() error = %v", err)
+	}
+	if len(plan.Steps) != 1 || plan.Steps[0].StepNumber != 5 {
+		t.Fatalf("repaired plan = %+v", plan)
+	}
+}
+
 func TestParseReview_ValidJSON(t *testing.T) {
 	t.Parallel()
 
