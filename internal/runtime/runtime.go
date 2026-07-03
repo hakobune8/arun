@@ -448,7 +448,7 @@ func repairPlanStepObjects(content string) string {
 		if inSteps && strings.HasPrefix(trimmed, `"step_number"`) && previousNonEmptyLine(out) == "}," {
 			out = append(out, leadingWhitespace(line)+"{")
 		}
-		out = append(out, line)
+		out = append(out, repairStepNumberLine(line))
 		if inSteps && trimmed == "]" {
 			inSteps = false
 		}
@@ -457,6 +457,18 @@ func repairPlanStepObjects(content string) string {
 		}
 	}
 	return strings.Join(out, "\n")
+}
+
+func repairStepNumberLine(line string) string {
+	trimmed := strings.TrimSpace(line)
+	if !strings.HasPrefix(trimmed, `"step_number"`) {
+		return line
+	}
+	repaired := strings.Replace(trimmed, `",`, `,`, 1)
+	if repaired == trimmed {
+		return line
+	}
+	return leadingWhitespace(line) + repaired
 }
 
 func previousNonEmptyLine(lines []string) string {
