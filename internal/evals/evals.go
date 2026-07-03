@@ -1885,7 +1885,7 @@ func kubernetesRolloutConfigFromEnv() (kubernetesRolloutConfig, error) {
 	}
 	slices.Sort(missing)
 	if len(missing) > 0 {
-		return cfg, fmt.Errorf("Kubernetes rollout E2E requires explicit %s", strings.Join(missing, ", "))
+		return cfg, fmt.Errorf("kubernetes rollout E2E requires explicit %s", strings.Join(missing, ", "))
 	}
 	if cfg.Release == "" {
 		cfg.Release = "arun-eval-rollout"

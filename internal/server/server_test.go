@@ -526,16 +526,16 @@ func TestRepositoryContextSearch_LiveGitHubSourcesRedactAndProvenance(t *testing
 	t.Setenv("ARUN_HOME", t.TempDir())
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.URL.Path == "/repos/owner/repo/issues":
+		switch r.URL.Path {
+		case "/repos/owner/repo/issues":
 			_, _ = w.Write([]byte(`[{"number":7,"title":"Investigate failed run","body":"token=ghp_123456789012345678901234567890123456","state":"open","html_url":"https://github.com/owner/repo/issues/7","created_at":"2026-07-01T00:00:00Z"}]`))
-		case r.URL.Path == "/repos/owner/repo/pulls":
+		case "/repos/owner/repo/pulls":
 			_, _ = w.Write([]byte(`[{"number":9,"title":"Fix report","state":"open","html_url":"https://github.com/owner/repo/pull/9","head":{"ref":"fix"},"base":{"ref":"main"}}]`))
-		case r.URL.Path == "/repos/owner/repo/commits/main/check-runs":
+		case "/repos/owner/repo/commits/main/check-runs":
 			_, _ = w.Write([]byte(`{"check_runs":[{"id":11,"name":"lint","status":"completed","conclusion":"failure","html_url":"https://github.com/owner/repo/runs/11","output":{"title":"lint failed","summary":"secret=ghp_123456789012345678901234567890123456"}}]}`))
-		case r.URL.Path == "/repos/owner/repo/actions/runs":
+		case "/repos/owner/repo/actions/runs":
 			_, _ = w.Write([]byte(`{"workflow_runs":[{"id":42,"name":"CI","display_title":"CI failure report","status":"completed","conclusion":"failure","html_url":"https://github.com/owner/repo/actions/runs/42","head_branch":"main","head_sha":"abc123","created_at":"2026-07-01T00:00:00Z","updated_at":"2026-07-01T00:01:00Z"}]}`))
-		case r.URL.Path == "/repos/owner/repo/actions/runs/42/logs":
+		case "/repos/owner/repo/actions/runs/42/logs":
 			_, _ = w.Write([]byte("build failed with github_token=ghp_123456789012345678901234567890123456\n"))
 		default:
 			http.NotFound(w, r)
