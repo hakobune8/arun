@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import type { ButtonHTMLAttributes, Dispatch, FormEvent, ReactNode, SetStateAction } from 'react'
 import {
   Activity,
@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 
 type Json = Record<string, any>
+type UILanguage = 'en' | 'ja'
 
 type Session = {
   authRequired?: boolean
@@ -161,6 +162,222 @@ type OrchPanel = 'new' | 'list' | 'detail'
 type DetailTab = 'overview' | 'runs' | 'memory' | 'guidelines' | 'search' | 'github'
 
 const detailTabs: DetailTab[] = ['overview', 'runs', 'memory', 'guidelines', 'search', 'github']
+const languageStorageKey = 'agentos.uiLanguage'
+
+const translations: Record<UILanguage, Record<string, string>> = {
+  en: {},
+  ja: {
+    'GitHub sign in required.': 'GitHub サインインが必要です。',
+    'Sign in with GitHub': 'GitHub でサインイン',
+    'Sign out': 'サインアウト',
+    'UI Language': '表示言語',
+    English: '英語',
+    Japanese: '日本語',
+    Orchestrate: '実行',
+    Schedules: 'スケジュール',
+    Storage: 'ストレージ',
+    Agents: 'エージェント',
+    Audit: '監査',
+    Run: '実行',
+    Sched: '予定',
+    New: '新規',
+    List: '一覧',
+    Detail: '詳細',
+    Refresh: '更新',
+    Repository: 'リポジトリ',
+    'Select repository': 'リポジトリを選択',
+    'No GitHub repositories available': '利用できる GitHub リポジトリはありません',
+    'Loading repositories...': 'リポジトリを読み込み中...',
+    'Loading templates...': 'テンプレートを読み込み中...',
+    'No template': 'テンプレートなし',
+    'Loading repository agents...': 'リポジトリエージェントを読み込み中...',
+    repository: 'リポジトリ',
+    'Base Branch': 'ベースブランチ',
+    'Base branch': 'ベースブランチ',
+    'Package or module': 'パッケージまたはモジュール',
+    Endpoints: 'エンドポイント',
+    'Bug or issue': 'バグまたは Issue',
+    'Expected behavior': '期待する動作',
+    'Files or components': 'ファイルまたはコンポーネント',
+    'Doc target': 'ドキュメント対象',
+    Audience: '対象読者',
+    'Required details': '必要な詳細',
+    'Workflow or check': 'ワークフローまたはチェック',
+    'Failure detail': '失敗詳細',
+    Finding: '指摘',
+    'Affected area': '影響範囲',
+    Constraints: '制約',
+    Version: 'バージョン',
+    'Scope since': '対象開始',
+    Artifacts: '成果物',
+    'Screen or flow': '画面またはフロー',
+    'Change requested': '変更内容',
+    'Validation target': '検証対象',
+    Task: 'タスク',
+    'Scenario Template': 'シナリオテンプレート',
+    Strategy: '戦略',
+    Sequential: '順次',
+    Parallel: '並列',
+    'Sequential runs planned subtasks in order. Parallel starts eligible subtasks concurrently and is best for independent work.': '順次は計画されたサブタスクを順番に実行します。並列は実行可能なサブタスクを同時に開始し、独立した作業に適しています。',
+    Apply: '適用',
+    Load: '読込',
+    Suggest: '提案',
+    GitHub: 'GitHub',
+    'Create Issue': 'Issue 作成',
+    'Create PR': 'PR 作成',
+    'Branch name (optional)': 'ブランチ名（任意）',
+    'PR base branch': 'PR ベースブランチ',
+    'Issue title': 'Issue タイトル',
+    'PR title': 'PR タイトル',
+    Runtime: 'ランタイム',
+    'LLM Preset': 'LLM プリセット',
+    'Output Language': '出力言語',
+    Limits: '制限',
+    'Max Duration': '最大時間',
+    'Max Subtasks': '最大サブタスク数',
+    'Max Retries': '最大リトライ数',
+    'Repo Concurrency': 'リポジトリ同時実行数',
+    'Org Concurrency': '組織同時実行数',
+    'LLM Token Budget': 'LLM トークン上限',
+    'GitHub Request Budget': 'GitHub リクエスト上限',
+    'LLM Tokens': 'LLM トークン',
+    'GitHub Requests': 'GitHub リクエスト',
+    'Start Orchestration': 'オーケストレーション開始',
+    Template: 'テンプレート',
+    'Custom schedule': 'カスタムスケジュール',
+    Name: '名前',
+    Schedule: 'スケジュール',
+    Cron: 'Cron',
+    Interval: '間隔',
+    Timezone: 'タイムゾーン',
+    Concurrency: '同時実行',
+    Notifications: '通知',
+    'Notification Triggers': '通知トリガー',
+    'Notification Destinations': '通知先',
+    'Webhook URL': 'Webhook URL',
+    'Issue Template': 'Issue テンプレート',
+    'PR Template': 'PR テンプレート',
+    'Create Schedule': 'スケジュール作成',
+    'Run Now': '今すぐ実行',
+    Resume: '再開',
+    Pause: '一時停止',
+    Next: '次回',
+    Last: '前回',
+    Status: '状態',
+    Time: '時刻',
+    Reason: '理由',
+    'New Schedule': '新規スケジュール',
+    'No schedules.': 'スケジュールはありません。',
+    'No notifications.': '通知はありません。',
+    'Repository default / English': 'リポジトリ既定 / 英語',
+    Default: '既定',
+    'Forbid overlap': '重複を禁止',
+    'Allow overlap': '重複を許可',
+    'No orchestrations.': 'オーケストレーションはありません。',
+    'Select an orchestration.': 'オーケストレーションを選択してください。',
+    Overview: '概要',
+    Runs: '実行',
+    Memory: 'メモリ',
+    Guidelines: 'ガイドライン',
+    Search: '検索',
+    Subtasks: 'サブタスク',
+    Passed: '成功',
+    Failed: '失敗',
+    Budget: '予算',
+    Duration: '時間',
+    'Stage Presets': 'ステージプリセット',
+    Stage: 'ステージ',
+    Agent: 'エージェント',
+    Preset: 'プリセット',
+    Summary: 'サマリー',
+    Pending: '保留中',
+    Timeline: 'タイムライン',
+    'No runs.': '実行はありません。',
+    Used: '使用済み',
+    Proposed: '提案',
+    Approve: '承認',
+    Archive: 'アーカイブ',
+    'Repository Memory': 'リポジトリメモリ',
+    Applied: '適用済み',
+    'Required Misses': '必須未適用',
+    Required: '必須',
+    Create: '作成',
+    'Guideline content': 'ガイドライン本文',
+    'Repository Guidelines': 'リポジトリガイドライン',
+    'All Sources': 'すべてのソース',
+    'Pull Requests': 'Pull Request',
+    'CI Checks': 'CI チェック',
+    'Promote Memory': 'メモリへ昇格',
+    'Promote Guideline': 'ガイドラインへ昇格',
+    'Mark Stale': '古い項目にする',
+    Open: '開く',
+    Home: 'ホーム',
+    Orchestrations: 'オーケストレーション',
+    Workspaces: 'ワークスペース',
+    'Cleanup Preview': 'クリーンアッププレビュー',
+    Preview: 'プレビュー',
+    Previewing: 'プレビュー中',
+    'Clean Up': 'クリーンアップ',
+    Cleaning: 'クリーンアップ中',
+    Selected: '選択済み',
+    Archived: 'アーカイブ済み',
+    Deleted: '削除済み',
+    Skipped: 'スキップ',
+    'No cleanup targets': 'クリーンアップ対象はありません',
+    Type: '種類',
+    Action: '操作',
+    Target: '対象',
+    Size: 'サイズ',
+    Policy: 'ポリシー',
+    'Orchestration Retention': 'オーケストレーション保持期間',
+    'Run Artifact Retention': '実行成果物保持期間',
+    'Workspace Retention': 'ワークスペース保持期間',
+    'Memory Retention': 'メモリ保持期間',
+    'Guideline Retention': 'ガイドライン保持期間',
+    'Keep Last Runs': '最新実行保持数',
+    'Archive before delete': '削除前にアーカイブ',
+    'Allow GitHub-linked cleanup': 'GitHub 連携済みも削除対象にする',
+    'Save Policy': 'ポリシー保存',
+    items: '件',
+    Actor: '実行者',
+    Outcome: '結果',
+    Message: 'メッセージ',
+    Cancel: 'キャンセル',
+    Reject: '却下',
+    No: 'なし',
+    memory: 'メモリ',
+    guideline: 'ガイドライン',
+    required: '必須',
+    pinned: 'ピン留め',
+  },
+}
+
+const I18nContext = createContext<{ language: UILanguage; t: (key: string) => string }>({
+  language: 'en',
+  t: (key) => key,
+})
+
+function normalizeLanguage(value: unknown): UILanguage {
+  return value === 'ja' ? 'ja' : 'en'
+}
+
+function languageKeyFor(login?: string) {
+  return login ? `${languageStorageKey}.${login}` : languageStorageKey
+}
+
+function loadStoredLanguage(login?: string): UILanguage {
+  if (typeof window === 'undefined') return 'en'
+  const scoped = login ? window.localStorage.getItem(languageKeyFor(login)) : ''
+  return normalizeLanguage(scoped || window.localStorage.getItem(languageStorageKey))
+}
+
+function translate(language: UILanguage, key: string) {
+  return translations[language][key] ?? key
+}
+
+function useT() {
+  return useContext(I18nContext).t
+}
 
 const defaultForm = {
   repo: '',
@@ -287,6 +504,7 @@ function repoForGitHub(repo = '') {
 }
 
 function Status({ value }: { value?: string | boolean }) {
+  const t = useT()
   const text = String(value ?? 'pending')
   const tone = text.toLowerCase()
   const color =
@@ -297,7 +515,7 @@ function Status({ value }: { value?: string | boolean }) {
         : tone.includes('run') || tone.includes('plan') || tone.includes('pending') || tone.includes('queue')
           ? 'border-amber-os/50 bg-amber-os/10 text-amber-os'
           : 'border-line bg-panel-2 text-soft'
-  return <span className={cx('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium', color)}>{text}</span>
+  return <span className={cx('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium', color)}>{t(text)}</span>
 }
 
 function Tag({ children }: { children: ReactNode }) {
@@ -310,6 +528,7 @@ function IconButton({
   tone = 'primary',
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { icon?: ReactNode; tone?: 'primary' | 'secondary' | 'danger' }) {
+  const t = useT()
   const cls =
     tone === 'danger'
       ? 'border-red-os/60 bg-red-os/15 text-red-os hover:bg-red-os/20'
@@ -326,7 +545,7 @@ function IconButton({
       )}
     >
       {icon}
-      {children}
+      {typeof children === 'string' ? t(children) : children}
     </button>
   )
 }
@@ -338,9 +557,12 @@ function Field({
   label: string
   children: ReactNode
 }) {
+  const t = useT()
+  const required = label.endsWith(' *')
+  const translated = required ? `${t(label.slice(0, -2))} *` : t(label)
   return (
     <label className="grid gap-1.5 text-xs text-soft">
-      <span>{label}</span>
+      <span>{translated}</span>
       {children}
     </label>
   )
@@ -355,6 +577,7 @@ function Panel({ children, className = '' }: { children: ReactNode; className?: 
 }
 
 function App() {
+  const [language, setLanguage] = useState<UILanguage>(() => loadStoredLanguage())
   const [session, setSession] = useState<Session>({ authRequired: false, authenticated: true })
   const [page, setPage] = useState<PageName>('orchestrates')
   const [orchPanel, setOrchPanel] = useState<OrchPanel>('new')
@@ -382,12 +605,30 @@ function App() {
   const [templatesLoading, setTemplatesLoading] = useState(false)
 
   const canUseApp = !session.authRequired || session.authenticated
+  const t = useMemo(() => (key: string) => translate(language, key), [language])
 
   useEffect(() => {
     api<Session>('/api/auth/session')
       .then(setSession)
       .catch(() => setSession({ authRequired: false, authenticated: true }))
   }, [])
+
+  useEffect(() => {
+    const next = loadStoredLanguage(session.user?.login)
+    setLanguage(next)
+  }, [session.user?.login])
+
+  useEffect(() => {
+    document.documentElement.lang = language
+    window.localStorage.setItem(languageStorageKey, language)
+    if (session.user?.login) window.localStorage.setItem(languageKeyFor(session.user.login), language)
+  }, [language, session.user?.login])
+
+  useEffect(() => {
+    if (language !== 'ja') return
+    setForm((current) => current.outputLanguage ? current : { ...current, outputLanguage: 'ja' })
+    setScheduleForm((current) => current.outputLanguage ? current : { ...current, outputLanguage: 'ja' })
+  }, [language])
 
   useEffect(() => {
     if (!canUseApp) return
@@ -402,7 +643,7 @@ function App() {
   useEffect(() => {
     if (!canUseApp || page !== 'orchestrates' || orchPanel !== 'new') return
     void loadTemplates(form.repo, form.baseBranch)
-  }, [canUseApp, page, orchPanel, form.repo, form.baseBranch])
+  }, [canUseApp, page, orchPanel, form.repo, form.baseBranch, language])
 
   useEffect(() => {
     if (!selectedID) return
@@ -446,7 +687,7 @@ function App() {
       const data = await api<Json[]>('/api/orchestrate/templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repo, baseBranch: baseBranch || 'main' }),
+        body: JSON.stringify({ repo, baseBranch: baseBranch || 'main', uiLanguage: language }),
       })
       setTemplates(data)
     } catch {
@@ -504,22 +745,27 @@ function App() {
 
   if (session.authRequired && !session.authenticated) {
     return (
-      <main className="grid min-h-dvh place-items-center px-5">
-        <Panel className="w-full max-w-md">
-          <div className="mb-5 flex items-center gap-3">
-            <div className="grid size-10 place-items-center rounded-os border border-cyan-os/40 bg-cyan-os/10">
-              <ShieldCheck className="size-5 text-cyan-os" />
+      <I18nContext.Provider value={{ language, t }}>
+        <main className="grid min-h-dvh place-items-center px-5">
+          <Panel className="w-full max-w-md">
+            <div className="mb-5 flex items-center gap-3">
+              <div className="grid size-10 place-items-center rounded-os border border-cyan-os/40 bg-cyan-os/10">
+                <ShieldCheck className="size-5 text-cyan-os" />
+              </div>
+              <div>
+                <h1 className="text-lg font-semibold">AgentOS</h1>
+                <p className="text-sm text-soft">{t('GitHub sign in required.')}</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-lg font-semibold">AgentOS</h1>
-              <p className="text-sm text-soft">GitHub sign in required.</p>
+            <div className="mb-4">
+              <LanguageSelect language={language} setLanguage={setLanguage} />
             </div>
-          </div>
-          <a className="inline-flex min-h-10 w-full items-center justify-center rounded-os border border-cyan-os/60 bg-cyan-os/15 text-sm font-semibold text-cyan-os" href="/auth/login">
-            Sign in with GitHub
-          </a>
-        </Panel>
-      </main>
+            <a className="inline-flex min-h-10 w-full items-center justify-center rounded-os border border-cyan-os/60 bg-cyan-os/15 text-sm font-semibold text-cyan-os" href="/auth/login">
+              {t('Sign in with GitHub')}
+            </a>
+          </Panel>
+        </main>
+      </I18nContext.Provider>
     )
   }
 
@@ -529,6 +775,7 @@ function App() {
   ]
 
   return (
+    <I18nContext.Provider value={{ language, t }}>
     <div className="min-h-dvh pb-20 md:pb-0">
       <header className="sticky top-0 z-20 border-b border-line bg-void/85 px-4 py-3 backdrop-blur md:px-6">
         <div className="mx-auto flex max-w-7xl items-center gap-4">
@@ -549,12 +796,13 @@ function App() {
             <NavButton active={page === 'audit'} icon={<History className="size-4" />} onClick={() => navTo('audit')}>Audit</NavButton>
           </nav>
           <div className="ml-auto flex min-w-0 items-center gap-3 text-sm text-soft">
+            <LanguageSelect language={language} setLanguage={setLanguage} compact />
             {session.user?.avatarUrl ? <img className="size-7 rounded-full" src={session.user.avatarUrl} alt="" /> : null}
             {session.user?.login ? <span className="hidden max-w-40 truncate sm:inline">{session.user.login}</span> : null}
             {session.authenticated && session.user ? (
               <a className="inline-flex items-center gap-1 text-soft hover:text-ink" href="/auth/logout">
                 <LogOut className="size-4" />
-                <span className="hidden sm:inline">Sign out</span>
+                <span className="hidden sm:inline">{t('Sign out')}</span>
               </a>
             ) : null}
           </div>
@@ -624,6 +872,7 @@ function App() {
         <BottomNav active={page === 'audit'} icon={<History className="size-5" />} onClick={() => navTo('audit')}>Audit</BottomNav>
       </nav>
     </div>
+    </I18nContext.Provider>
   )
 
   async function submitOrchestration(event: FormEvent) {
@@ -734,20 +983,35 @@ function App() {
 }
 
 function NavButton({ active, icon, children, onClick }: { active: boolean; icon: ReactNode; children: ReactNode; onClick: () => void }) {
+  const t = useT()
   return (
     <button className={cx('inline-flex items-center gap-2 rounded-os px-3 py-2 text-sm', active ? 'bg-panel-2 text-ink' : 'text-soft hover:bg-panel hover:text-ink')} onClick={onClick} type="button">
       {icon}
-      {children}
+      {typeof children === 'string' ? t(children) : children}
     </button>
   )
 }
 
 function BottomNav({ active, icon, children, onClick }: { active: boolean; icon: ReactNode; children: ReactNode; onClick: () => void }) {
+  const t = useT()
   return (
     <button className={cx('grid min-w-0 justify-items-center gap-1 rounded-os px-1 py-1.5 text-[10px] leading-none', active ? 'bg-panel-2 text-cyan-os' : 'text-soft')} onClick={onClick} type="button">
       {icon}
-      <span className="block max-w-full truncate">{children}</span>
+      <span className="block max-w-full truncate">{typeof children === 'string' ? t(children) : children}</span>
     </button>
+  )
+}
+
+function LanguageSelect({ language, setLanguage, compact = false }: { language: UILanguage; setLanguage: (language: UILanguage) => void; compact?: boolean }) {
+  const t = useT()
+  return (
+    <label className={cx('grid gap-1 text-xs text-soft', compact ? 'w-20 sm:w-28' : '')}>
+      <span className={compact ? 'sr-only' : ''}>{t('UI Language')}</span>
+      <select className={cx(inputClass, compact ? 'min-h-8 px-2 text-xs' : '')} value={language} onChange={(e) => setLanguage(normalizeLanguage(e.target.value))}>
+        <option value="en">{t('English')}</option>
+        <option value="ja">{t('Japanese')}</option>
+      </select>
+    </label>
   )
 }
 
@@ -764,6 +1028,7 @@ function SchedulesPage(props: {
   setStatus: (value: string) => void
   submit: (event: FormEvent) => void
 }) {
+  const t = useT()
   const { form, setForm } = props
   const update = (patch: Partial<typeof defaultScheduleForm>) => setForm((current) => ({ ...current, ...patch }))
 
@@ -823,7 +1088,7 @@ function SchedulesPage(props: {
             <IconButton tone="secondary" icon={<RefreshCw className="size-4" />} onClick={props.reload}>Refresh</IconButton>
           </div>
           <div className="divide-y divide-line">
-            {props.schedules.length === 0 ? <div className="p-4 text-sm text-soft">No schedules.</div> : null}
+            {props.schedules.length === 0 ? <div className="p-4 text-sm text-soft">{t('No schedules.')}</div> : null}
             {props.schedules.map((schedule) => (
               <div key={schedule.id} className="grid gap-3 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -846,14 +1111,14 @@ function SchedulesPage(props: {
                   <Tag>{schedule.concurrencyPolicy || 'forbid'}</Tag>
                 </div>
                 <div className="grid gap-2 text-xs text-soft sm:grid-cols-3">
-                  <span>Next: {formatTime(schedule.nextRunAt)}</span>
-                  <span>Last: {formatTime(schedule.lastRunAt)}</span>
-                  <span>Status: {schedule.lastRunStatus || '-'}</span>
+                  <span>{t('Next')}: {formatTime(schedule.nextRunAt)}</span>
+                  <span>{t('Last')}: {formatTime(schedule.lastRunAt)}</span>
+                  <span>{t('Status')}: {schedule.lastRunStatus || '-'}</span>
                 </div>
                 {(schedule.executions ?? []).length ? (
                   <div className="overflow-x-auto rounded-os border border-line">
                     <table className="w-full min-w-[620px] table-fixed text-left text-xs">
-                      <thead className="text-soft"><tr><th className="px-3 py-2">Time</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Reason</th><th className="px-3 py-2">Run</th></tr></thead>
+                      <thead className="text-soft"><tr><th className="px-3 py-2">{t('Time')}</th><th className="px-3 py-2">{t('Status')}</th><th className="px-3 py-2">{t('Reason')}</th><th className="px-3 py-2">{t('Run')}</th></tr></thead>
                       <tbody className="divide-y divide-line">
                         {(schedule.executions ?? []).slice().reverse().slice(0, 5).map((execution) => (
                           <tr key={execution.id}>
@@ -877,7 +1142,7 @@ function SchedulesPage(props: {
             <IconButton tone="secondary" icon={<RefreshCw className="size-4" />} onClick={props.reload}>Refresh</IconButton>
           </div>
           <div className="divide-y divide-line">
-            {props.notifications.length === 0 ? <div className="p-4 text-sm text-soft">No notifications.</div> : null}
+            {props.notifications.length === 0 ? <div className="p-4 text-sm text-soft">{t('No notifications.')}</div> : null}
             {props.notifications.slice(0, 12).map((notification) => (
               <div key={notification.id} className="grid gap-2 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -892,7 +1157,7 @@ function SchedulesPage(props: {
                   <Tag>{notification.repo || '-'}</Tag>
                   <Tag>{notification.status || '-'}</Tag>
                   {(notification.destinations ?? []).map((destination) => <Tag key={destination}>{destination}</Tag>)}
-                  {notification.runUrl ? <a className="text-xs text-cyan-os hover:underline" href={notification.runUrl}>Run</a> : null}
+                  {notification.runUrl ? <a className="text-xs text-cyan-os hover:underline" href={notification.runUrl}>{t('Run')}</a> : null}
                 </div>
                 {(notification.deliveries ?? []).length ? (
                   <div className="flex flex-wrap gap-2 text-xs text-soft">
@@ -912,7 +1177,7 @@ function SchedulesPage(props: {
           <div className="flex items-center gap-2 text-sm font-semibold text-ink"><Sparkles className="size-4 text-cyan-os" /> New Schedule</div>
           <Field label="Template">
             <select className={inputClass} value={form.templateId} onChange={(e) => applyTemplate(e.target.value)}>
-              <option value="">Custom schedule</option>
+              <option value="">{t('Custom schedule')}</option>
               {props.templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
             </select>
           </Field>
@@ -928,7 +1193,7 @@ function SchedulesPage(props: {
           </Field>
           <Field label="Repository">
             <select className={inputClass} required value={form.repo} onChange={(e) => selectRepository(e.target.value)}>
-              <option value="">{repositoryOptions.length ? 'Select repository' : 'No GitHub repositories available'}</option>
+              <option value="">{repositoryOptions.length ? t('Select repository') : t('No GitHub repositories available')}</option>
               {repositoryOptions.map((repo) => <option key={repo.full_name} value={repo.full_name}>{repo.full_name}</option>)}
             </select>
           </Field>
@@ -943,24 +1208,24 @@ function SchedulesPage(props: {
           </Field>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
             <Field label="Strategy">
-              <select className={inputClass} value={form.strategy} onChange={(e) => update({ strategy: e.target.value })}><option value="sequential">Sequential</option><option value="parallel">Parallel</option></select>
+              <select className={inputClass} value={form.strategy} onChange={(e) => update({ strategy: e.target.value })}><option value="sequential">{t('Sequential')}</option><option value="parallel">{t('Parallel')}</option></select>
             </Field>
             <Field label="LLM Preset">
               <select className={inputClass} value={form.llmPreset} onChange={(e) => update({ llmPreset: e.target.value })}>
-                {(props.llm.presets ?? []).length ? (props.llm.presets ?? []).map((p: Json) => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>) : <option value="">Default</option>}
+                {(props.llm.presets ?? []).length ? (props.llm.presets ?? []).map((p: Json) => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>) : <option value="">{t('Default')}</option>}
               </select>
             </Field>
           </div>
           <Field label="Output Language">
             <select className={inputClass} value={form.outputLanguage} onChange={(e) => update({ outputLanguage: e.target.value })}>
-              <option value="">Repository default / English</option>
-              <option value="en">English</option>
-              <option value="ja">Japanese</option>
+              <option value="">{t('Repository default / English')}</option>
+              <option value="en">{t('English')}</option>
+              <option value="ja">{t('Japanese')}</option>
             </select>
           </Field>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
             <Field label="Schedule">
-              <select className={inputClass} value={form.scheduleType} onChange={(e) => update({ scheduleType: e.target.value })}><option value="interval">Interval</option><option value="cron">Cron</option></select>
+              <select className={inputClass} value={form.scheduleType} onChange={(e) => update({ scheduleType: e.target.value })}><option value="interval">{t('Interval')}</option><option value="cron">{t('Cron')}</option></select>
             </Field>
             {form.scheduleType === 'cron' ? (
               <Field label="Cron">
@@ -976,7 +1241,7 @@ function SchedulesPage(props: {
             <input className={inputClass} value={form.timezone} onChange={(e) => update({ timezone: e.target.value })} placeholder="UTC" />
           </Field>
           <Field label="Concurrency">
-            <select className={inputClass} value={form.concurrencyPolicy} onChange={(e) => update({ concurrencyPolicy: e.target.value })}><option value="forbid">Forbid overlap</option><option value="allow">Allow overlap</option></select>
+            <select className={inputClass} value={form.concurrencyPolicy} onChange={(e) => update({ concurrencyPolicy: e.target.value })}><option value="forbid">{t('Forbid overlap')}</option><option value="allow">{t('Allow overlap')}</option></select>
           </Field>
           <div className="grid gap-3 rounded-os border border-line bg-void p-3">
             <div className="text-sm font-semibold text-ink">Limits</div>
@@ -1007,7 +1272,7 @@ function SchedulesPage(props: {
             </div>
           </div>
           <div className="grid gap-3 rounded-os border border-line bg-void p-3">
-            <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.notifyEnabled} onChange={(e) => update({ notifyEnabled: e.target.checked })} />Notifications</label>
+            <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.notifyEnabled} onChange={(e) => update({ notifyEnabled: e.target.checked })} />{t('Notifications')}</label>
             <Field label="Notification Triggers">
               <input className={inputClass} value={form.notifyTriggers} onChange={(e) => update({ notifyTriggers: e.target.value })} placeholder="completed, failed, quality_gate_failed" />
             </Field>
@@ -1019,8 +1284,8 @@ function SchedulesPage(props: {
             </Field>
           </div>
           <div className="grid gap-2">
-            <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.createIssue} onChange={(e) => update({ createIssue: e.target.checked })} />Create Issue</label>
-            <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.createPullRequest} onChange={(e) => update({ createPullRequest: e.target.checked })} />Create PR</label>
+            <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.createIssue} onChange={(e) => update({ createIssue: e.target.checked })} />{t('Create Issue')}</label>
+            <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.createPullRequest} onChange={(e) => update({ createPullRequest: e.target.checked })} />{t('Create PR')}</label>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
             <Field label="Issue Template">
@@ -1085,15 +1350,17 @@ function OrchestratesPage(props: {
 }
 
 function Segment({ active, icon, children, onClick }: { active: boolean; icon?: ReactNode; children: ReactNode; onClick: () => void }) {
+  const t = useT()
   return (
     <button className={cx('inline-flex min-h-9 shrink-0 items-center gap-2 rounded-os px-3 text-sm', active ? 'bg-cyan-os/15 text-cyan-os' : 'text-soft hover:bg-panel-2 hover:text-ink')} type="button" onClick={onClick}>
       {icon}
-      {children}
+      {typeof children === 'string' ? t(children) : children}
     </button>
   )
 }
 
 function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
+  const t = useT()
   const { form, setForm } = props
   const [templateValues, setTemplateValues] = useState<Record<string, string>>({})
   const update = (patch: Partial<typeof defaultForm>) => setForm((current) => ({ ...current, ...patch }))
@@ -1136,7 +1403,7 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
   }
 
   async function loadRepositoryAgents() {
-    props.setStatus('Loading repository agents...')
+    props.setStatus(t('Loading repository agents...'))
     try {
       const result = await api<Json>('/api/agents/repository', {
         method: 'POST',
@@ -1199,6 +1466,7 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
       maxGitHubRequests: limits.maxGitHubRequests ? String(limits.maxGitHubRequests) : form.maxGitHubRequests,
       maxConcurrentRepoRuns: limits.maxConcurrentRepoRuns ? String(limits.maxConcurrentRepoRuns) : form.maxConcurrentRepoRuns,
       maxConcurrentOrgRuns: limits.maxConcurrentOrgRuns ? String(limits.maxConcurrentOrgRuns) : form.maxConcurrentOrgRuns,
+      outputLanguage: selectedTemplate.outputLanguage ?? form.outputLanguage,
     })
     props.setSelectedAgents(new Set(selectedTemplate.agents ?? []))
   }
@@ -1218,13 +1486,13 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
       <div className="grid min-w-0 gap-4">
         <Panel>
           <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-ink"><Cloud className="size-4 text-cyan-os" /> Repository</div>
+              <div className="flex items-center gap-2 text-sm font-semibold text-ink"><Cloud className="size-4 text-cyan-os" /> {t('Repository')}</div>
             <IconButton type="button" tone="secondary" icon={<RefreshCw className="size-4" />} onClick={props.loadRepositories}>Refresh</IconButton>
           </div>
           <div className="grid gap-3 sm:grid-cols-[1fr_11rem]">
             <Field label="Repository">
               <select className={inputClass} required value={form.repo} disabled={props.repositoriesLoading && repositoryOptions.length === 0} onChange={(e) => selectRepository(e.target.value)}>
-                <option value="">{props.repositoriesLoading ? 'Loading repositories...' : repositoryOptions.length ? 'Select repository' : 'No GitHub repositories available'}</option>
+                <option value="">{props.repositoriesLoading ? t('Loading repositories...') : repositoryOptions.length ? t('Select repository') : t('No GitHub repositories available')}</option>
                 {repositoryOptions.map((repo) => <option key={repo.full_name} value={repo.full_name}>{repo.full_name}{repo.private ? ' private' : ''}</option>)}
               </select>
             </Field>
@@ -1235,23 +1503,23 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
         </Panel>
 
         <Panel>
-          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink"><TerminalSquare className="size-4 text-cyan-os" /> Task</div>
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink"><TerminalSquare className="size-4 text-cyan-os" /> {t('Task')}</div>
           <div className="grid gap-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Scenario Template">
                 <select className={inputClass} value={form.scenarioTemplate} disabled={props.templatesLoading && props.templates.length === 0} onChange={(e) => update({ scenarioTemplate: e.target.value })}>
-                  <option value="">{props.templatesLoading ? 'Loading templates...' : 'No template'}</option>
-                  {props.templates.map((t) => <option key={t.id} value={t.id}>{t.name}{t.source === 'repository' ? ' (repository)' : ''}</option>)}
+                  <option value="">{props.templatesLoading ? t('Loading templates...') : t('No template')}</option>
+                  {props.templates.map((template) => <option key={template.id} value={template.id}>{template.name}{template.source === 'repository' ? ` (${t('repository')})` : ''}</option>)}
                 </select>
               </Field>
               <Field label="Strategy">
                 <div className="grid gap-2">
                   <select className={inputClass} value={form.strategy} onChange={(e) => update({ strategy: e.target.value })}>
-                    <option value="sequential">Sequential</option>
-                    <option value="parallel">Parallel</option>
+                    <option value="sequential">{t('Sequential')}</option>
+                    <option value="parallel">{t('Parallel')}</option>
                   </select>
                   <p className="text-xs leading-5 text-soft">
-                    Sequential runs planned subtasks in order. Parallel starts eligible subtasks concurrently and is best for independent work.
+                    {t('Sequential runs planned subtasks in order. Parallel starts eligible subtasks concurrently and is best for independent work.')}
                   </p>
                 </div>
               </Field>
@@ -1289,7 +1557,7 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
 
         <Panel>
           <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-ink"><Bot className="size-4 text-cyan-os" /> Agents</div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-ink"><Bot className="size-4 text-cyan-os" /> {t('Agents')}</div>
             <div className="flex gap-2">
               <IconButton type="button" tone="secondary" icon={<Database className="size-4" />} onClick={loadRepositoryAgents}>Load</IconButton>
               <IconButton type="button" tone="secondary" icon={<Sparkles className="size-4" />} onClick={recommend}>Suggest</IconButton>
@@ -1321,11 +1589,11 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
         </Panel>
 
         <Panel>
-          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink"><GitPullRequest className="size-4 text-cyan-os" /> GitHub</div>
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink"><GitPullRequest className="size-4 text-cyan-os" /> {t('GitHub')}</div>
           <div className="grid gap-3">
             <div className="grid gap-2 sm:grid-cols-2">
-              <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.createIssue} onChange={(e) => update({ createIssue: e.target.checked })} />Create Issue</label>
-              <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.createPullRequest} onChange={(e) => update({ createPullRequest: e.target.checked })} />Create PR</label>
+              <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.createIssue} onChange={(e) => update({ createIssue: e.target.checked })} />{t('Create Issue')}</label>
+              <label className="flex items-center gap-2 text-sm text-ink"><input className="size-4 accent-cyan-os" type="checkbox" checked={form.createPullRequest} onChange={(e) => update({ createPullRequest: e.target.checked })} />{t('Create PR')}</label>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Branch name (optional)">
@@ -1347,22 +1615,22 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
 
       <aside className="grid min-w-0 content-start gap-4">
         <Panel>
-          <div className="mb-3 text-sm font-semibold text-ink">Runtime</div>
+          <div className="mb-3 text-sm font-semibold text-ink">{t('Runtime')}</div>
           <div className="grid gap-3">
             <Field label="LLM Preset">
               <select className={inputClass} value={form.llmPreset} onChange={(e) => update({ llmPreset: e.target.value })}>
-                {(props.llm.presets ?? []).length ? (props.llm.presets ?? []).map((p: Json) => <option key={p.id} value={p.id}>{p.name ?? p.id} / {p.model}</option>) : <option value="">Default</option>}
+                {(props.llm.presets ?? []).length ? (props.llm.presets ?? []).map((p: Json) => <option key={p.id} value={p.id}>{p.name ?? p.id} / {p.model}</option>) : <option value="">{t('Default')}</option>}
               </select>
             </Field>
             <Field label="Output Language">
               <select className={inputClass} value={form.outputLanguage} onChange={(e) => update({ outputLanguage: e.target.value })}>
-                <option value="">Repository default / English</option>
-                <option value="en">English</option>
-                <option value="ja">Japanese</option>
+                <option value="">{t('Repository default / English')}</option>
+                <option value="en">{t('English')}</option>
+                <option value="ja">{t('Japanese')}</option>
               </select>
             </Field>
             <div className="grid gap-3 rounded-os border border-line bg-void p-3">
-              <div className="text-sm font-semibold text-ink">Limits</div>
+              <div className="text-sm font-semibold text-ink">{t('Limits')}</div>
               <Field label="Max Duration">
                 <input className={inputClass} value={form.maxDuration} onChange={(e) => update({ maxDuration: e.target.value })} placeholder="30m" />
               </Field>
@@ -1397,9 +1665,10 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
 }
 
 function OrchestrationList({ records, open }: { records: Orchestration[]; open: (id: string) => void }) {
+  const t = useT()
   return (
     <Panel className="p-0">
-      {records.length === 0 ? <div className="p-4 text-sm text-soft">No orchestrations.</div> : null}
+      {records.length === 0 ? <div className="p-4 text-sm text-soft">{t('No orchestrations.')}</div> : null}
       <div className="divide-y divide-line">
         {records.map((record) => (
           <button key={record.id} className="grid w-full min-w-0 gap-2 p-4 text-left hover:bg-panel-2 sm:grid-cols-[11rem_1fr_auto]" onClick={() => open(record.id)} type="button">
@@ -1418,7 +1687,8 @@ function OrchestrationList({ records, open }: { records: Orchestration[]; open: 
 }
 
 function OrchestrationDetail({ current, selectedID, tab, setTab, refresh }: { current: Orchestration | null; selectedID: string; tab: DetailTab; setTab: (tab: DetailTab) => void; refresh: () => void }) {
-  if (!selectedID) return <Panel><p className="text-sm text-soft">Select an orchestration.</p></Panel>
+  const t = useT()
+  if (!selectedID) return <Panel><p className="text-sm text-soft">{t('Select an orchestration.')}</p></Panel>
   if (!current) return <Panel><Loader2 className="size-5 animate-spin text-cyan-os" /></Panel>
   return (
     <div className="grid gap-4">
@@ -1490,6 +1760,7 @@ function stagePresetValues(item: Json) {
 }
 
 function OverviewTab({ record }: { record: Orchestration }) {
+  const t = useT()
   const results = record.results ?? []
   const subtaskStates = record.subtasks ?? []
   const passed = subtaskStates.length
@@ -1512,17 +1783,17 @@ function OverviewTab({ record }: { record: Orchestration }) {
           <Stat label="Agents" value={record.agents?.length ?? 0} tone="text-amber-os" />
         </div>
         <div className="mt-5 grid gap-3 rounded-os border border-line bg-void p-3 text-sm sm:grid-cols-2">
-          <div><span className="text-soft">Budget</span><div className="break-words text-ink">{usage.budgetStatus || 'within_limits'}</div></div>
-          <div><span className="text-soft">Duration</span><div className="break-words text-ink">{usage.duration || '-' } / {limits.maxDuration || '-'}</div></div>
-          <div><span className="text-soft">Subtasks</span><div className="break-words text-ink">{usage.subtasksPlanned ?? total} / {limits.maxSubtasks || '-'}</div></div>
-          <div><span className="text-soft">Repo Concurrency</span><div className="break-words text-ink">{limits.maxConcurrentRepoRuns || '-'}</div></div>
-          <div><span className="text-soft">LLM Tokens</span><div className="break-words text-ink">{usage.llmTokensUsed ?? 0} / {usage.llmTokensBudget || limits.maxLlmTokens || '-'}</div></div>
-          <div><span className="text-soft">GitHub Requests</span><div className="break-words text-ink">{usage.gitHubRequestsUsed ?? 0} / {usage.gitHubRequestsBudget || limits.maxGitHubRequests || '-'}</div></div>
+          <div><span className="text-soft">{t('Budget')}</span><div className="break-words text-ink">{usage.budgetStatus || 'within_limits'}</div></div>
+          <div><span className="text-soft">{t('Duration')}</span><div className="break-words text-ink">{usage.duration || '-' } / {limits.maxDuration || '-'}</div></div>
+          <div><span className="text-soft">{t('Subtasks')}</span><div className="break-words text-ink">{usage.subtasksPlanned ?? total} / {limits.maxSubtasks || '-'}</div></div>
+          <div><span className="text-soft">{t('Repo Concurrency')}</span><div className="break-words text-ink">{limits.maxConcurrentRepoRuns || '-'}</div></div>
+          <div><span className="text-soft">{t('LLM Tokens')}</span><div className="break-words text-ink">{usage.llmTokensUsed ?? 0} / {usage.llmTokensBudget || limits.maxLlmTokens || '-'}</div></div>
+          <div><span className="text-soft">{t('GitHub Requests')}</span><div className="break-words text-ink">{usage.gitHubRequestsUsed ?? 0} / {usage.gitHubRequestsBudget || limits.maxGitHubRequests || '-'}</div></div>
           {usage.limitExceeded ? <div className="break-words text-red-os sm:col-span-2">{usage.limitExceeded}</div> : null}
         </div>
         {stagePresets.length ? (
           <>
-            <h2 className="mt-5 text-sm font-semibold text-ink">Stage Presets</h2>
+            <h2 className="mt-5 text-sm font-semibold text-ink">{t('Stage Presets')}</h2>
             <div className="mt-2 grid gap-2">
               {stagePresets.map((item, idx) => (
                 <div key={`${item.stage ?? 'stage'}-${item.agent ?? idx}`} className="grid gap-2 rounded-os border border-line bg-void p-3 text-sm">
@@ -1531,9 +1802,9 @@ function OverviewTab({ record }: { record: Orchestration }) {
                       const values = stagePresetValues(item)
                       return (
                         <>
-                          <Tag>Stage: {values.stage}</Tag>
-                          <Tag>Agent: {values.agent}</Tag>
-                          <span className="break-words text-ink">Preset: {values.preset}</span>
+                          <Tag>{t('Stage')}: {values.stage}</Tag>
+                          <Tag>{t('Agent')}: {values.agent}</Tag>
+                          <span className="break-words text-ink">{t('Preset')}: {values.preset}</span>
                         </>
                       )
                     })()}
@@ -1545,11 +1816,11 @@ function OverviewTab({ record }: { record: Orchestration }) {
             </div>
           </>
         ) : null}
-        <h2 className="mt-5 text-sm font-semibold text-ink">Summary</h2>
-        {record.summary ? <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-os bg-void p-3 text-xs text-soft">{record.summary}</pre> : <p className="mt-2 text-sm text-soft">Pending.</p>}
+        <h2 className="mt-5 text-sm font-semibold text-ink">{t('Summary')}</h2>
+        {record.summary ? <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-os bg-void p-3 text-xs text-soft">{record.summary}</pre> : <p className="mt-2 text-sm text-soft">{t('Pending')}.</p>}
       </Panel>
       <Panel>
-        <h2 className="mb-3 text-sm font-semibold text-ink">Timeline</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink">{t('Timeline')}</h2>
         <div className="grid gap-3">
           {(record.events ?? []).slice().reverse().map((e, idx) => (
             <div key={`${e.timestamp}-${idx}`} className="grid gap-1 rounded-os border border-line bg-void p-3 text-sm">
@@ -1564,7 +1835,8 @@ function OverviewTab({ record }: { record: Orchestration }) {
 }
 
 function Stat({ label, value, tone = 'text-cyan-os' }: { label: string; value: number; tone?: string }) {
-  return <div className="rounded-os border border-line bg-void p-3 text-center"><div className={cx('text-2xl font-semibold', tone)}>{value}</div><div className="text-[11px] uppercase tracking-wide text-soft">{label}</div></div>
+  const t = useT()
+  return <div className="rounded-os border border-line bg-void p-3 text-center"><div className={cx('text-2xl font-semibold', tone)}>{value}</div><div className="text-[11px] uppercase tracking-wide text-soft">{t(label)}</div></div>
 }
 
 function RunsTab({ record, refresh }: { record: Orchestration; refresh: () => void }) {
@@ -1627,7 +1899,8 @@ function RunsTab({ record, refresh }: { record: Orchestration; refresh: () => vo
 }
 
 function EntryList({ entries, kind, actions }: { entries: Json[]; kind: string; actions?: (entry: Json) => ReactNode }) {
-  if (!entries?.length) return <p className="text-sm text-soft">No {kind}.</p>
+  const t = useT()
+  if (!entries?.length) return <p className="text-sm text-soft">{t('No')} {t(kind)}.</p>
   return (
     <div className="divide-y divide-line">
       {entries.map((entry) => (
@@ -1940,11 +2213,13 @@ function StoragePage({ storage, status, setStatus, reload }: { storage: StorageS
 }
 
 function StorageStat({ label, value, count }: { label: string; value: unknown; count?: unknown }) {
-  return <div className="rounded-os border border-line bg-void p-3"><div className="text-xs text-soft">{label}</div><div className="text-lg font-semibold text-cyan-os">{formatBytes(value)}</div>{count !== undefined ? <div className="text-xs text-soft">{String(count)} items</div> : null}</div>
+  const t = useT()
+  return <div className="rounded-os border border-line bg-void p-3"><div className="text-xs text-soft">{t(label)}</div><div className="text-lg font-semibold text-cyan-os">{formatBytes(value)}</div>{count !== undefined ? <div className="text-xs text-soft">{String(count)} {t('items')}</div> : null}</div>
 }
 
 function StorageSummary({ label, value }: { label: string; value: unknown }) {
-  return <div className="rounded-os border border-line bg-void p-3 text-center"><div className="text-xl font-semibold text-ink">{Number(value ?? 0)}</div><div className="text-xs text-soft">{label}</div></div>
+  const t = useT()
+  return <div className="rounded-os border border-line bg-void p-3 text-center"><div className="text-xl font-semibold text-ink">{Number(value ?? 0)}</div><div className="text-xs text-soft">{t(label)}</div></div>
 }
 
 function ApprovalActions({ id, refresh }: { id: string; refresh: () => void }) {
