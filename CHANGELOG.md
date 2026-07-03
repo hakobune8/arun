@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [v1.5.6] - 2026-07-03
+
+### Fixed
+- Added Node.js and npm to the runtime image so live frontend and QA
+  validation can execute generated package scripts during orchestration.
+- Allowed frontend and QA quality gates to fall back to static smoke evidence
+  only when the local JavaScript runtime or selected package manager is
+  unavailable.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.6.
+
 ## [v1.5.5] - 2026-07-03
 
 ### Fixed
