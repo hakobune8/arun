@@ -1452,6 +1452,16 @@ function OrchestrationDetail({ current, selectedID, tab, setTab, refresh }: { cu
   )
 }
 
+function stagePresetSubject(item: Json) {
+  return item.agent ? String(item.agent) : 'Planning stage'
+}
+
+function stagePresetDescription(item: Json) {
+  const preset = item.presetId ? String(item.presetId) : 'default'
+  const stage = item.stage ? String(item.stage) : 'stage'
+  return item.agent ? `${preset} preset for ${stage}` : `${preset} preset default`
+}
+
 function OverviewTab({ record }: { record: Orchestration }) {
   const results = record.results ?? []
   const subtaskStates = record.subtasks ?? []
@@ -1489,10 +1499,10 @@ function OverviewTab({ record }: { record: Orchestration }) {
             <div className="mt-2 grid gap-2">
               {stagePresets.map((item, idx) => (
                 <div key={`${item.stage ?? 'stage'}-${item.agent ?? idx}`} className="grid gap-2 rounded-os border border-line bg-void p-3 text-sm">
-                  <div className="flex flex-wrap gap-2">
-                    <Tag>{item.stage ?? '-'}</Tag>
-                    {item.agent ? <Tag>{item.agent}</Tag> : null}
-                    <Tag>{item.presetId ?? '-'}</Tag>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-ink">{stagePresetSubject(item)}</span>
+                    <span className="text-soft">{stagePresetDescription(item)}</span>
+                    {item.stage ? <Tag>{item.stage}</Tag> : null}
                     {item.fallback ? <Status value="fallback" /> : null}
                   </div>
                   {item.reason ? <p className="break-words text-xs text-soft">{item.reason}</p> : null}
