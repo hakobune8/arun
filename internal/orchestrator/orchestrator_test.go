@@ -843,6 +843,9 @@ func TestValidateQualityGate_BlocksEscapingPath(t *testing.T) {
 }
 
 func TestDockerQualityGate_AllowsMissingDockerDaemon(t *testing.T) {
+	if goruntime.GOOS == "windows" {
+		t.Skip("Docker daemon behavior differs on Windows runners")
+	}
 	repo := t.TempDir()
 	if err := os.WriteFile(filepath.Join(repo, "Dockerfile"), []byte("FROM scratch\n"), 0o600); err != nil {
 		t.Fatal(err)
