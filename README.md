@@ -258,6 +258,7 @@ release that changes `charts/arun/**`, update both `version` and
 `appVersion` in `charts/arun/Chart.yaml` intentionally so chart-releaser can
 publish a new immutable chart release.
 
+- [v1.5.7 release notes](docs/release-v1.5.7.md) — Heavy scrum duration
 - [v1.5.6 release notes](docs/release-v1.5.6.md) — Runtime npm validation
 - [v1.5.5 release notes](docs/release-v1.5.5.md) — Go-service frontend
   validation recovery.

@@ -2,10 +2,14 @@
 
 ## [Unreleased]
 
+## [v1.5.7] - 2026-07-04
+
 ### Changed
 - Increased the built-in `implementation-heavy-scrum` template default
   `maxDuration` from `60m` to `120m` so three-sprint live runs have enough
   time to complete after Sprint 2 validation and reporting.
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.7.
 
 ## [v1.5.6] - 2026-07-03
 
