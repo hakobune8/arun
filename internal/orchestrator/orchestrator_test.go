@@ -858,6 +858,48 @@ func main() {
 	}
 }
 
+func TestRecoverHelmChartCreatesLintableChart(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	out, err := recoverHelmChart(context.Background(), repo, "Add Helm chart for local empty invaders repository with Deployment and Service.")
+	if err != nil {
+		t.Fatalf("recoverHelmChart() error = %v", err)
+	}
+	if !strings.Contains(out, "charts/invaders") {
+		t.Fatalf("output = %q, want chart path", out)
+	}
+	for _, file := range []string{
+		filepath.Join("charts", "invaders", "Chart.yaml"),
+		filepath.Join("charts", "invaders", "values.yaml"),
+		filepath.Join("charts", "invaders", "templates", "deployment.yaml"),
+		filepath.Join("charts", "invaders", "templates", "service.yaml"),
+	} {
+		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
+			t.Fatalf("%s not created: %v", file, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "helm",
+		Description: "Add Helm chart for Kubernetes deployment.",
+	}))
+	if !status.Passed {
+		t.Fatalf("quality gate failed: %+v", status)
+	}
+}
+
+func TestHelmQualityGateFailsWithoutChart(t *testing.T) {
+	t.Parallel()
+
+	status := validateQualityGate(context.Background(), t.TempDir(), qualityGateForSubtask(&Subtask{
+		AgentName:   "helm",
+		Description: "Add Helm chart for Kubernetes deployment.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed without chart: %+v", status)
+	}
+}
+
 func TestValidateQualityGate_RequiredCommandAndContent(t *testing.T) {
 	repo := t.TempDir()
 	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("run go test ./...\n"), 0o600); err != nil {
