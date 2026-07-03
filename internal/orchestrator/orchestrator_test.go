@@ -814,6 +814,50 @@ func TestRecoverBuiltInSubtask_FrontendTimeoutRecoversEmptyRepository(t *testing
 	}
 }
 
+func TestRecoverGoBackendResetsBrokenGeneratedGoInEmptyRepo(t *testing.T) {
+	t.Parallel()
+	if !commandAvailable("go") {
+		t.Skip("go toolchain unavailable")
+	}
+
+	repo := t.TempDir()
+	if err := runCmd(context.Background(), repo, "git", "init", "-b", "main"); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "cmd", "server"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "go.mod"), []byte("module agentos-local-repo\n\ngo 1.22\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	broken := `package main
+
+func main() {
+	_ = context.Background()
+}
+`
+	if err := os.WriteFile(filepath.Join(repo, "cmd", "server", "main.go"), []byte(broken), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := recoverGoBackend(context.Background(), repo, "For a completely empty repository, create a minimal Go net/http service with /healthz and go test ./...")
+	if err != nil {
+		t.Fatalf("recoverGoBackend() error = %v", err)
+	}
+	if !strings.Contains(out, "Created minimal Go net/http service") {
+		t.Fatalf("output = %q, want recovery summary", out)
+	}
+	if fileExists(filepath.Join(repo, "cmd", "server", "main.go")) {
+		t.Fatalf("broken generated Go file still exists")
+	}
+	if err := runShell(context.Background(), repo, "go test ./..."); err != nil {
+		t.Fatalf("go test after recovery: %v", err)
+	}
+	if err := runShell(context.Background(), repo, "go vet ./..."); err != nil {
+		t.Fatalf("go vet after recovery: %v", err)
+	}
+}
+
 func TestValidateQualityGate_RequiredCommandAndContent(t *testing.T) {
 	repo := t.TempDir()
 	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("run go test ./...\n"), 0o600); err != nil {
