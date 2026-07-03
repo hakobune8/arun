@@ -1254,8 +1254,8 @@ func TestServer_OrchestrateTemplates_ReturnsBuiltIns(t *testing.T) {
 			t.Fatalf("implementation-heavy-scrum task missing %q", want)
 		}
 	}
-	if heavy.Limits.MaxDuration != "60m" || heavy.Limits.MaxSubtasks != 24 || heavy.Limits.MaxConcurrentRepoRun != 1 {
-		t.Fatalf("implementation-heavy-scrum limits = %+v, want 60m/24/1", heavy.Limits)
+	if heavy.Limits.MaxDuration != "60m" || heavy.Limits.MaxSubtasks != 30 || heavy.Limits.MaxConcurrentRepoRun != 1 {
+		t.Fatalf("implementation-heavy-scrum limits = %+v, want 60m/30/1", heavy.Limits)
 	}
 	for _, want := range []string{"analyst", "go-backend", "frontend", "docs", "qa", "reviewer", "release-manager", "docker", "helm", "kubernetes", "devops"} {
 		if !containsString(heavy.Agents, want) {
@@ -1282,6 +1282,94 @@ func TestServer_OrchestrateTemplates_ReturnsBuiltInsWhenRepositoryUnavailable(t 
 	if !containsScenarioTemplate(templates, "three-sprint-agile-scrum") {
 		t.Fatalf("templates missing built-in scrum template: %+v", templates)
 	}
+}
+
+func TestImplementationHeavyScrumPlan_UsesSprintStageWorkflow(t *testing.T) {
+	record := &orchestrationRecord{
+		Task:     "Build an invaders game",
+		Scenario: &scenarioTemplateSelection{ID: "implementation-heavy-scrum"},
+	}
+
+	plan := implementationHeavyScrumPlan(record)
+	if plan == nil {
+		t.Fatal("plan is nil")
+		return
+	}
+	if len(plan.Subtasks) != 25 {
+		t.Fatalf("subtasks = %d, want 25", len(plan.Subtasks))
+	}
+	agents := make([]string, 0, len(plan.Subtasks))
+	byID := map[string]orchestrator.Subtask{}
+	for _, subtask := range plan.Subtasks {
+		agents = append(agents, subtask.AgentName)
+		byID[subtask.ID] = subtask
+	}
+	for _, want := range []string{"analyst", "go-backend", "frontend", "qa", "docker", "helm", "kubernetes", "devops", "docs", "reviewer", "release-manager"} {
+		if !containsString(agents, want) {
+			t.Fatalf("plan agents = %+v, want %s", agents, want)
+		}
+	}
+	if got := byID["sprint-1-adjust-plan"].Deps; len(got) != 1 || got[0] != "sprint-1-qa" {
+		t.Fatalf("sprint-1-adjust-plan deps = %+v, want sprint-1-qa", got)
+	}
+	if got := byID["sprint-1-backend-fix"].Deps; len(got) != 1 || got[0] != "sprint-1-adjust-plan" {
+		t.Fatalf("sprint-1-backend-fix deps = %+v, want sprint-1-adjust-plan", got)
+	}
+	if got := byID["sprint-2-plan"].Deps; len(got) != 1 || got[0] != "sprint-1-report" {
+		t.Fatalf("sprint-2-plan deps = %+v, want sprint-1-report", got)
+	}
+	if got := byID["sprint-2-backend"].Deps; len(got) != 1 || got[0] != "sprint-2-plan" {
+		t.Fatalf("sprint-2-backend deps = %+v, want sprint-2-plan", got)
+	}
+	if got := byID["sprint-2-docker"].Deps; len(got) != 1 || got[0] != "sprint-2-backend" {
+		t.Fatalf("sprint-2-docker deps = %+v, want sprint-2-backend", got)
+	}
+	if !strings.Contains(byID["sprint-1-adjust-plan"].Description, "Sprint 1 QA") {
+		t.Fatalf("sprint-1-adjust-plan description = %q, want QA evidence handoff", byID["sprint-1-adjust-plan"].Description)
+	}
+	if sprint, ok := scrumSprintCheckpoint("sprint-3-report"); !ok || sprint != 3 {
+		t.Fatalf("sprint-3-report checkpoint = %d/%v, want 3/true", sprint, ok)
+	}
+}
+
+func TestCommitScrumSprintCheckpoint_CreatesThreeCheckpointCommits(t *testing.T) {
+	repo := t.TempDir()
+	runGitTestCommand(t, repo, "init")
+	record := &orchestrationRecord{
+		ID:       "run-test",
+		RepoPath: repo,
+		Scenario: &scenarioTemplateSelection{ID: "implementation-heavy-scrum"},
+	}
+
+	for _, id := range []string{"sprint-1-report", "sprint-2-report", "sprint-3-report"} {
+		event := &orchestrator.SubtaskEvent{
+			Type:    orchestrator.SubtaskCompleted,
+			Subtask: orchestrator.Subtask{ID: id},
+			Result:  &orchestrator.SubtaskResult{Success: true},
+		}
+		if err := commitScrumSprintCheckpoint(record, event); err != nil {
+			t.Fatalf("commit checkpoint %s: %v", id, err)
+		}
+	}
+
+	out := runGitTestCommand(t, repo, "rev-list", "--count", "HEAD")
+	if strings.TrimSpace(out) != "3" {
+		t.Fatalf("commit count = %q, want 3", strings.TrimSpace(out))
+	}
+	if len(record.Events) != 3 {
+		t.Fatalf("events = %d, want 3", len(record.Events))
+	}
+}
+
+func runGitTestCommand(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+	return string(out)
 }
 
 func containsScenarioTemplate(templates []scenarioTemplate, id string) bool {
