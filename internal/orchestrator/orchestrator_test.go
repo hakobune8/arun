@@ -331,8 +331,20 @@ func TestSubtaskProfile_ReportOnlyAgentsDoNotRequireGoValidation(t *testing.T) {
 					t.Fatalf("%s tools = %+v, want no test tool", agent, prof.Tools.Allow)
 				}
 			}
+			if (agent == "analyst" || agent == "reporter") && !containsTestString(prof.Tools.Allow, "write_file") {
+				t.Fatalf("%s tools = %+v, want write_file for planning/report artifacts", agent, prof.Tools.Allow)
+			}
 		})
 	}
+}
+
+func containsTestString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestQAQualityGate_AllowsStaticFrontendSmokeEvidence(t *testing.T) {
