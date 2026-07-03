@@ -274,6 +274,7 @@ func (s *Server) handleOrchestrateTemplates(w http.ResponseWriter, r *http.Reque
 			}
 		}
 	}
+	localizeScenarioTemplates(templates, req.UILanguage)
 	_ = json.NewEncoder(w).Encode(templates) //nolint:errcheck // best-effort
 }
 
@@ -690,6 +691,7 @@ type orchestrateRecommendRequest struct {
 type orchestrateTemplatesRequest struct {
 	Repo       string `json:"repo"`
 	BaseBranch string `json:"baseBranch"`
+	UILanguage string `json:"uiLanguage"`
 }
 
 type scenarioTemplateSelection struct {
@@ -711,6 +713,7 @@ type scenarioTemplate struct {
 	Name              string                     `json:"name" yaml:"name"`
 	Description       string                     `json:"description,omitempty" yaml:"description,omitempty"`
 	Source            string                     `json:"source,omitempty" yaml:"source,omitempty"`
+	OutputLanguage    string                     `json:"outputLanguage,omitempty" yaml:"outputLanguage,omitempty"`
 	Agents            []string                   `json:"agents" yaml:"agents"`
 	Strategy          string                     `json:"strategy,omitempty" yaml:"strategy,omitempty"`
 	CreateIssue       bool                       `json:"createIssue,omitempty" yaml:"createIssue,omitempty"`
@@ -3258,6 +3261,68 @@ Expected output:
 		},
 	}
 	return templates
+}
+
+type localizedScenarioTemplate struct {
+	Name        string
+	Description string
+}
+
+func localizeScenarioTemplates(templates []scenarioTemplate, language string) {
+	if strings.TrimSpace(language) != "ja" {
+		return
+	}
+	names := map[string]localizedScenarioTemplate{
+		"go-http-service-bootstrap": {
+			Name:        "Go HTTP サービス作成",
+			Description: "既存構成を保ちながら Go HTTP サービスを作成または拡張します。",
+		},
+		"bug-fix-with-tests": {
+			Name:        "テスト付きバグ修正",
+			Description: "不具合を修正し、回帰テストを追加してレビューします。",
+		},
+		"documentation-only-update": {
+			Name:        "ドキュメント更新のみ",
+			Description: "コード変更を最小限に抑え、README または docs を更新します。",
+		},
+		"ci-failure-fixer": {
+			Name:        "CI 失敗修正",
+			Description: "CI 失敗を診断し、ローカル検証付きで修正します。",
+		},
+		"security-remediation": {
+			Name:        "セキュリティ修正",
+			Description: "セキュリティまたはコードスキャンの指摘を検証付きで修正します。",
+		},
+		"release-preparation": {
+			Name:        "リリース準備",
+			Description: "CHANGELOG、チェックリスト、リリース準備資料を更新します。",
+		},
+		"frontend-ui-change": {
+			Name:        "フロントエンド UI 変更",
+			Description: "レスポンシブとアクセシビリティを確認しながら UI 変更を実装します。",
+		},
+		"three-sprint-agile-scrum": {
+			Name:        "3 スプリント Agile Scrum",
+			Description: "計画、実装、レビュー、スモーク、報告を含む 3 スプリントの scrum ワークフローを実行します。",
+		},
+		"implementation-heavy-scrum": {
+			Name:        "実装重視 Scrum",
+			Description: "新規または sandbox リポジトリ向けに、アプリ、CI/CD、Kubernetes、レビュー、スモーク、報告成果物を作成します。",
+		},
+	}
+	const japaneseOutputInstruction = "\n\nOutput language: Japanese. Write generated reports, issue/PR bodies, user-facing summaries, and stakeholder notes in Japanese unless repository conventions require otherwise."
+	for i := range templates {
+		if localized, ok := names[templates[i].ID]; ok && templates[i].Source == "built-in" {
+			templates[i].Name = localized.Name
+			templates[i].Description = localized.Description
+			if !strings.Contains(templates[i].TaskTemplate, "Output language: Japanese.") {
+				templates[i].TaskTemplate += japaneseOutputInstruction
+			}
+		}
+		if strings.TrimSpace(templates[i].OutputLanguage) == "" {
+			templates[i].OutputLanguage = "ja"
+		}
+	}
 }
 
 func availableAgentNames(registry *agent.Registry, names ...string) []string {

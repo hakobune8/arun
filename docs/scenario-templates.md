@@ -23,6 +23,15 @@ limits, issue preference, and pull request preference. When an orchestration
 starts, AgentOS saves the selected template as `scenarioTemplate` on the
 orchestration record.
 
+The Web UI sends the selected UI language when it loads templates. For built-in
+templates, Japanese UI mode localizes the template name and description, sets
+the template default `outputLanguage` to `ja`, and appends an instruction that
+generated reports, issue/PR bodies, user-facing summaries, and stakeholder
+notes should be written in Japanese unless repository conventions require
+otherwise. Repository-provided templates are not machine-translated; their text
+is returned as authored, with the UI language used only as the default output
+language when the template does not specify one.
+
 ## Stage Presets
 
 Web/API orchestrations route planning and built-in agents to recommended

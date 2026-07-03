@@ -1270,6 +1270,35 @@ func TestServer_OrchestrateTemplates_ReturnsBuiltIns(t *testing.T) {
 	}
 }
 
+func TestServer_OrchestrateTemplates_LocalizesBuiltInsForJapaneseUI(t *testing.T) {
+	s := NewServer(0)
+	w := serveRequest(s, "POST", "/api/orchestrate/templates", []byte(`{"repo":"","baseBranch":"main","uiLanguage":"ja"}`))
+	assertStatus(t, w.Code, http.StatusOK)
+	var templates []scenarioTemplate
+	if err := json.Unmarshal(w.Body.Bytes(), &templates); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	var heavy *scenarioTemplate
+	for i := range templates {
+		if templates[i].ID == "implementation-heavy-scrum" {
+			heavy = &templates[i]
+			break
+		}
+	}
+	if heavy == nil {
+		t.Fatalf("implementation-heavy-scrum template not found: %+v", templates)
+	}
+	if heavy.Name != "実装重視 Scrum" || heavy.OutputLanguage != "ja" {
+		t.Fatalf("localized heavy template = %+v", heavy)
+	}
+	if !strings.Contains(heavy.Description, "sandbox リポジトリ") {
+		t.Fatalf("localized heavy description = %q", heavy.Description)
+	}
+	if !strings.Contains(heavy.TaskTemplate, "Output language: Japanese.") {
+		t.Fatalf("localized heavy task missing language instruction: %q", heavy.TaskTemplate)
+	}
+}
+
 func TestServer_OrchestrateTemplates_ReturnsBuiltInsWhenRepositoryUnavailable(t *testing.T) {
 	t.Setenv("AGENTOS_AUTH_REQUIRED", "true")
 	t.Setenv("AGENTOS_SESSION_SECRET", "test-secret")
