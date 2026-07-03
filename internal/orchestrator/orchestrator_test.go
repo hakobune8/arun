@@ -888,6 +888,34 @@ func TestRecoverHelmChartCreatesLintableChart(t *testing.T) {
 	}
 }
 
+func TestRecoverDockerfileCreatesValidDockerArtifacts(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if _, err := recoverGoBackend(context.Background(), repo, "For a completely empty repository, create a minimal Go net/http service with /healthz and go test ./..."); err != nil {
+		t.Fatalf("recoverGoBackend() error = %v", err)
+	}
+	out, err := recoverDockerfile(context.Background(), repo, "Add Dockerfile and container run instructions for the Go application.")
+	if err != nil {
+		t.Fatalf("recoverDockerfile() error = %v", err)
+	}
+	if !strings.Contains(out, "Dockerfile") {
+		t.Fatalf("output = %q, want Dockerfile summary", out)
+	}
+	for _, file := range []string{"Dockerfile", ".dockerignore", filepath.Join("docs", "container-run.md")} {
+		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
+			t.Fatalf("%s not created: %v", file, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "docker",
+		Description: "Add Dockerfile and container run instructions.",
+	}))
+	if !status.Passed {
+		t.Fatalf("quality gate failed: %+v", status)
+	}
+}
+
 func TestHelmQualityGateFailsWithoutChart(t *testing.T) {
 	t.Parallel()
 
