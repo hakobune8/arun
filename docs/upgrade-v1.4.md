@@ -16,6 +16,17 @@ Operational flow hardening continues in v1.4.x with authenticated Web UI E2E,
 live GitHub and Kubernetes scenarios, schedule-to-notification checks, real LLM
 smoke coverage, LiteLLM preset tuning, and agile scrum simulation.
 
+v1.4.1 is the first v1.4.x patch release. It focuses on the
+implementation-heavy scrum Web UI flow verified after v1.4.0:
+
+- empty or sandbox repositories can complete Go, frontend, Docker, Helm,
+  Kubernetes, CI, documentation, review, and report stages
+- scrum stakeholder reports use the selected output language or repository
+  language instead of forcing Japanese
+- orchestration overview pass counts include completed subtasks even when
+  legacy records lack a result `success` field
+- Stage Presets show explicit stage, agent, and preset values
+
 ## Governance Limits
 
 Orchestrations and schedules can carry governance metadata for:
@@ -66,7 +77,7 @@ scenario coverage, and report formats.
 
 ## Helm Upgrade
 
-The v1.4.0 chart defaults `image.tag` to `v1.4.0`. Upgrade the release while
+The v1.4.1 chart defaults `image.tag` to `v1.4.1`. Upgrade the release while
 keeping existing runtime values:
 
 ```bash
@@ -75,7 +86,7 @@ helm --kubeconfig /Users/ssl222/Downloads/kubeconfig/mgmt-k3s.yaml \
   -n agentos \
   --reuse-values \
   --set image.repository=ghcr.io/kazyamaz200/agentos \
-  --set image.tag=v1.4.0 \
+  --set image.tag=v1.4.1 \
   --set image.pullPolicy=Always \
   --server-side=true \
   --force-conflicts \
@@ -148,12 +159,12 @@ For the v1.4 feature scope, also confirm:
 
 ## Final Release Checklist
 
-- Confirm `CHANGELOG.md` v1.4.0 notes include every closed v1.4 milestone
-  issue.
+- Confirm `CHANGELOG.md` includes the target v1.4.x release notes and every
+  issue included in the patch release.
 - Verify README roadmap separates v1.4.0 completed work from v1.4.x hardening.
 - Verify `charts/agentos/Chart.yaml` and `charts/agentos/values.yaml` use the
   final release version and image tag.
-- Build and deploy the final v1.4.0 image, then run health, Web UI asset,
+- Build and deploy the final v1.4.x image, then run health, Web UI asset,
   agent registry, storage, and eval checks.
 - Confirm the deployed image tag, chart version, GitHub release tag, and
-  changelog heading all refer to the same final v1.4.0 version.
+  changelog heading all refer to the same final v1.4.x version.

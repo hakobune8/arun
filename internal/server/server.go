@@ -3189,7 +3189,7 @@ Sprint 2:
 Sprint 3:
 - Stabilize the outcome.
 - Summarize what was built, what was not built, validation results, risks, and recommended backlog.
-- Produce a final Japanese stakeholder report.
+- Produce a final stakeholder report in the selected output language or the repository's usual language.
 
 Expected output:
 - Sprint 1, Sprint 2, and Sprint 3 sections.
@@ -3243,7 +3243,7 @@ Sprint 2:
 Sprint 3:
 - Stabilize the result, improve developer ergonomics, add or refine Helm/Kubernetes deploy artifacts, and remove obvious rough edges.
 - Ensure README or docs explain how to run and verify the work.
-- Produce final review, smoke-test notes, and a Japanese stakeholder report.
+- Produce final review, smoke-test notes, and a stakeholder report in the selected output language or the repository's usual language.
 
 Expected output:
 - Concrete file changes or a clear explanation of why no safe implementation was possible.

@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [v1.4.1] - 2026-07-03
+
+### Changed
+- Tuned the built-in scrum scenario templates so stakeholder reports use the
+  selected output language or the repository's usual language instead of
+  forcing Japanese.
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for the v1.4.1 patch release.
+
+### Fixed
+- Fixed implementation-heavy scrum fallback paths so empty or sandbox
+  repositories can complete app, Docker, Helm, Kubernetes, review, and report
+  stages with concrete validation artifacts.
+- Fixed Web UI orchestration progress counts and run status labels so
+  completed subtasks count as passed even when older records do not populate a
+  result `success` field.
+- Improved Stage Presets display to show stage, agent, and preset explicitly.
+
+### Notes
+- v1.4.1 was verified against a private empty repository using the
+  `implementation-heavy-scrum` template. The run completed 25/25 subtasks,
+  created a tracking Issue and Pull Request, and validated Go, Docker, Helm,
+  and Kubernetes artifacts.
+
 ## [v1.4.0] - 2026-07-02
 
 ### Added

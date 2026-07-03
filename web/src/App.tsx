@@ -538,7 +538,7 @@ function App() {
             </div>
             <div className="hidden min-w-0 text-left sm:block">
               <div className="text-sm font-semibold tracking-wide text-ink">AgentOS</div>
-              <div className="text-[11px] text-soft">v1.4 workspace</div>
+              <div className="text-[11px] text-soft">v1.4.1 workspace</div>
             </div>
           </button>
           <nav className="hidden gap-1 md:flex">
@@ -1452,24 +1452,51 @@ function OrchestrationDetail({ current, selectedID, tab, setTab, refresh }: { cu
   )
 }
 
-function stagePresetSubject(item: Json) {
-  return item.agent ? String(item.agent) : 'Planning stage'
+function jsonText(item: Json, ...keys: string[]) {
+  for (const key of keys) {
+    const value = item?.[key]
+    if (value !== undefined && value !== null && String(value).trim() !== '') return String(value)
+  }
+  return ''
 }
 
-function stagePresetDescription(item: Json) {
-  const preset = item.presetId ? String(item.presetId) : 'default'
-  const stage = item.stage ? String(item.stage) : 'stage'
-  return item.agent ? `${preset} preset for ${stage}` : `${preset} preset default`
+function subtaskResultFor(record: Orchestration, subtask: Json) {
+  return subtask.result ?? (record.results ?? []).find((result) => result.subtask_id === subtask.id || result.subtaskId === subtask.id) ?? {}
+}
+
+function subtaskStatus(subtask: Json, result: Json = {}) {
+  if (subtask.status) return String(subtask.status)
+  if (result.success === true) return 'completed'
+  if (result.success === false) return 'failed'
+  return 'pending'
+}
+
+function subtaskSucceeded(subtask: Json, result: Json = {}) {
+  const status = subtaskStatus(subtask, result)
+  return status === 'completed' || result.success === true
+}
+
+function subtaskFailed(subtask: Json, result: Json = {}) {
+  const status = subtaskStatus(subtask, result)
+  return status === 'failed' || result.success === false
+}
+
+function stagePresetValues(item: Json) {
+  return {
+    stage: jsonText(item, 'stage') || 'default',
+    agent: jsonText(item, 'agent') || 'planning',
+    preset: jsonText(item, 'presetId', 'preset_id') || 'default',
+  }
 }
 
 function OverviewTab({ record }: { record: Orchestration }) {
   const results = record.results ?? []
   const subtaskStates = record.subtasks ?? []
   const passed = subtaskStates.length
-    ? subtaskStates.filter((x) => x.status === 'completed' || x.result?.success === true).length
+    ? subtaskStates.filter((x) => subtaskSucceeded(x, subtaskResultFor(record, x))).length
     : results.filter((x) => x.success).length
   const failed = subtaskStates.length
-    ? subtaskStates.filter((x) => x.status === 'failed' || x.result?.success === false).length
+    ? subtaskStates.filter((x) => subtaskFailed(x, subtaskResultFor(record, x))).length
     : results.filter((x) => x.success === false).length
   const total = record.plan?.subtasks?.length ?? (subtaskStates.length || results.length)
   const usage = record.usage ?? {}
@@ -1500,9 +1527,16 @@ function OverviewTab({ record }: { record: Orchestration }) {
               {stagePresets.map((item, idx) => (
                 <div key={`${item.stage ?? 'stage'}-${item.agent ?? idx}`} className="grid gap-2 rounded-os border border-line bg-void p-3 text-sm">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-ink">{stagePresetSubject(item)}</span>
-                    <span className="text-soft">{stagePresetDescription(item)}</span>
-                    {item.stage ? <Tag>{item.stage}</Tag> : null}
+                    {(() => {
+                      const values = stagePresetValues(item)
+                      return (
+                        <>
+                          <Tag>Stage: {values.stage}</Tag>
+                          <Tag>Agent: {values.agent}</Tag>
+                          <span className="break-words text-ink">Preset: {values.preset}</span>
+                        </>
+                      )
+                    })()}
                     {item.fallback ? <Status value="fallback" /> : null}
                   </div>
                   {item.reason ? <p className="break-words text-xs text-soft">{item.reason}</p> : null}
@@ -1577,10 +1611,10 @@ function RunsTab({ record, refresh }: { record: Orchestration; refresh: () => vo
         <div className="divide-y divide-line">
           {states.length === 0 ? <div className="p-4 text-sm text-soft">No runs.</div> : null}
           {states.map((s) => {
-            const result = s.result ?? (record.results ?? []).find((r) => r.subtask_id === s.id || r.subtaskId === s.id) ?? {}
+            const result = subtaskResultFor(record, s)
             return (
               <div key={s.id} className="grid gap-2 p-4">
-                <div className="flex flex-wrap items-center gap-2"><Status value={s.status ?? (result.success ? 'pass' : 'pending')} /><Tag>{s.agent_type ?? s.agentName ?? '-'}</Tag><span className="text-xs text-soft">{s.id}</span></div>
+                <div className="flex flex-wrap items-center gap-2"><Status value={subtaskStatus(s, result)} /><Tag>{s.agent_type ?? s.agentName ?? '-'}</Tag><span className="text-xs text-soft">{s.id}</span></div>
                 <p className="whitespace-pre-wrap break-words text-sm leading-6 text-ink">{s.description}</p>
                 {result.output || result.error || result.diff ? <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-os bg-void p-3 text-xs text-soft">{[result.error, result.output, result.diff].filter(Boolean).join('\n')}</pre> : null}
               </div>
