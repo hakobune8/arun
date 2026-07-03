@@ -1566,7 +1566,7 @@ function RunsTab({ record, refresh }: { record: Orchestration; refresh: () => vo
             return (
               <div key={s.id} className="grid gap-2 p-4">
                 <div className="flex flex-wrap items-center gap-2"><Status value={s.status ?? (result.success ? 'pass' : 'pending')} /><Tag>{s.agent_type ?? s.agentName ?? '-'}</Tag><span className="text-xs text-soft">{s.id}</span></div>
-                <p className="break-words text-sm text-ink">{s.description}</p>
+                <p className="whitespace-pre-wrap break-words text-sm leading-6 text-ink">{s.description}</p>
                 {result.output || result.error || result.diff ? <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-os bg-void p-3 text-xs text-soft">{[result.error, result.output, result.diff].filter(Boolean).join('\n')}</pre> : null}
               </div>
             )
