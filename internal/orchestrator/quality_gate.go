@@ -51,7 +51,7 @@ const goModTidyValidationCommand = `sh -c 'if command -v go >/dev/null 2>&1; the
 
 const dockerValidationCommand = `sh -c 'test -f Dockerfile && grep -Eiq "^FROM[[:space:]]" Dockerfile && if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then docker build -t agentos-validation .; fi'`
 
-const helmValidationCommand = `sh -c 'chart=$(find . -path "*/Chart.yaml" -not -path "./.git/*" -print -quit); test -n "$chart"; dir=$(dirname "$chart"); if command -v helm >/dev/null 2>&1; then helm lint "$dir" && helm template agentos-validation "$dir" >/dev/null; fi'`
+const helmValidationCommand = `sh -c 'chart=$(find . -path "*/Chart.yaml" -not -path "./.git/*" -print -quit); test -n "$chart" || exit 1; dir=$(dirname "$chart"); if command -v helm >/dev/null 2>&1; then helm lint "$dir" && helm template agentos-validation "$dir" >/dev/null; fi'`
 
 const kubernetesValidationCommand = `sh -c 'manifest=$(find . \( -name "*.yaml" -o -name "*.yml" \) -not -path "./.git/*" -exec grep -El "^(apiVersion|kind):" {} + | head -n1); test -n "$manifest"; if command -v kubectl >/dev/null 2>&1; then kubectl apply --dry-run=client -f "$manifest" >/dev/null; fi'`
 
