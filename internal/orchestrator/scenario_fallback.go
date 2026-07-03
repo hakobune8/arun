@@ -66,6 +66,9 @@ func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask *Subta
 	}
 
 	switch subtask.AgentName {
+	case "analyst":
+		out, err := recoverScrumPlanning(runSandbox.RootDir(), subtask)
+		return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
 	case "go-backend":
 		out, err := recoverGoBackend(recoveryCtx, runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
@@ -152,6 +155,45 @@ func (o *Orchestrator) recoverNoOpBuiltInSubtaskWithStatus(ctx context.Context, 
 	default:
 		return SubtaskResult{}, false
 	}
+}
+
+func recoverScrumPlanning(root string, subtask *Subtask) (string, error) {
+	if subtask == nil {
+		return "", errors.New("missing subtask")
+	}
+	docsDir := filepath.Join(root, "docs", "sprint-planning")
+	if err := os.MkdirAll(docsDir, 0o755); err != nil {
+		return "", err
+	}
+	safeID := strings.TrimSpace(subtask.ID)
+	if safeID == "" {
+		safeID = "planning"
+	}
+	safeID = strings.NewReplacer("/", "-", "\\", "-", " ", "-").Replace(safeID)
+	path := filepath.Join(docsDir, safeID+".md")
+	content := fmt.Sprintf(
+		"# %s Recovery Plan\n\n"+
+			"ARUN generated this deterministic planning artifact after the built-in analyst\n"+
+			"runtime failed before producing a usable plan.\n\n"+
+			"## Scope\n\n"+
+			"%s\n\n"+
+			"## Implementation Direction\n\n"+
+			"- Start with the smallest reviewable Go `net/http` service increment.\n"+
+			"- Keep `/healthz` available and covered by tests.\n"+
+			"- Add or preserve a lightweight frontend/static response only when it helps the\n"+
+			"  repository goal.\n"+
+			"- Keep follow-up implementation stages responsible for concrete code changes.\n\n"+
+			"## Validation Expectations\n\n"+
+			"- Run `go test ./...` when Go sources are present.\n"+
+			"- Run `go vet ./...` when the Go toolchain is available.\n"+
+			"- Record smoke-test evidence in repository documentation.\n",
+		strings.TrimSpace(subtask.ID),
+		strings.TrimSpace(subtask.Description),
+	)
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		return "", fmt.Errorf("write planning artifact: %w", err)
+	}
+	return fmt.Sprintf("Recovered analyst planning by writing %s", filepath.ToSlash(filepath.Join("docs", "sprint-planning", safeID+".md"))), nil
 }
 
 func fallbackRecoveryContext() (context.Context, context.CancelFunc) {
