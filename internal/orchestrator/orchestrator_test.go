@@ -1261,6 +1261,105 @@ func TestRecoverBuiltInSubtask_PartialStaticFrontendQA(t *testing.T) {
 	}
 }
 
+func TestRecoverBuiltInSubtask_GoQAValidationFailure(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	files := map[string]string{
+		"go.mod": `module github.com/example/invaders
+
+go 1.22
+`,
+		"main.go": `package main
+
+import (
+	"encoding/json"
+	"net/http"
+)
+
+func healthzHandler(w http.ResponseWriter, r *http.Request) {
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func main() {
+	http.HandleFunc("/healthz", healthzHandler)
+	_ = http.ListenAndServe(":8080", nil)
+}
+`,
+		"main_test.go": `package main
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func TestHealthzHandler(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	healthzHandler(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["status"] != "ok" {
+		t.Fatalf("body = %+v", body)
+	}
+}
+`,
+		"Dockerfile": `FROM golang:1.23-alpine AS builder
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN go build -o /app/server .
+`,
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-go-qa-step"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"qa": &recordingAgent{name: "qa"}},
+		&runtime.Config{},
+	)
+
+	result, ok := o.recoverBuiltInSubtask(context.Background(), &Subtask{
+		ID:          "sprint-1-qa",
+		AgentName:   "qa",
+		Description: "Sprint 1 QA: run available tests for a minimal Go net/http server with /healthz and go test ./...",
+	}, runSandbox, errors.New("validation failed after 3 retries: tests"))
+	if !ok || !result.Success {
+		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
+	}
+	for _, file := range []string{filepath.Join("docs", "testing.md"), filepath.Join("docs", "smoke-test.md")} {
+		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
+			t.Fatalf("%s not created: %v", file, err)
+		}
+	}
+	dockerfile, err := os.ReadFile(filepath.Join(repo, "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(dockerfile), "go.mod go.sum") {
+		t.Fatalf("Dockerfile still requires missing go.sum:\n%s", dockerfile)
+	}
+	if result.QualityGate == nil || !result.QualityGate.Passed {
+		t.Fatalf("quality gate = %+v, want passed", result.QualityGate)
+	}
+}
+
 func TestRecoverBuiltInSubtask_UsesFreshContextAfterTimeout(t *testing.T) {
 	t.Parallel()
 
