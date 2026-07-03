@@ -261,8 +261,9 @@ func staticFrontendFallbackArtifactsPresent(root, agentName string) bool {
 func isCanonicalGoServiceTask(description string) bool {
 	desc := strings.ToLower(description)
 	hasHealthEndpoint := strings.Contains(desc, "/healthz") || strings.Contains(desc, "health endpoint")
+	hasGoHTTPServer := strings.Contains(desc, "go http server") || strings.Contains(desc, "go server")
 	return hasHealthEndpoint &&
-		(strings.Contains(desc, "net/http") || strings.Contains(desc, "go.mod") || strings.Contains(desc, "go test"))
+		(strings.Contains(desc, "net/http") || strings.Contains(desc, "go.mod") || strings.Contains(desc, "go test") || hasGoHTTPServer)
 }
 
 func recoverGoBackend(ctx context.Context, root, description string) (string, error) {

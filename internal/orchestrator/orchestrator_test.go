@@ -1379,9 +1379,13 @@ RUN go build -o /app/server .
 	)
 
 	result, ok := o.recoverBuiltInSubtask(context.Background(), &Subtask{
-		ID:          "sprint-1-qa",
-		AgentName:   "qa",
-		Description: "Sprint 1 QA: run available tests for a minimal Go net/http server with /healthz and go test ./...",
+		ID:        "sprint-1-qa",
+		AgentName: "qa",
+		Description: `Sprint 1 QA: run available tests or smoke checks, record gaps in repository artifacts.
+
+新規 repository の target baseline:
+- Health endpoint と小さな product API または static asset handler を持つ minimal Go HTTP server。
+- Tests、lint または smoke checks、build validation を実行する GitHub Actions CI。`,
 	}, runSandbox, errors.New("validation failed after 3 retries: tests"))
 	if !ok || !result.Success {
 		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
