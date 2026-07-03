@@ -814,6 +814,88 @@ func TestRecoverBuiltInSubtask_FrontendTimeoutRecoversEmptyRepository(t *testing
 	}
 }
 
+func TestRecoverBuiltInSubtask_FrontendValidationRecoversGoService(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	files := map[string]string{
+		"go.mod": `module github.com/hakobune8/arun-test
+
+go 1.22
+`,
+		"main.go": `package main
+
+import (
+	"encoding/json"
+	"net/http"
+)
+
+func healthzHandler(w http.ResponseWriter, r *http.Request) {
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func main() {
+	http.HandleFunc("/healthz", healthzHandler)
+	_ = http.ListenAndServe(":8080", nil)
+}
+`,
+		"main_test.go": `package main
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func TestHealthzHandler(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	healthzHandler(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+}
+`,
+		"README.md": "# ARUN Test\n\nGenerated Go service.\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-frontend-step"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"frontend": &recordingAgent{name: "frontend"}},
+		&runtime.Config{},
+	)
+
+	result, ok := o.recoverBuiltInSubtask(context.Background(), &Subtask{
+		ID:        "sprint-1-frontend",
+		AgentName: "frontend",
+		Description: `Sprint 1 coding: create or connect a minimal user-facing frontend/static experience.
+
+新規 repository の target baseline:
+- Health endpoint と小さな product API または static asset handler を持つ minimal Go HTTP server。
+- Repository goal に合う場合の minimal Web UI または static frontend slice。`,
+	}, runSandbox, errors.New("validation failed after 3 retries: tests"))
+	if !ok || !result.Success {
+		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
+	}
+	for _, file := range []string{"package.json", "index.html", "styles.css", filepath.Join("src", "main.js"), filepath.Join("docs", "smoke-test.md")} {
+		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
+			t.Fatalf("%s not created: %v", file, err)
+		}
+	}
+	if result.QualityGate == nil || !result.QualityGate.Passed {
+		t.Fatalf("quality gate = %+v, want passed", result.QualityGate)
+	}
+}
+
 func TestRecoverGoBackendResetsBrokenGeneratedGoInEmptyRepo(t *testing.T) {
 	t.Parallel()
 	if !commandAvailable("go") {
