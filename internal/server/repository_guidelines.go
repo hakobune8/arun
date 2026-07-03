@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kazyamaz200/agentos/internal/apphome"
-	"github.com/kazyamaz200/agentos/internal/guideline"
-	"github.com/kazyamaz200/agentos/internal/orchestrator"
+	"github.com/hakobune8/arun/internal/apphome"
+	"github.com/hakobune8/arun/internal/guideline"
+	"github.com/hakobune8/arun/internal/orchestrator"
 )
 
 type repositoryGuidelineRequest struct {

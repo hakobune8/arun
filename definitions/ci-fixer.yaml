@@ -1,4 +1,4 @@
-apiVersion: agentos.io/v1
+apiVersion: arun.io/v1
 kind: Agent
 metadata:
   name: ci-fixer

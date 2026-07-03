@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package cli implements the command-line interface commands for AgentOS.
+// Package cli implements the command-line interface commands for ARUN.
 package cli
 
 import (
 	"fmt"
 	"os"
 
-	"github.com/kazyamaz200/agentos/internal/github"
-	"github.com/kazyamaz200/agentos/internal/task"
+	"github.com/hakobune8/arun/internal/github"
+	"github.com/hakobune8/arun/internal/task"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -142,7 +142,7 @@ func fetchIssue(numberStr string) error {
 	repoPath := fmt.Sprintf("https://github.com/%s/%s.git", owner, name)
 	t := task.FromGitHubIssue(issue, repoPath)
 
-	taskDir := ".agentos/tasks"
+	taskDir := ".arun/tasks"
 	if err := os.MkdirAll(taskDir, 0o755); err != nil {
 		return fmt.Errorf("create task dir: %w", err)
 	}

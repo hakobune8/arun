@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package main is the entry point for the AgentOS CLI application.
+// Package main is the entry point for the ARUN CLI application.
 package main
 
-import "github.com/kazyamaz200/agentos/internal/cli"
+import "github.com/hakobune8/arun/internal/cli"
 
 func main() {
 	cli.Execute()

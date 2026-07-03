@@ -1,8 +1,8 @@
-{{- define "agentos.name" -}}
+{{- define "arun.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{- define "agentos.fullname" -}}
+{{- define "arun.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -15,16 +15,16 @@
 {{- end }}
 {{- end }}
 
-{{- define "agentos.labels" -}}
-helm.sh/chart: {{ include "agentos.name" . }}-{{ .Chart.Version }}
-{{ include "agentos.selectorLabels" . }}
+{{- define "arun.labels" -}}
+helm.sh/chart: {{ include "arun.name" . }}-{{ .Chart.Version }}
+{{ include "arun.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
-{{- define "agentos.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "agentos.name" . }}
+{{- define "arun.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "arun.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}

@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [v1.5.0] - 2026-07-03
+
+### Added
+- Added user-selectable English/Japanese Web UI language support with persisted
+  browser preference.
+- Added Japanese built-in scenario template names, descriptions, default output
+  language, and task-template output instructions.
+
+### Changed
+- Transferred the repository from `hakobune8/arun` to `hakobune8/arun`.
+- Updated release, Docker image, Helm chart, GitHub Pages chart repository, and
+  public documentation defaults for the new repository location.
+- Kept the Go module path, CLI name, Helm chart name, environment variables,
+  state directories, and cookie names compatible with v1.4.x.
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.0.
+
 ## [v1.4.1] - 2026-07-03
 
 ### Changed
@@ -38,7 +55,7 @@
   GitHub-linked orchestration records.
 - Added Web UI controls for storage usage, retention policy preview, cleanup
   execution, and cleanup report review.
-- Added the `agentos evals` orchestration evaluation suite with deterministic
+- Added the `arun evals` orchestration evaluation suite with deterministic
   scenario coverage, functional coverage reporting, JSON/Markdown reports, and
   opt-in live smoke checks for environments that provide credentials.
 
@@ -87,7 +104,7 @@
   storage enabled for schedules, notification history, orchestration records,
   repository memory, and guidelines.
 - Webhook delivery for schedule notifications is outbound-only. GitHub-to-
-  AgentOS webhook delivery remains optional for issue-triggered workflows.
+  ARUN webhook delivery remains optional for issue-triggered workflows.
 - Helm chart `version`, `appVersion`, and default `image.tag` are aligned to
   `v1.3.0`.
 
@@ -97,9 +114,9 @@
 - Expanded built-in agent registry for broader repository workflows, including
   frontend, security, release, dependency, QA, and convention-aware planning
   guidance.
-- Repository-defined custom agent profiles through `.agentos/agents/*.yaml`.
+- Repository-defined custom agent profiles through `.arun/agents/*.yaml`.
 - Reusable scenario templates, including repository-defined
-  `.agentos/scenarios/*.yaml` templates.
+  `.arun/scenarios/*.yaml` templates.
 - Repository-scoped continuous improvement memory with approval before reuse.
 - Repository-specific guideline management and retrieval.
 - Repository-scoped context search across memory, guidelines, orchestration
@@ -122,7 +139,7 @@
   v1.3.0 milestone.
 
 ### Notes
-- GitHub-to-AgentOS webhook delivery is still not required for v1.2.0 unless a
+- GitHub-to-ARUN webhook delivery is still not required for v1.2.0 unless a
   later release task changes that before tagging.
 - The `on_pr_merge` close policy remains recorded for conservative follow-up;
   automatic PR merge detection remains deferred.
@@ -149,7 +166,7 @@
 - Orchestration completion records include GitHub metadata such as source issue, branch, pull request, close policy, approval status, and source close state.
 
 ### Notes
-- GitHub-to-AgentOS webhook delivery is not required for v1.1 because deployments may not be reachable from GitHub.
+- GitHub-to-ARUN webhook delivery is not required for v1.1 because deployments may not be reachable from GitHub.
 - The `on_pr_merge` close policy is recorded for manual follow-up; webhook-based automatic PR merge detection is deferred.
 
 ## [v1.0.1] - 2026-06-30
@@ -164,7 +181,7 @@
 
 ### Added
 - Runtime Agent interface (Plan, Execute, Review) with lifecycle hooks (#91)
-- Versioned Agent definition schema (apiVersion: agentos.io/v1) (#97)
+- Versioned Agent definition schema (apiVersion: arun.io/v1) (#97)
 - Agent plugin registry with built-in agents (go-backend, reviewer, ci-fixer, docs) (#93)
 - Structured event bus with typed events and file store persistence (#94)
 - JSON memory store backend (zero dependencies) (#95)
@@ -191,7 +208,7 @@
 ### Added
 - Agent Factory: create agent instances from YAML template definitions
 - Multi-agent orchestration with sequential/parallel strategies
-- CLI commands: `agentos agent list/create/run`, `agentos orchestrate`
+- CLI commands: `arun agent list/create/run`, `arun orchestrate`
 - Agent template system with coder/reviewer/tester template
 - Package-level Go doc comments (ongoing)
 
@@ -203,7 +220,7 @@
 ### Added
 - MCP client (JSON-RPC stdio) with tool registration
 - Docker sandbox interface stub for future isolated execution
-- Web UI dashboard (`agentos serve`)
+- Web UI dashboard (`arun serve`)
 - GitHub CI checks integration
 - CI Fix Agent for automated CI failure resolution
 
@@ -226,14 +243,14 @@
 
 ### Added
 - GitHub API client for issue/PR/checks operations
-- `agentos issue`, `agentos pr`, `agentos checks` commands
-- Auto-PR creation on `agentos run --pr`
+- `arun issue`, `arun pr`, `arun checks` commands
+- Auto-PR creation on `arun run --pr`
 - CI Fix Agent prototype
 
 ## [v0.1] - 2026-06-24
 
 ### Added
-- Initial AgentOS implementation
+- Initial ARUN implementation
 - CLI with `run`, `review`, `version` commands
 - LLM client with LiteLLM integration
 - Tool system: filesystem, shell, git, search, test tools

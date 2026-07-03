@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package cli implements the command-line interface commands for AgentOS.
+// Package cli implements the command-line interface commands for ARUN.
 package cli
 
 import (
@@ -23,12 +23,12 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "agentos",
-	Short: "AgentOS - Coding agent execution platform",
-	Long: `AgentOS is a coding agent execution platform that uses LiteLLM
+	Use:   "arun",
+	Short: "ARUN - Coding agent execution platform",
+	Long: `ARUN is a coding agent execution platform that uses LiteLLM
 as the LLM gateway for safe, reproducible code generation.
 
-Complete documentation is available at https://github.com/kazyamaz200/agentos`,
+Complete documentation is available at https://github.com/hakobune8/arun`,
 }
 
 // Execute runs the root cobra command, parsing and dispatching CLI subcommands.

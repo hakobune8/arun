@@ -50,7 +50,7 @@ summary := o.MergeResults(results)
 ## CLI
 
 ```bash
-agentos orchestrate --agents "go-backend,reviewer" --repo ./local-repo --task "..." --strategy parallel
+arun orchestrate --agents "go-backend,reviewer" --repo ./local-repo --task "..." --strategy parallel
 ```
 
 ## Web UI Remote Repository Workflow
@@ -62,14 +62,14 @@ environments:
 2. Select a GitHub repository from the repository picker.
 3. Confirm the base branch, usually the repository default branch or `main`.
 4. Describe the task or apply a scenario template.
-5. Load repository agents or ask AgentOS to suggest built-in specialists.
+5. Load repository agents or ask ARUN to suggest built-in specialists.
 6. Choose `Sequential` or `Parallel` and start orchestration.
 
-AgentOS clones each request into an isolated workspace under
-`AGENTOS_HOME/workspaces/orchestrate`. This keeps concurrent runs against
+ARUN clones each request into an isolated workspace under
+`ARUN_HOME/workspaces/orchestrate`. This keeps concurrent runs against
 different repositories from sharing a mutable checkout. Private GitHub
 repositories require GitHub App installation credentials or a GitHub token in
-the AgentOS deployment environment. The repository picker uses authenticated
+the ARUN deployment environment. The repository picker uses authenticated
 GitHub repository listing and stores the selected repository as `owner/repo`.
 
 ## Governance Limits
@@ -85,7 +85,7 @@ Web UI and API orchestrations accept optional execution limits:
 - `maxRetries`, `maxLlmTokens`, and `maxGitHubRequests` are persisted as
   budget metadata and surfaced in run detail for governance reporting.
 
-If omitted, AgentOS defaults to a 30 minute run duration, 12 planned subtasks,
+If omitted, ARUN defaults to a 30 minute run duration, 12 planned subtasks,
 and one active run per repository. Orchestration detail records include
 normalized `limits` plus `usage` fields with budget status, duration, planned
 subtasks, completed subtasks, and failure counts.
@@ -108,7 +108,7 @@ Markdown outputs, and permission notes. Users can still adjust the output
 language, Issue/PR creation settings, and repository/default artifact templates
 before saving the schedule.
 
-AgentOS starts due schedules in-process when the Web server is running. Missed
+ARUN starts due schedules in-process when the Web server is running. Missed
 runs after restart are checked on startup. By default, `concurrencyPolicy:
 forbid` skips a due execution when the previous schedule run is still planning
 or running. Each orchestration started by a schedule records `scheduleId`, and
@@ -124,7 +124,7 @@ started, completed, failed, skipped, PR-created, quality-gate-failed, and
 manual-intervention outcomes. Destinations include the Web UI notification
 inbox, webhook delivery with retry recording, and GitHub Issue or PR comments
 when the run created those artifacts. Notification history is stored under
-`AGENTOS_HOME/notifications` and is exposed by `/api/notifications`.
+`ARUN_HOME/notifications` and is exposed by `/api/notifications`.
 
 ## Task Recommendations
 
@@ -230,20 +230,20 @@ recommendation logic used by the New Orchestrate form.
 
 Issue labels can adjust launch behavior:
 
-- `agentos:create-pr` enables PR creation.
-- `agentos:report-only` disables PR creation.
-- `agentos:parallel` selects parallel orchestration.
-- `agentos:sequential` selects sequential orchestration.
-- `agentos:close-never` prevents automatic source Issue close.
-- `agentos:close-on-quality-gate-pass` closes the source Issue after successful
+- `arun:create-pr` enables PR creation.
+- `arun:report-only` disables PR creation.
+- `arun:parallel` selects parallel orchestration.
+- `arun:sequential` selects sequential orchestration.
+- `arun:close-never` prevents automatic source Issue close.
+- `arun:close-on-quality-gate-pass` closes the source Issue after successful
   completion and passing quality gates.
-- `agentos:close-on-pr-merge` records a conservative PR-merge close policy.
-- `agentos:approval-required` requires human approval before closing.
+- `arun:close-on-pr-merge` records a conservative PR-merge close policy.
+- `arun:approval-required` requires human approval before closing.
 
 Issue text can also include a slash command line:
 
 ```text
-/agentos run agents=docs,reviewer strategy=parallel create_pr=false close_policy=after_human_approval approval=true
+/arun run agents=docs,reviewer strategy=parallel create_pr=false close_policy=after_human_approval approval=true
 ```
 
 The slash command overrides matching label-derived controls. The server records
@@ -258,10 +258,10 @@ manual follow-up. `after_human_approval` puts a completed run into
 `pending_approval` until an authorized user approves or rejects it from the Web
 UI or approval API.
 
-For Issue-sourced runs, AgentOS posts a start comment and one final status
+For Issue-sourced runs, ARUN posts a start comment and one final status
 comment back to the source Issue when GitHub write credentials are configured.
 The final comment includes the run status, any PR URL, error text, and summary.
-Set `AGENTOS_PUBLIC_URL` to include a stable AgentOS run link in these comments;
+Set `ARUN_PUBLIC_URL` to include a stable ARUN run link in these comments;
 otherwise the run ID is shown without a public link.
 
 ## GitHub Artifacts
@@ -270,7 +270,7 @@ New orchestrations can request GitHub artifacts from the Web UI:
 
 - `Create tracking Issue` creates an issue at the start of the orchestration.
 - `Create Pull Request` creates a PR after the orchestration completes.
-- `Branch name` defaults to `agentos/<run-id>`.
+- `Branch name` defaults to `arun/<run-id>`.
 - `PR base branch` defaults to `main`.
 - Issue and PR titles default to the task description.
 

@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,14 +29,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kazyamaz200/agentos/internal/agent"
-	"github.com/kazyamaz200/agentos/internal/apphome"
-	agentosgh "github.com/kazyamaz200/agentos/internal/github"
-	"github.com/kazyamaz200/agentos/internal/llm"
-	"github.com/kazyamaz200/agentos/internal/orchestrator"
-	"github.com/kazyamaz200/agentos/internal/runtime"
-	"github.com/kazyamaz200/agentos/internal/sandbox"
-	"github.com/kazyamaz200/agentos/internal/tools"
+	"github.com/hakobune8/arun/internal/agent"
+	"github.com/hakobune8/arun/internal/apphome"
+	arungh "github.com/hakobune8/arun/internal/github"
+	"github.com/hakobune8/arun/internal/llm"
+	"github.com/hakobune8/arun/internal/orchestrator"
+	"github.com/hakobune8/arun/internal/runtime"
+	"github.com/hakobune8/arun/internal/sandbox"
+	"github.com/hakobune8/arun/internal/tools"
 )
 
 // Mode controls how much of a scenario is exercised.
@@ -365,7 +365,7 @@ func Run(ctx context.Context, opts Options) (*Report, error) {
 	workDir := opts.WorkDir
 	if strings.TrimSpace(workDir) == "" {
 		var err error
-		workDir, err = os.MkdirTemp("", "agentos-evals-*")
+		workDir, err = os.MkdirTemp("", "arun-evals-*")
 		if err != nil {
 			return nil, err
 		}
@@ -516,10 +516,10 @@ func runLiveScenario(ctx context.Context, scenario *Scenario, liveURL string, re
 	}
 	base := strings.TrimRight(strings.TrimSpace(liveURL), "/")
 	if base == "" {
-		base = strings.TrimRight(os.Getenv("AGENTOS_EVAL_LIVE_URL"), "/")
+		base = strings.TrimRight(os.Getenv("ARUN_EVAL_LIVE_URL"), "/")
 	}
 	if base == "" {
-		result.FailureReasons = append(result.FailureReasons, "live URL is required via --live-url or AGENTOS_EVAL_LIVE_URL")
+		result.FailureReasons = append(result.FailureReasons, "live URL is required via --live-url or ARUN_EVAL_LIVE_URL")
 		return result
 	}
 	client := &http.Client{Timeout: 15 * time.Second}
@@ -688,14 +688,14 @@ func runThreeSprintScrumScenario(ctx context.Context, workDir string, scenario *
 	liveReadiness := scrumLiveReadinessChecks()
 	for _, check := range liveReadiness {
 		result.Checks = append(result.Checks, check)
-		if !check.Passed && strings.EqualFold(os.Getenv("AGENTOS_EVAL_SCRUM_LIVE"), "true") {
+		if !check.Passed && strings.EqualFold(os.Getenv("ARUN_EVAL_SCRUM_LIVE"), "true") {
 			result.FailureReasons = append(result.FailureReasons, fmt.Sprintf("%s/%s: %s", check.Page, check.Action, check.Failure))
 		}
 	}
 	summary := scrumSimulationReport{
 		Backlog:       backlog,
 		Sprints:       sprintReports,
-		LiveMode:      strings.EqualFold(os.Getenv("AGENTOS_EVAL_SCRUM_LIVE"), "true"),
+		LiveMode:      strings.EqualFold(os.Getenv("ARUN_EVAL_SCRUM_LIVE"), "true"),
 		LiveReadiness: liveReadiness,
 	}
 	summaryJSON, err := json.Marshal(summary)
@@ -727,7 +727,7 @@ func runThreeSprintScrumScenario(ctx context.Context, workDir string, scenario *
 		"blockerCount":     fmt.Sprintf("%d", scrumBlockerCount(sprintReports)),
 		"summary":          string(summaryJSON),
 		"liveMode":         fmt.Sprintf("%t", summary.LiveMode),
-		"liveModeNote":     "Set AGENTOS_EVAL_SCRUM_LIVE=true with GitHub and LLM settings to make live readiness checks mandatory.",
+		"liveModeNote":     "Set ARUN_EVAL_SCRUM_LIVE=true with GitHub and LLM settings to make live readiness checks mandatory.",
 		"functionalStages": strings.Join(stages, ","),
 	}
 	return result
@@ -851,7 +851,7 @@ func scrumBlockerCount(sprints []scrumSprintReport) int {
 }
 
 func scrumLiveReadinessChecks() []ScenarioCheck {
-	liveEnabled := strings.EqualFold(strings.TrimSpace(os.Getenv("AGENTOS_EVAL_SCRUM_LIVE")), "true")
+	liveEnabled := strings.EqualFold(strings.TrimSpace(os.Getenv("ARUN_EVAL_SCRUM_LIVE")), "true")
 	if !liveEnabled {
 		return []ScenarioCheck{{
 			Page:   "scrum-live",
@@ -863,14 +863,14 @@ func scrumLiveReadinessChecks() []ScenarioCheck {
 		{
 			Page:    "scrum-live",
 			Action:  "github repo configured",
-			Passed:  strings.TrimSpace(os.Getenv("AGENTOS_EVAL_GITHUB_REPO")) != "",
-			Failure: "AGENTOS_EVAL_GITHUB_REPO is required for live scrum GitHub integration",
+			Passed:  strings.TrimSpace(os.Getenv("ARUN_EVAL_GITHUB_REPO")) != "",
+			Failure: "ARUN_EVAL_GITHUB_REPO is required for live scrum GitHub integration",
 		},
 		{
 			Page:    "scrum-live",
 			Action:  "llm preset matrix configured",
-			Passed:  strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LLM_PRESET_MATRIX")) != "" || strings.TrimSpace(os.Getenv("AGENTOS_LLM_PRESETS")) != "",
-			Failure: "AGENTOS_EVAL_LLM_PRESET_MATRIX or AGENTOS_LLM_PRESETS is required for live scrum LLM integration",
+			Passed:  strings.TrimSpace(os.Getenv("ARUN_EVAL_LLM_PRESET_MATRIX")) != "" || strings.TrimSpace(os.Getenv("ARUN_LLM_PRESETS")) != "",
+			Failure: "ARUN_EVAL_LLM_PRESET_MATRIX or ARUN_LLM_PRESETS is required for live scrum LLM integration",
 		},
 	}
 	for i := range checks {
@@ -889,10 +889,10 @@ type authE2EResult struct {
 func runAuthenticatedWebUIScenario(ctx context.Context, liveURL string, result *ScenarioResult) *ScenarioResult {
 	base := strings.TrimRight(strings.TrimSpace(liveURL), "/")
 	if base == "" {
-		base = strings.TrimRight(os.Getenv("AGENTOS_EVAL_LIVE_URL"), "/")
+		base = strings.TrimRight(os.Getenv("ARUN_EVAL_LIVE_URL"), "/")
 	}
 	if base == "" {
-		result.FailureReasons = append(result.FailureReasons, "live URL is required via --live-url or AGENTOS_EVAL_LIVE_URL")
+		result.FailureReasons = append(result.FailureReasons, "live URL is required via --live-url or ARUN_EVAL_LIVE_URL")
 		return result
 	}
 	script, err := findAuthE2EScript()
@@ -901,11 +901,11 @@ func runAuthenticatedWebUIScenario(ctx context.Context, liveURL string, result *
 		return result
 	}
 	if !authE2EConfigured() {
-		result.FailureReasons = append(result.FailureReasons, "authenticated session material is required via AGENTOS_EVAL_AUTH_STORAGE_STATE or AGENTOS_EVAL_AUTH_COOKIE")
+		result.FailureReasons = append(result.FailureReasons, "authenticated session material is required via ARUN_EVAL_AUTH_STORAGE_STATE or ARUN_EVAL_AUTH_COOKIE")
 		return result
 	}
 	cmd := exec.CommandContext(ctx, "node", script)
-	cmd.Env = append(os.Environ(), "AGENTOS_EVAL_LIVE_URL="+base)
+	cmd.Env = append(os.Environ(), "ARUN_EVAL_LIVE_URL="+base)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -939,15 +939,15 @@ func runAuthenticatedWebUIScenario(ctx context.Context, liveURL string, result *
 }
 
 func authE2EConfigured() bool {
-	return strings.TrimSpace(os.Getenv("AGENTOS_EVAL_AUTH_STORAGE_STATE")) != "" || authCookieConfigured()
+	return strings.TrimSpace(os.Getenv("ARUN_EVAL_AUTH_STORAGE_STATE")) != "" || authCookieConfigured()
 }
 
 func authCookieConfigured() bool {
-	return strings.TrimSpace(os.Getenv("AGENTOS_EVAL_AUTH_COOKIE")) != ""
+	return strings.TrimSpace(os.Getenv("ARUN_EVAL_AUTH_COOKIE")) != ""
 }
 
 func findAuthE2EScript() (string, error) {
-	if script := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_AUTH_E2E_SCRIPT")); script != "" {
+	if script := strings.TrimSpace(os.Getenv("ARUN_EVAL_AUTH_E2E_SCRIPT")); script != "" {
 		if _, err := os.Stat(script); err != nil {
 			return "", fmt.Errorf("authenticated Web UI E2E script %q: %w", script, err)
 		}
@@ -968,11 +968,11 @@ func findAuthE2EScript() (string, error) {
 		}
 		wd = parent
 	}
-	return "", fmt.Errorf("authenticated Web UI E2E script not found; set AGENTOS_EVAL_AUTH_E2E_SCRIPT")
+	return "", fmt.Errorf("authenticated Web UI E2E script not found; set ARUN_EVAL_AUTH_E2E_SCRIPT")
 }
 
 func sanitizeAuthE2EOutput(out string) string {
-	for _, key := range []string{"AGENTOS_EVAL_AUTH_COOKIE"} {
+	for _, key := range []string{"ARUN_EVAL_AUTH_COOKIE"} {
 		value := os.Getenv(key)
 		if value != "" {
 			out = strings.ReplaceAll(out, value, "[redacted]")
@@ -982,17 +982,17 @@ func sanitizeAuthE2EOutput(out string) string {
 }
 
 func runGitHubWorkflowScenario(ctx context.Context, result *ScenarioResult) *ScenarioResult {
-	repo := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_GITHUB_REPO"))
+	repo := strings.TrimSpace(os.Getenv("ARUN_EVAL_GITHUB_REPO"))
 	if repo == "" {
-		result.FailureReasons = append(result.FailureReasons, "live GitHub repo is required via AGENTOS_EVAL_GITHUB_REPO")
+		result.FailureReasons = append(result.FailureReasons, "live GitHub repo is required via ARUN_EVAL_GITHUB_REPO")
 		return result
 	}
 	owner, name, ok := splitGitHubRepo(repo)
 	if !ok {
-		result.FailureReasons = append(result.FailureReasons, "AGENTOS_EVAL_GITHUB_REPO must be owner/name")
+		result.FailureReasons = append(result.FailureReasons, "ARUN_EVAL_GITHUB_REPO must be owner/name")
 		return result
 	}
-	token, err := agentosgh.TokenFromEnv(ctx)
+	token, err := arungh.TokenFromEnv(ctx)
 	if err != nil {
 		result.FailureReasons = append(result.FailureReasons, "GitHub token: "+err.Error())
 		return result
@@ -1001,18 +1001,18 @@ func runGitHubWorkflowScenario(ctx context.Context, result *ScenarioResult) *Sce
 		result.FailureReasons = append(result.FailureReasons, "GitHub token is required via GITHUB_TOKEN, GH_TOKEN, or GitHub App env")
 		return result
 	}
-	baseBranch := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_GITHUB_BASE_BRANCH"))
+	baseBranch := strings.TrimSpace(os.Getenv("ARUN_EVAL_GITHUB_BASE_BRANCH"))
 	if baseBranch == "" {
 		baseBranch = "main"
 	}
 	stamp := time.Now().UTC().Format("20060102T150405")
-	branch := "agentos-eval/live-github-" + stamp
-	title := "[AgentOS Eval] Live GitHub workflow " + stamp
-	filePath := ".agentos-evals/live-github-" + stamp + ".md"
-	client := agentosgh.NewClient(owner, name)
+	branch := "arun-eval/live-github-" + stamp
+	title := "[ARUN Eval] Live GitHub workflow " + stamp
+	filePath := ".arun-evals/live-github-" + stamp + ".md"
+	client := arungh.NewClient(owner, name)
 
-	var issue *agentosgh.Issue
-	var pr *agentosgh.PullRequest
+	var issue *arungh.Issue
+	var pr *arungh.PullRequest
 	branchCreated := false
 	defer func() {
 		if pr != nil && pr.Number > 0 {
@@ -1026,9 +1026,9 @@ func runGitHubWorkflowScenario(ctx context.Context, result *ScenarioResult) *Sce
 		}
 	}()
 
-	issue, err = client.CreateIssue(agentosgh.CreateIssueRequest{
+	issue, err = client.CreateIssue(arungh.CreateIssueRequest{
 		Title: title + " issue",
-		Body:  "Created by AgentOS live GitHub workflow E2E. This test artifact should be closed automatically.",
+		Body:  "Created by ARUN live GitHub workflow E2E. This test artifact should be closed automatically.",
 	})
 	if err != nil {
 		result.FailureReasons = append(result.FailureReasons, "create issue: "+err.Error())
@@ -1039,7 +1039,7 @@ func runGitHubWorkflowScenario(ctx context.Context, result *ScenarioResult) *Sce
 		result.FailureReasons = append(result.FailureReasons, "created issue missing number or URL")
 	}
 
-	comment, err := client.CreateIssueComment(issue.Number, agentosgh.CreateIssueCommentRequest{Body: "AgentOS live GitHub workflow E2E is preparing a temporary branch and PR."})
+	comment, err := client.CreateIssueComment(issue.Number, arungh.CreateIssueCommentRequest{Body: "ARUN live GitHub workflow E2E is preparing a temporary branch and PR."})
 	result.Checks = append(result.Checks, ScenarioCheck{Page: "github", Action: "comment issue", Passed: err == nil && comment != nil && comment.HTMLURL != ""})
 	if err != nil {
 		result.FailureReasons = append(result.FailureReasons, "comment issue: "+err.Error())
@@ -1057,9 +1057,9 @@ func runGitHubWorkflowScenario(ctx context.Context, result *ScenarioResult) *Sce
 	branchCreated = true
 	result.Checks = append(result.Checks, ScenarioCheck{Page: "github", Action: "create branch", Passed: true})
 
-	content := fmt.Sprintf("# AgentOS Live GitHub Workflow E2E\n\n- Created: %s\n- Issue: %s\n", time.Now().UTC().Format(time.RFC3339), issue.HTMLURL)
-	if err := client.PutFile(filePath, agentosgh.PutFileRequest{
-		Message: "add AgentOS live GitHub workflow eval artifact",
+	content := fmt.Sprintf("# ARUN Live GitHub Workflow E2E\n\n- Created: %s\n- Issue: %s\n", time.Now().UTC().Format(time.RFC3339), issue.HTMLURL)
+	if err := client.PutFile(filePath, arungh.PutFileRequest{
+		Message: "add ARUN live GitHub workflow eval artifact",
 		Content: content,
 		Branch:  branch,
 	}); err != nil {
@@ -1068,9 +1068,9 @@ func runGitHubWorkflowScenario(ctx context.Context, result *ScenarioResult) *Sce
 	}
 	result.Checks = append(result.Checks, ScenarioCheck{Page: "github", Action: "create branch file", Passed: true})
 
-	pr, err = client.CreatePR(agentosgh.CreatePRRequest{
+	pr, err = client.CreatePR(arungh.CreatePRRequest{
 		Title: title + " PR",
-		Body:  "Created by AgentOS live GitHub workflow E2E. This PR should be closed automatically.\n\nIssue: " + issue.HTMLURL,
+		Body:  "Created by ARUN live GitHub workflow E2E. This PR should be closed automatically.\n\nIssue: " + issue.HTMLURL,
 		Head:  branch,
 		Base:  baseBranch,
 		Draft: true,
@@ -1182,23 +1182,23 @@ type scrumLLMStageOutcome struct {
 }
 
 func runScrumGitHubScenario(ctx context.Context, result *ScenarioResult) *ScenarioResult {
-	repo := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_GITHUB_REPO"))
+	repo := strings.TrimSpace(os.Getenv("ARUN_EVAL_GITHUB_REPO"))
 	if repo == "" {
-		result.FailureReasons = append(result.FailureReasons, "live GitHub repo is required via AGENTOS_EVAL_GITHUB_REPO")
+		result.FailureReasons = append(result.FailureReasons, "live GitHub repo is required via ARUN_EVAL_GITHUB_REPO")
 		return result
 	}
 	owner, name, ok := splitGitHubRepo(repo)
 	if !ok {
-		result.FailureReasons = append(result.FailureReasons, "AGENTOS_EVAL_GITHUB_REPO must be owner/name")
+		result.FailureReasons = append(result.FailureReasons, "ARUN_EVAL_GITHUB_REPO must be owner/name")
 		return result
 	}
-	if !githubRepoAllowed(repo, os.Getenv("AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST")) {
-		result.FailureReasons = append(result.FailureReasons, "AGENTOS_EVAL_GITHUB_REPO must be explicitly listed in AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST")
+	if !githubRepoAllowed(repo, os.Getenv("ARUN_EVAL_GITHUB_REPO_ALLOWLIST")) {
+		result.FailureReasons = append(result.FailureReasons, "ARUN_EVAL_GITHUB_REPO must be explicitly listed in ARUN_EVAL_GITHUB_REPO_ALLOWLIST")
 		return result
 	}
 	cleanupMode := scrumGitHubCleanupMode()
 	if cleanupMode == "" {
-		result.FailureReasons = append(result.FailureReasons, "AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP must be keep or close")
+		result.FailureReasons = append(result.FailureReasons, "ARUN_EVAL_SCRUM_GITHUB_CLEANUP must be keep or close")
 		return result
 	}
 	scrumLLMEnabled := scrumLLMPresetsEnabled()
@@ -1211,7 +1211,7 @@ func runScrumGitHubScenario(ctx context.Context, result *ScenarioResult) *Scenar
 			return result
 		}
 	}
-	token, err := agentosgh.TokenFromEnv(ctx)
+	token, err := arungh.TokenFromEnv(ctx)
 	if err != nil {
 		result.FailureReasons = append(result.FailureReasons, "GitHub token: "+err.Error())
 		return result
@@ -1221,13 +1221,13 @@ func runScrumGitHubScenario(ctx context.Context, result *ScenarioResult) *Scenar
 		return result
 	}
 
-	runID := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_SCRUM_GITHUB_RUN_ID"))
+	runID := strings.TrimSpace(os.Getenv("ARUN_EVAL_SCRUM_GITHUB_RUN_ID"))
 	if runID == "" {
 		runID = time.Now().UTC().Format("20060102T150405")
 	}
-	client := agentosgh.NewClient(owner, name)
+	client := arungh.NewClient(owner, name)
 	backlog := scrumGitHubBacklog()
-	issues := map[string]*agentosgh.Issue{}
+	issues := map[string]*arungh.Issue{}
 	existing, err := findScrumGitHubIssues(client, runID)
 	if err != nil {
 		result.FailureReasons = append(result.FailureReasons, "find existing scrum issues: "+err.Error())
@@ -1329,8 +1329,8 @@ func runScrumGitHubScenario(ctx context.Context, result *ScenarioResult) *Scenar
 		"llmStageFailures":      fmt.Sprintf("%d", len(llmStageOutcomes)-llmStageSuccesses),
 		"llmStages":             string(encodedLLMStages),
 		"secretsRedacted":       "true",
-		"artifactPrefix":        "[AgentOS Eval]",
-		"repoAllowlistUsed":     strings.TrimSpace(os.Getenv("AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST")),
+		"artifactPrefix":        "[ARUN Eval]",
+		"repoAllowlistUsed":     strings.TrimSpace(os.Getenv("ARUN_EVAL_GITHUB_REPO_ALLOWLIST")),
 	}
 	if !cleanupOK {
 		result.FailureReasons = append(result.FailureReasons, "scrum GitHub cleanup did not complete successfully")
@@ -1339,16 +1339,16 @@ func runScrumGitHubScenario(ctx context.Context, result *ScenarioResult) *Scenar
 }
 
 func scrumLLMPresetsEnabled() bool {
-	return strings.EqualFold(strings.TrimSpace(os.Getenv("AGENTOS_EVAL_SCRUM_LLM_PRESETS")), "true")
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("ARUN_EVAL_SCRUM_LLM_PRESETS")), "true")
 }
 
 func scrumLiteLLMPresetMapFromEnv() (map[string]liteLLMPresetEvalConfig, error) {
-	raw := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LLM_PRESET_MATRIX"))
+	raw := strings.TrimSpace(os.Getenv("ARUN_EVAL_LLM_PRESET_MATRIX"))
 	if raw == "" {
-		raw = strings.TrimSpace(os.Getenv("AGENTOS_LLM_PRESETS"))
+		raw = strings.TrimSpace(os.Getenv("ARUN_LLM_PRESETS"))
 	}
 	if raw == "" {
-		return nil, fmt.Errorf("scrum LLM presets require AGENTOS_EVAL_LLM_PRESET_MATRIX or AGENTOS_LLM_PRESETS when AGENTOS_EVAL_SCRUM_LLM_PRESETS=true")
+		return nil, fmt.Errorf("scrum LLM presets require ARUN_EVAL_LLM_PRESET_MATRIX or ARUN_LLM_PRESETS when ARUN_EVAL_SCRUM_LLM_PRESETS=true")
 	}
 	presets, err := liteLLMPresetEvalConfigFromRaw(raw)
 	if err != nil {
@@ -1499,7 +1499,7 @@ func runScrumLLMStageCheck(ctx context.Context, stage scrumLLMStage, preset *lit
 }
 
 func scrumLLMStageSystemPrompt(agentName string) string {
-	return "You are the AgentOS " + agentName + " agent participating in an executable scrum eval. Reply with one concise operational note. Do not include secrets."
+	return "You are the ARUN " + agentName + " agent participating in an executable scrum eval. Reply with one concise operational note. Do not include secrets."
 }
 
 func scrumLLMStageUserPrompt(stage scrumLLMStage) string {
@@ -1511,7 +1511,7 @@ func scrumLLMStageUserPrompt(stage scrumLLMStage) string {
 }
 
 func scrumGitHubCleanupMode() string {
-	mode := strings.ToLower(strings.TrimSpace(os.Getenv("AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP")))
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("ARUN_EVAL_SCRUM_GITHUB_CLEANUP")))
 	if mode == "" {
 		return "close"
 	}
@@ -1523,12 +1523,12 @@ func scrumGitHubCleanupMode() string {
 	}
 }
 
-func createScrumGitHubIssues(client *agentosgh.Client, backlog []scrumBacklogItem, runID string, result *ScenarioResult) (map[string]*agentosgh.Issue, error) {
-	issues := map[string]*agentosgh.Issue{}
+func createScrumGitHubIssues(client *arungh.Client, backlog []scrumBacklogItem, runID string, result *ScenarioResult) (map[string]*arungh.Issue, error) {
+	issues := map[string]*arungh.Issue{}
 	for i := range backlog {
 		item := &backlog[i]
-		issue, err := client.CreateIssue(agentosgh.CreateIssueRequest{
-			Title: fmt.Sprintf("[AgentOS Eval][%s] %s %s", runID, item.ID, item.Title),
+		issue, err := client.CreateIssue(arungh.CreateIssueRequest{
+			Title: fmt.Sprintf("[ARUN Eval][%s] %s %s", runID, item.ID, item.Title),
 			Body:  renderScrumGitHubIssueBody(runID, item, "backlog"),
 		})
 		if err != nil {
@@ -1540,7 +1540,7 @@ func createScrumGitHubIssues(client *agentosgh.Client, backlog []scrumBacklogIte
 	return issues, nil
 }
 
-func findScrumGitHubIssues(client *agentosgh.Client, runID string) (map[string]*agentosgh.Issue, error) {
+func findScrumGitHubIssues(client *arungh.Client, runID string) (map[string]*arungh.Issue, error) {
 	if strings.TrimSpace(runID) == "" {
 		return nil, nil
 	}
@@ -1548,8 +1548,8 @@ func findScrumGitHubIssues(client *agentosgh.Client, runID string) (map[string]*
 	if err != nil {
 		return nil, err
 	}
-	found := map[string]*agentosgh.Issue{}
-	marker := "[AgentOS Eval][" + runID + "]"
+	found := map[string]*arungh.Issue{}
+	marker := "[ARUN Eval][" + runID + "]"
 	for i := range issues {
 		issue := &issues[i]
 		if !strings.Contains(issue.Title, marker) {
@@ -1562,7 +1562,7 @@ func findScrumGitHubIssues(client *agentosgh.Client, runID string) (map[string]*
 	return found, nil
 }
 
-func cleanupScrumGitHubIssues(client *agentosgh.Client, issues map[string]*agentosgh.Issue, backlog []scrumBacklogItem, mode string) []scrumGitHubArtifact {
+func cleanupScrumGitHubIssues(client *arungh.Client, issues map[string]*arungh.Issue, backlog []scrumBacklogItem, mode string) []scrumGitHubArtifact {
 	artifacts := make([]scrumGitHubArtifact, 0, len(backlog))
 	for i := range backlog {
 		item := &backlog[i]
@@ -1659,7 +1659,7 @@ func scrumGitHubBacklog() []scrumBacklogItem {
 }
 
 func renderScrumGitHubIssueBody(runID string, item *scrumBacklogItem, status string) string {
-	return fmt.Sprintf(`Created by AgentOS executable scrum GitHub eval.
+	return fmt.Sprintf(`Created by ARUN executable scrum GitHub eval.
 
 - Run ID: %s
 - Item: %s
@@ -1672,7 +1672,7 @@ This artifact is safe to close after the eval records final sprint evidence.
 `, runID, item.ID, item.Owner, item.Estimate, item.Sprint, status)
 }
 
-func commentScrumSprint(client *agentosgh.Client, issues map[string]*agentosgh.Issue, runID string, sprint *scrumGitHubSprint) error {
+func commentScrumSprint(client *arungh.Client, issues map[string]*arungh.Issue, runID string, sprint *scrumGitHubSprint) error {
 	for _, id := range sprint.Planned {
 		issue := issues[id]
 		if issue == nil || issue.Number == 0 {
@@ -1685,11 +1685,11 @@ func commentScrumSprint(client *agentosgh.Client, issues map[string]*agentosgh.I
 		if slices.Contains(sprint.Carried, id) {
 			status = "carried"
 		}
-		body := fmt.Sprintf("AgentOS eval run `%s` sprint %d status: `%s`.", runID, sprint.Sprint, status)
+		body := fmt.Sprintf("ARUN eval run `%s` sprint %d status: `%s`.", runID, sprint.Sprint, status)
 		if len(sprint.Blockers) > 0 && slices.Contains(sprint.Carried, id) {
 			body += "\n\nBlockers:\n- " + strings.Join(sprint.Blockers, "\n- ")
 		}
-		if _, err := client.CreateIssueComment(issue.Number, agentosgh.CreateIssueCommentRequest{Body: body}); err != nil {
+		if _, err := client.CreateIssueComment(issue.Number, arungh.CreateIssueCommentRequest{Body: body}); err != nil {
 			return fmt.Errorf("%s: %w", id, err)
 		}
 	}
@@ -1761,8 +1761,8 @@ func runKubernetesRolloutScenario(ctx context.Context, result *ScenarioResult) *
 	}
 	defer os.RemoveAll(filepath.Dir(chartDir))
 
-	deployment := cfg.Release + "-agentos-eval"
-	keepRelease := strings.EqualFold(strings.TrimSpace(os.Getenv("AGENTOS_EVAL_KUBE_KEEP_RELEASE")), "true")
+	deployment := cfg.Release + "-arun-eval"
+	keepRelease := strings.EqualFold(strings.TrimSpace(os.Getenv("ARUN_EVAL_KUBE_KEEP_RELEASE")), "true")
 	defer func() {
 		if !keepRelease {
 			_ = runHelm(ctx, &cfg, "uninstall", cfg.Release, "--wait", "--timeout", "2m")
@@ -1866,18 +1866,18 @@ func runKubernetesRolloutScenario(ctx context.Context, result *ScenarioResult) *
 
 func kubernetesRolloutConfigFromEnv() (kubernetesRolloutConfig, error) {
 	cfg := kubernetesRolloutConfig{
-		Kubeconfig:  strings.TrimSpace(os.Getenv("AGENTOS_EVAL_KUBECONFIG")),
-		Context:     strings.TrimSpace(os.Getenv("AGENTOS_EVAL_KUBE_CONTEXT")),
-		Namespace:   strings.TrimSpace(os.Getenv("AGENTOS_EVAL_KUBE_NAMESPACE")),
-		Release:     strings.TrimSpace(os.Getenv("AGENTOS_EVAL_KUBE_RELEASE")),
-		BaseImage:   strings.TrimSpace(os.Getenv("AGENTOS_EVAL_KUBE_BASE_IMAGE")),
-		TargetImage: strings.TrimSpace(os.Getenv("AGENTOS_EVAL_KUBE_TARGET_IMAGE")),
+		Kubeconfig:  strings.TrimSpace(os.Getenv("ARUN_EVAL_KUBECONFIG")),
+		Context:     strings.TrimSpace(os.Getenv("ARUN_EVAL_KUBE_CONTEXT")),
+		Namespace:   strings.TrimSpace(os.Getenv("ARUN_EVAL_KUBE_NAMESPACE")),
+		Release:     strings.TrimSpace(os.Getenv("ARUN_EVAL_KUBE_RELEASE")),
+		BaseImage:   strings.TrimSpace(os.Getenv("ARUN_EVAL_KUBE_BASE_IMAGE")),
+		TargetImage: strings.TrimSpace(os.Getenv("ARUN_EVAL_KUBE_TARGET_IMAGE")),
 	}
 	var missing []string
 	for name, value := range map[string]string{
-		"AGENTOS_EVAL_KUBECONFIG":     cfg.Kubeconfig,
-		"AGENTOS_EVAL_KUBE_CONTEXT":   cfg.Context,
-		"AGENTOS_EVAL_KUBE_NAMESPACE": cfg.Namespace,
+		"ARUN_EVAL_KUBECONFIG":     cfg.Kubeconfig,
+		"ARUN_EVAL_KUBE_CONTEXT":   cfg.Context,
+		"ARUN_EVAL_KUBE_NAMESPACE": cfg.Namespace,
 	} {
 		if value == "" {
 			missing = append(missing, name)
@@ -1888,7 +1888,7 @@ func kubernetesRolloutConfigFromEnv() (kubernetesRolloutConfig, error) {
 		return cfg, fmt.Errorf("Kubernetes rollout E2E requires explicit %s", strings.Join(missing, ", "))
 	}
 	if cfg.Release == "" {
-		cfg.Release = "agentos-eval-rollout"
+		cfg.Release = "arun-eval-rollout"
 	}
 	if cfg.BaseImage == "" {
 		cfg.BaseImage = "registry.k8s.io/pause:3.9"
@@ -1900,7 +1900,7 @@ func kubernetesRolloutConfigFromEnv() (kubernetesRolloutConfig, error) {
 }
 
 func writeKubernetesEvalChart() (string, error) {
-	root, err := os.MkdirTemp("", "agentos-kubernetes-eval-*")
+	root, err := os.MkdirTemp("", "arun-kubernetes-eval-*")
 	if err != nil {
 		return "", err
 	}
@@ -1910,8 +1910,8 @@ func writeKubernetesEvalChart() (string, error) {
 	}
 	files := map[string]string{
 		filepath.Join(chartDir, "Chart.yaml"): `apiVersion: v2
-name: agentos-rollout-eval
-description: AgentOS disposable rollout eval chart
+name: arun-rollout-eval
+description: ARUN disposable rollout eval chart
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
@@ -1921,20 +1921,20 @@ appVersion: "0.1.0"
 		filepath.Join(chartDir, "templates", "deployment.yaml"): `apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-agentos-eval
+  name: {{ .Release.Name }}-arun-eval
   labels:
-    app.kubernetes.io/name: agentos-rollout-eval
+    app.kubernetes.io/name: arun-rollout-eval
     app.kubernetes.io/instance: {{ .Release.Name }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: agentos-rollout-eval
+      app.kubernetes.io/name: arun-rollout-eval
       app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: agentos-rollout-eval
+        app.kubernetes.io/name: arun-rollout-eval
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
       automountServiceAccountToken: false
@@ -2031,7 +2031,7 @@ func kubernetesEventSnippet(ctx context.Context, cfg *kubernetesRolloutConfig) s
 }
 
 func sanitizeKubernetesOutput(out string) string {
-	for _, key := range []string{"AGENTOS_EVAL_AUTH_COOKIE", "GITHUB_TOKEN", "GH_TOKEN"} {
+	for _, key := range []string{"ARUN_EVAL_AUTH_COOKIE", "GITHUB_TOKEN", "GH_TOKEN"} {
 		value := os.Getenv(key)
 		if value != "" {
 			out = strings.ReplaceAll(out, value, "[redacted]")
@@ -2242,9 +2242,9 @@ func runLiteLLMPresetCheck(ctx context.Context, preset *liteLLMPresetEvalConfig)
 
 func liteLLMPresetSystemPrompt(expected string) string {
 	if expected == "" {
-		return "You are an AgentOS LiteLLM preset health evaluator. Reply with a concise one-line operational readiness response."
+		return "You are an ARUN LiteLLM preset health evaluator. Reply with a concise one-line operational readiness response."
 	}
-	return "You are an AgentOS LiteLLM preset health evaluator. Reply concisely and include the requested marker exactly."
+	return "You are an ARUN LiteLLM preset health evaluator. Reply concisely and include the requested marker exactly."
 }
 
 func liteLLMPresetUserPrompt(expected string) string {
@@ -2255,15 +2255,15 @@ func liteLLMPresetUserPrompt(expected string) string {
 }
 
 func liteLLMPresetEvalConfigFromEnv() ([]liteLLMPresetEvalConfig, error) {
-	if !strings.EqualFold(strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LLM_PRESETS")), "true") {
-		return nil, fmt.Errorf("LiteLLM preset evals require AGENTOS_EVAL_LLM_PRESETS=true")
+	if !strings.EqualFold(strings.TrimSpace(os.Getenv("ARUN_EVAL_LLM_PRESETS")), "true") {
+		return nil, fmt.Errorf("LiteLLM preset evals require ARUN_EVAL_LLM_PRESETS=true")
 	}
-	raw := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LLM_PRESET_MATRIX"))
+	raw := strings.TrimSpace(os.Getenv("ARUN_EVAL_LLM_PRESET_MATRIX"))
 	if raw == "" {
-		raw = strings.TrimSpace(os.Getenv("AGENTOS_LLM_PRESETS"))
+		raw = strings.TrimSpace(os.Getenv("ARUN_LLM_PRESETS"))
 	}
 	if raw == "" {
-		return nil, fmt.Errorf("LiteLLM preset evals require AGENTOS_EVAL_LLM_PRESET_MATRIX or AGENTOS_LLM_PRESETS")
+		return nil, fmt.Errorf("LiteLLM preset evals require ARUN_EVAL_LLM_PRESET_MATRIX or ARUN_LLM_PRESETS")
 	}
 	return liteLLMPresetEvalConfigFromRaw(raw)
 }
@@ -2338,7 +2338,7 @@ func runRealLLMSmokeScenario(ctx context.Context, result *ScenarioResult) *Scena
 		result.FailureReasons = append(result.FailureReasons, err.Error())
 		return result
 	}
-	repo, err := os.MkdirTemp("", "agentos-real-llm-smoke-*")
+	repo, err := os.MkdirTemp("", "arun-real-llm-smoke-*")
 	if err != nil {
 		result.FailureReasons = append(result.FailureReasons, "create disposable repo: "+err.Error())
 		return result
@@ -2351,7 +2351,7 @@ func runRealLLMSmokeScenario(ctx context.Context, result *ScenarioResult) *Scena
 		result.FailureReasons = append(result.FailureReasons, "init disposable repo: "+err.Error())
 		return result
 	}
-	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("# AgentOS Real LLM Smoke\n\nDisposable eval repository.\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("# ARUN Real LLM Smoke\n\nDisposable eval repository.\n"), 0o600); err != nil {
 		result.FailureReasons = append(result.FailureReasons, "seed disposable repo: "+err.Error())
 		return result
 	}
@@ -2368,7 +2368,7 @@ func runRealLLMSmokeScenario(ctx context.Context, result *ScenarioResult) *Scena
 
 	runCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
-	taskText := "Use the docs agent to create AGENTOS_REAL_LLM_SMOKE.md with a short Markdown report. The file must contain the exact phrase AgentOS real LLM smoke passed and a Residual risk section. Do not modify any other files."
+	taskText := "Use the docs agent to create ARUN_REAL_LLM_SMOKE.md with a short Markdown report. The file must contain the exact phrase ARUN real LLM smoke passed and a Residual risk section. Do not modify any other files."
 	plan, err := orch.Plan(runCtx, taskText)
 	if err != nil {
 		result.FailureReasons = append(result.FailureReasons, "plan: "+err.Error())
@@ -2384,10 +2384,10 @@ func runRealLLMSmokeScenario(ctx context.Context, result *ScenarioResult) *Scena
 	plan.Subtasks[0].AgentName = "docs"
 	plan.Subtasks[0].Description = taskText
 	plan.Subtasks[0].QualityGate = &orchestrator.QualityGate{
-		RequiredFiles: []string{"AGENTOS_REAL_LLM_SMOKE.md"},
+		RequiredFiles: []string{"ARUN_REAL_LLM_SMOKE.md"},
 		ContentChecks: []orchestrator.QualityContentCheck{{
-			File:     "AGENTOS_REAL_LLM_SMOKE.md",
-			Contains: []string{"AgentOS real LLM smoke passed", "Residual risk"},
+			File:     "ARUN_REAL_LLM_SMOKE.md",
+			Contains: []string{"ARUN real LLM smoke passed", "Residual risk"},
 		}},
 	}
 	result.Subtasks = len(plan.Subtasks)
@@ -2410,17 +2410,17 @@ func runRealLLMSmokeScenario(ctx context.Context, result *ScenarioResult) *Scena
 			result.QualityGates = append(result.QualityGates, QualityGateCheck{SubtaskID: subtask.SubtaskID, Passed: subtask.QualityGate.Passed})
 		}
 	}
-	artifactPath := filepath.Join(repo, "AGENTOS_REAL_LLM_SMOKE.md")
+	artifactPath := filepath.Join(repo, "ARUN_REAL_LLM_SMOKE.md")
 	_, statErr := os.Stat(artifactPath)
 	artifactExists := statErr == nil
-	result.RequiredFiles = append(result.RequiredFiles, FileCheck{Path: "AGENTOS_REAL_LLM_SMOKE.md", Exists: artifactExists})
+	result.RequiredFiles = append(result.RequiredFiles, FileCheck{Path: "ARUN_REAL_LLM_SMOKE.md", Exists: artifactExists})
 	result.Checks = append(result.Checks,
 		ScenarioCheck{Page: "llm", Action: "subtask execution", Passed: len(executed) > 0 && result.Failures == 0},
 		ScenarioCheck{Page: "llm", Action: "artifact recording", Passed: artifactExists},
 		ScenarioCheck{Page: "llm", Action: "real LLM responses", Passed: client.successfulResponses > 0},
 	)
 	if !artifactExists {
-		result.FailureReasons = append(result.FailureReasons, "missing AGENTOS_REAL_LLM_SMOKE.md")
+		result.FailureReasons = append(result.FailureReasons, "missing ARUN_REAL_LLM_SMOKE.md")
 	}
 	if client.successfulResponses == 0 {
 		result.FailureReasons = append(result.FailureReasons, "real LLM smoke recorded 0 successful LLM responses")
@@ -2440,9 +2440,9 @@ func runRealLLMSmokeScenario(ctx context.Context, result *ScenarioResult) *Scena
 		"promptTokens":        fmt.Sprintf("%d", client.promptTokens),
 		"completionTokens":    fmt.Sprintf("%d", client.completionTokens),
 		"totalTokens":         fmt.Sprintf("%d", client.totalTokens),
-		"costBudget":          strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LLM_COST_BUDGET")),
+		"costBudget":          strings.TrimSpace(os.Getenv("ARUN_EVAL_LLM_COST_BUDGET")),
 		"residualRisk":        "LLM output quality is model-dependent; this smoke only validates a bounded docs artifact flow.",
-		"requiredArtifact":    "AGENTOS_REAL_LLM_SMOKE.md",
+		"requiredArtifact":    "ARUN_REAL_LLM_SMOKE.md",
 		"requiredArtifactSet": fmt.Sprintf("%t", artifactExists),
 		"diff":                gitDiff(ctx, repo),
 	}
@@ -2451,40 +2451,40 @@ func runRealLLMSmokeScenario(ctx context.Context, result *ScenarioResult) *Scena
 
 func realLLMSmokeConfigFromEnv() (realLLMSmokeConfig, error) {
 	var cfg realLLMSmokeConfig
-	if !strings.EqualFold(strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LIVE_LLM")), "true") {
-		return cfg, fmt.Errorf("real LLM smoke requires AGENTOS_EVAL_LIVE_LLM=true")
+	if !strings.EqualFold(strings.TrimSpace(os.Getenv("ARUN_EVAL_LIVE_LLM")), "true") {
+		return cfg, fmt.Errorf("real LLM smoke requires ARUN_EVAL_LIVE_LLM=true")
 	}
 	if strings.TrimSpace(os.Getenv("LITELLM_BASE_URL")) == "" {
 		return cfg, fmt.Errorf("real LLM smoke requires explicit LITELLM_BASE_URL")
 	}
-	cfg.RepoAllowlist = strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LLM_REPO_ALLOWLIST"))
+	cfg.RepoAllowlist = strings.TrimSpace(os.Getenv("ARUN_EVAL_LLM_REPO_ALLOWLIST"))
 	if cfg.RepoAllowlist == "" {
-		return cfg, fmt.Errorf("real LLM smoke requires AGENTOS_EVAL_LLM_REPO_ALLOWLIST containing temp")
+		return cfg, fmt.Errorf("real LLM smoke requires ARUN_EVAL_LLM_REPO_ALLOWLIST containing temp")
 	}
-	timeout := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LLM_TIMEOUT"))
+	timeout := strings.TrimSpace(os.Getenv("ARUN_EVAL_LLM_TIMEOUT"))
 	if timeout == "" {
 		timeout = "2m"
 	}
 	parsedTimeout, err := time.ParseDuration(timeout)
 	if err != nil {
-		return cfg, fmt.Errorf("AGENTOS_EVAL_LLM_TIMEOUT: %w", err)
+		return cfg, fmt.Errorf("ARUN_EVAL_LLM_TIMEOUT: %w", err)
 	}
 	cfg.Timeout = parsedTimeout
 	cfg.MaxTokens = 1024
-	if raw := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LLM_MAX_TOKENS")); raw != "" {
+	if raw := strings.TrimSpace(os.Getenv("ARUN_EVAL_LLM_MAX_TOKENS")); raw != "" {
 		if _, err := fmt.Sscanf(raw, "%d", &cfg.MaxTokens); err != nil {
-			return cfg, fmt.Errorf("AGENTOS_EVAL_LLM_MAX_TOKENS must be an integer")
+			return cfg, fmt.Errorf("ARUN_EVAL_LLM_MAX_TOKENS must be an integer")
 		}
 	}
 	if cfg.MaxTokens <= 0 {
-		return cfg, fmt.Errorf("AGENTOS_EVAL_LLM_MAX_TOKENS must be positive")
+		return cfg, fmt.Errorf("ARUN_EVAL_LLM_MAX_TOKENS must be positive")
 	}
-	cfg.Model = strings.TrimSpace(os.Getenv("AGENTOS_EVAL_LLM_MODEL"))
+	cfg.Model = strings.TrimSpace(os.Getenv("ARUN_EVAL_LLM_MODEL"))
 	if cfg.Model == "" {
-		cfg.Model = strings.TrimSpace(os.Getenv("AGENTOS_MODEL_CODER"))
+		cfg.Model = strings.TrimSpace(os.Getenv("ARUN_MODEL_CODER"))
 	}
 	if cfg.Model == "" {
-		return cfg, fmt.Errorf("real LLM smoke requires AGENTOS_EVAL_LLM_MODEL or AGENTOS_MODEL_CODER")
+		return cfg, fmt.Errorf("real LLM smoke requires ARUN_EVAL_LLM_MODEL or ARUN_MODEL_CODER")
 	}
 	return cfg, nil
 }
@@ -2496,7 +2496,7 @@ func realLLMRepoAllowed(repo, allowlist string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("disposable repo %q is not allowed by AGENTOS_EVAL_LLM_REPO_ALLOWLIST", repo)
+	return fmt.Errorf("disposable repo %q is not allowed by ARUN_EVAL_LLM_REPO_ALLOWLIST", repo)
 }
 
 type realLLMSmokeAgent struct {
@@ -2509,7 +2509,7 @@ func (a *realLLMSmokeAgent) Plan(ctx *runtime.RunContext) (*runtime.Plan, error)
 	resp, err := a.llm.Chat(ctx.Context, llm.ChatRequest{
 		Model: a.llm.ModelName(),
 		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: "You are a bounded AgentOS smoke-test planner. Return a concise plan summary for the requested documentation artifact."},
+			{Role: llm.RoleSystem, Content: "You are a bounded ARUN smoke-test planner. Return a concise plan summary for the requested documentation artifact."},
 			{Role: llm.RoleUser, Content: ctx.Task.Description},
 		},
 		Temperature: 0.1,
@@ -2528,8 +2528,8 @@ func (a *realLLMSmokeAgent) Plan(ctx *runtime.RunContext) (*runtime.Plan, error)
 		Steps: []runtime.Step{{
 			StepNumber:  1,
 			Action:      "edit",
-			Description: "Create AGENTOS_REAL_LLM_SMOKE.md with smoke status and residual risk.",
-			TargetFiles: []string{"AGENTOS_REAL_LLM_SMOKE.md"},
+			Description: "Create ARUN_REAL_LLM_SMOKE.md with smoke status and residual risk.",
+			TargetFiles: []string{"ARUN_REAL_LLM_SMOKE.md"},
 			Reasoning:   "Bounded smoke scenario requires a deterministic artifact while still exercising live LLM planning.",
 		}},
 	}, nil
@@ -2537,16 +2537,16 @@ func (a *realLLMSmokeAgent) Plan(ctx *runtime.RunContext) (*runtime.Plan, error)
 
 func (a *realLLMSmokeAgent) Execute(ctx *runtime.RunContext, plan *runtime.Plan) (*runtime.ExecutionResult, error) {
 	started := time.Now()
-	content := "# AgentOS Real LLM Smoke\n\nAgentOS real LLM smoke passed.\n\n## Residual risk\n\nLLM behavior remains model-dependent; this smoke validates a bounded docs artifact flow.\n"
+	content := "# ARUN Real LLM Smoke\n\nARUN real LLM smoke passed.\n\n## Residual risk\n\nLLM behavior remains model-dependent; this smoke validates a bounded docs artifact flow.\n"
 	tool, ok := ctx.Registry.Get("write_file")
 	if !ok {
 		return &runtime.ExecutionResult{Success: false, Error: "write_file tool not found"}, fmt.Errorf("write_file tool not found")
 	}
-	output := tool.Run(ctx.Context, tools.ToolInput{"file": "AGENTOS_REAL_LLM_SMOKE.md", "content": content})
+	output := tool.Run(ctx.Context, tools.ToolInput{"file": "ARUN_REAL_LLM_SMOKE.md", "content": content})
 	step := runtime.StepResult{StepNumber: 1, Action: "edit", Duration: time.Since(started)}
 	if output.Success {
 		step.Success = true
-		step.Output = "created AGENTOS_REAL_LLM_SMOKE.md"
+		step.Output = "created ARUN_REAL_LLM_SMOKE.md"
 		return &runtime.ExecutionResult{
 			StepResults: []runtime.StepResult{step},
 			Diff:        gitDiff(ctx.Context, ctx.Workspace.RootDir()),
@@ -2562,7 +2562,7 @@ func (a *realLLMSmokeAgent) Review(ctx *runtime.RunContext, result *runtime.Exec
 	resp, err := a.llm.Chat(ctx.Context, llm.ChatRequest{
 		Model: a.llm.ModelName(),
 		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: "You are reviewing a bounded AgentOS real LLM smoke artifact. Reply with a concise approval summary."},
+			{Role: llm.RoleSystem, Content: "You are reviewing a bounded ARUN real LLM smoke artifact. Reply with a concise approval summary."},
 			{Role: llm.RoleUser, Content: result.Diff},
 		},
 		Temperature: 0.1,
@@ -2615,31 +2615,31 @@ type notificationEvalDelivery struct {
 func runScheduleNotificationScenario(ctx context.Context, liveURL string, result *ScenarioResult) *ScenarioResult {
 	base := strings.TrimRight(strings.TrimSpace(liveURL), "/")
 	if base == "" {
-		base = strings.TrimRight(os.Getenv("AGENTOS_EVAL_LIVE_URL"), "/")
+		base = strings.TrimRight(os.Getenv("ARUN_EVAL_LIVE_URL"), "/")
 	}
 	if base == "" {
-		result.FailureReasons = append(result.FailureReasons, "live URL is required via --live-url or AGENTOS_EVAL_LIVE_URL")
+		result.FailureReasons = append(result.FailureReasons, "live URL is required via --live-url or ARUN_EVAL_LIVE_URL")
 		return result
 	}
 	if !authCookieConfigured() {
-		result.FailureReasons = append(result.FailureReasons, "authenticated API session cookie is required via AGENTOS_EVAL_AUTH_COOKIE")
+		result.FailureReasons = append(result.FailureReasons, "authenticated API session cookie is required via ARUN_EVAL_AUTH_COOKIE")
 		return result
 	}
-	repo := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_SCHEDULE_REPO"))
+	repo := strings.TrimSpace(os.Getenv("ARUN_EVAL_SCHEDULE_REPO"))
 	if repo == "" {
 		repo = "."
 	}
-	branch := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_SCHEDULE_BASE_BRANCH"))
+	branch := strings.TrimSpace(os.Getenv("ARUN_EVAL_SCHEDULE_BASE_BRANCH"))
 	if branch == "" {
 		branch = "main"
 	}
 	client := &http.Client{Timeout: 30 * time.Second}
-	name := "AgentOS Eval Schedule Notification " + time.Now().UTC().Format("20060102T150405")
+	name := "ARUN Eval Schedule Notification " + time.Now().UTC().Format("20060102T150405")
 	payload := map[string]any{
 		"name":              name,
 		"repo":              repo,
 		"baseBranch":        branch,
-		"task":              "AgentOS schedule notification E2E smoke. Produce a short no-op report. Do not modify files.",
+		"task":              "ARUN schedule notification E2E smoke. Produce a short no-op report. Do not modify files.",
 		"agents":            []string{"reporter"},
 		"strategy":          "sequential",
 		"schedule":          map[string]any{"type": "interval", "interval": "24h", "timezone": "UTC"},
@@ -2801,23 +2801,23 @@ type storageAuditEvalEvent struct {
 func runStorageCleanupScenario(ctx context.Context, liveURL string, result *ScenarioResult) *ScenarioResult {
 	base := strings.TrimRight(strings.TrimSpace(liveURL), "/")
 	if base == "" {
-		base = strings.TrimRight(os.Getenv("AGENTOS_EVAL_LIVE_URL"), "/")
+		base = strings.TrimRight(os.Getenv("ARUN_EVAL_LIVE_URL"), "/")
 	}
 	if base == "" {
-		result.FailureReasons = append(result.FailureReasons, "live URL is required via --live-url or AGENTOS_EVAL_LIVE_URL")
+		result.FailureReasons = append(result.FailureReasons, "live URL is required via --live-url or ARUN_EVAL_LIVE_URL")
 		return result
 	}
 	if !authCookieConfigured() {
-		result.FailureReasons = append(result.FailureReasons, "authenticated API session cookie is required via AGENTOS_EVAL_AUTH_COOKIE")
+		result.FailureReasons = append(result.FailureReasons, "authenticated API session cookie is required via ARUN_EVAL_AUTH_COOKIE")
 		return result
 	}
-	repo := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_STORAGE_REPO"))
+	repo := strings.TrimSpace(os.Getenv("ARUN_EVAL_STORAGE_REPO"))
 	if repo == "" {
-		repo = "agentos-evals/storage-cleanup"
+		repo = "arun-evals/storage-cleanup"
 	}
-	branch := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_STORAGE_BASE_BRANCH"))
+	branch := strings.TrimSpace(os.Getenv("ARUN_EVAL_STORAGE_BASE_BRANCH"))
 	if branch == "" {
-		branch = "agentos-eval-storage-cleanup"
+		branch = "arun-eval-storage-cleanup"
 	}
 	policy := map[string]any{
 		"repo":                     repo,
@@ -3009,7 +3009,7 @@ func doJSON(client *http.Client, req *http.Request, into any) error {
 }
 
 func addAuthHeaders(req *http.Request) {
-	if cookie := strings.TrimSpace(os.Getenv("AGENTOS_EVAL_AUTH_COOKIE")); cookie != "" {
+	if cookie := strings.TrimSpace(os.Getenv("ARUN_EVAL_AUTH_COOKIE")); cookie != "" {
 		req.Header.Set("Cookie", cookie)
 	}
 }
@@ -3143,7 +3143,7 @@ func newScenarioOrchestrator(repo string, scenario *Scenario) (*orchestrator.Orc
 	if err != nil {
 		return nil, err
 	}
-	if err := os.Setenv("AGENTOS_HOME", home); err != nil {
+	if err := os.Setenv("ARUN_HOME", home); err != nil {
 		return nil, err
 	}
 	client := llm.NewMockLLMClient(nil)
@@ -3166,10 +3166,10 @@ func initRepo(repo string) error {
 	if err := runCmd(context.Background(), repo, "git", "init", "-b", "main"); err != nil {
 		return err
 	}
-	if err := runCmd(context.Background(), repo, "git", "config", "user.email", "agentos-evals@example.invalid"); err != nil {
+	if err := runCmd(context.Background(), repo, "git", "config", "user.email", "arun-evals@example.invalid"); err != nil {
 		return err
 	}
-	return runCmd(context.Background(), repo, "git", "config", "user.name", "AgentOS Evals")
+	return runCmd(context.Background(), repo, "git", "config", "user.name", "ARUN Evals")
 }
 
 func runCmd(ctx context.Context, dir, name string, args ...string) error {

@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/kazyamaz200/agentos/internal/apphome"
+	"github.com/hakobune8/arun/internal/apphome"
 )
 
 // Sandbox defines the interface for execution isolation.
@@ -90,7 +90,7 @@ func (s *LocalSandbox) Type() string { return "local" }
 // RootDir returns the sandbox's root directory path.
 func (s *LocalSandbox) RootDir() string { return s.rootDir }
 
-// PrepareRun creates the run directory structure under AGENTOS_HOME/runs for
+// PrepareRun creates the run directory structure under ARUN_HOME/runs for
 // the given taskID.
 func (s *LocalSandbox) PrepareRun(taskID string) error {
 	s.TaskID = taskID

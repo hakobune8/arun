@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ package task
 import (
 	"fmt"
 
-	gh "github.com/kazyamaz200/agentos/internal/github"
+	gh "github.com/hakobune8/arun/internal/github"
 )
 
 // FromGitHubIssue creates a Task from a GitHub issue and the target

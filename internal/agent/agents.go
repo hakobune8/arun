@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@
 package agent
 
 import (
-	"github.com/kazyamaz200/agentos/internal/llm"
-	"github.com/kazyamaz200/agentos/internal/runtime"
+	"github.com/hakobune8/arun/internal/llm"
+	"github.com/hakobune8/arun/internal/runtime"
 )
 
 // DefaultRegistry returns a registry pre-populated with all built-in agents.
@@ -28,7 +28,7 @@ func DefaultRegistry() *Registry {
 		Name:          "go-backend",
 		Description:   "Go backend coding agent — plans, codes, tests, and lints Go projects while preserving repository structure",
 		Version:       "1.0.0",
-		Author:        "AgentOS",
+		Author:        "ARUN",
 		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git", "test"},
 		Domains:       []string{"backend", "go", "api", "service"},
 		TriggerKeywords: []string{
@@ -53,7 +53,7 @@ func DefaultRegistry() *Registry {
 		Name:          "frontend",
 		Description:   "Frontend application agent — implements UI, layout, responsive, accessibility, and frontend validation work",
 		Version:       "1.0.0",
-		Author:        "AgentOS",
+		Author:        "ARUN",
 		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git", "test"},
 		Domains:       []string{"frontend", "ui", "web-app", "responsive", "accessibility", "visual-validation"},
 		TriggerKeywords: []string{
@@ -78,7 +78,7 @@ func DefaultRegistry() *Registry {
 		Name:          "reviewer",
 		Description:   "Code review agent — reviews diffs for correctness, tests, security, maintainability, and release readiness",
 		Version:       "1.0.0",
-		Author:        "AgentOS",
+		Author:        "ARUN",
 		RequiredTools: []string{"read_file", "git"},
 		Domains:       []string{"review", "quality", "release-readiness"},
 		TriggerKeywords: []string{
@@ -104,7 +104,7 @@ func DefaultRegistry() *Registry {
 		Name:          "ci-fixer",
 		Description:   "CI fix agent — analyzes CI failures and applies conventional GitHub Actions and validation fixes",
 		Version:       "1.0.0",
-		Author:        "AgentOS",
+		Author:        "ARUN",
 		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git", "test"},
 		Domains:       []string{"ci", "github-actions", "validation"},
 		TriggerKeywords: []string{
@@ -130,13 +130,13 @@ func DefaultRegistry() *Registry {
 		Name:          "docs",
 		Description:   "Documentation agent — generates and updates practical repository documentation that matches existing style",
 		Version:       "1.0.0",
-		Author:        "AgentOS",
+		Author:        "ARUN",
 		RequiredTools: []string{"read_file", "write_file", "search", "git"},
 		Domains:       []string{"documentation", "developer-experience", "release-notes"},
 		TriggerKeywords: []string{
 			"docs", "documentation", "readme", "guide", "manual", "quickstart", "changelog",
 		},
-		TriggerFiles:     []string{"README.md", "docs/", "CHANGELOG.md", ".agentos/config.yaml"},
+		TriggerFiles:     []string{"README.md", "docs/", "CHANGELOG.md", ".arun/config.yaml"},
 		RecommendedAfter: []string{"go-backend", "release-manager"},
 		ArchitectureGuidance: []string{
 			"Inspect README and docs structure before adding new sections or files.",
@@ -156,7 +156,7 @@ func DefaultRegistry() *Registry {
 		Name:          "security",
 		Description:   "Security agent — reviews dependencies, auth/session handling, secrets, and security-sensitive diffs",
 		Version:       "1.0.0",
-		Author:        "AgentOS",
+		Author:        "ARUN",
 		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git", "test"},
 		Domains:       []string{"security", "auth", "secrets", "dependencies"},
 		TriggerKeywords: []string{
@@ -182,7 +182,7 @@ func DefaultRegistry() *Registry {
 		Name:          "release-manager",
 		Description:   "Release manager agent — prepares changelogs, version notes, release checklists, and readiness validation",
 		Version:       "1.0.0",
-		Author:        "AgentOS",
+		Author:        "ARUN",
 		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git"},
 		Domains:       []string{"release", "deployment", "helm", "kubernetes", "docker"},
 		TriggerKeywords: []string{
@@ -208,7 +208,7 @@ func DefaultRegistry() *Registry {
 		Name:          "dependency-updater",
 		Description:   "Dependency updater agent — updates Go modules, package locks, and GitHub Actions versions with compatibility checks",
 		Version:       "1.0.0",
-		Author:        "AgentOS",
+		Author:        "ARUN",
 		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git", "test"},
 		Domains:       []string{"dependencies", "go-modules", "package-locks", "github-actions"},
 		TriggerKeywords: []string{
@@ -234,7 +234,7 @@ func DefaultRegistry() *Registry {
 		Name:          "qa",
 		Description:   "QA agent — adds scenario tests, smoke checks, regression coverage, and manual verification notes",
 		Version:       "1.0.0",
-		Author:        "AgentOS",
+		Author:        "ARUN",
 		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git", "test"},
 		Domains:       []string{"qa", "tests", "smoke", "regression", "frontend-validation"},
 		TriggerKeywords: []string{
@@ -260,7 +260,7 @@ func DefaultRegistry() *Registry {
 		Name:          "docker",
 		Description:   "Docker ops agent — maintains Dockerfiles, image builds, .dockerignore, runtime config, and container safety defaults",
 		Version:       "1.0.0",
-		Author:        "AgentOS",
+		Author:        "ARUN",
 		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git", "test"},
 		Domains:       []string{"docker", "containers", "images", "compose", "container-security"},
 		TriggerKeywords: []string{
@@ -286,7 +286,7 @@ func DefaultRegistry() *Registry {
 		Name:          "helm",
 		Description:   "Helm ops agent — maintains charts, templates, values, schema, chart linting, and release-safe Helm packaging",
 		Version:       "1.0.0",
-		Author:        "AgentOS",
+		Author:        "ARUN",
 		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git", "test"},
 		Domains:       []string{"helm", "charts", "templates", "values", "kubernetes-packaging"},
 		TriggerKeywords: []string{
@@ -312,7 +312,7 @@ func DefaultRegistry() *Registry {
 		Name:          "kubernetes",
 		Description:   "Kubernetes ops agent — maintains manifests, deployments, services, ingress, probes, resources, rollout checks, and cluster-safe defaults",
 		Version:       "1.0.0",
-		Author:        "AgentOS",
+		Author:        "ARUN",
 		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git", "test"},
 		Domains:       []string{"kubernetes", "k8s", "manifests", "deployments", "services", "ingress", "rollouts"},
 		TriggerKeywords: []string{
@@ -338,7 +338,7 @@ func DefaultRegistry() *Registry {
 		Name:          "devops",
 		Description:   "DevOps umbrella agent — coordinates Docker, Helm, Kubernetes, deployment debugging, and release hardening tasks",
 		Version:       "1.0.0",
-		Author:        "AgentOS",
+		Author:        "ARUN",
 		RequiredTools: []string{"read_file", "write_file", "search", "shell", "git", "test"},
 		Domains:       []string{"devops", "ops", "deployment", "docker", "helm", "kubernetes", "release-hardening"},
 		TriggerKeywords: []string{
@@ -364,13 +364,13 @@ func DefaultRegistry() *Registry {
 		Name:          "analyst",
 		Description:   "Analyst agent — investigates logs, runs, artifacts, GitHub context, and repository evidence to identify findings and next actions",
 		Version:       "1.0.0",
-		Author:        "AgentOS",
+		Author:        "ARUN",
 		RequiredTools: []string{"read_file", "search", "shell", "git"},
 		Domains:       []string{"analysis", "investigation", "logs", "artifacts", "github", "observability", "root-cause"},
 		TriggerKeywords: []string{
 			"analyze", "investigate", "investigation", "root cause", "rca", "logs", "artifacts", "run history", "failure pattern", "trend", "evidence", "findings",
 		},
-		TriggerFiles: []string{"logs/", "artifacts/", ".github/workflows/", "README.md", "docs/", "CHANGELOG.md", ".agentos/"},
+		TriggerFiles: []string{"logs/", "artifacts/", ".github/workflows/", "README.md", "docs/", "CHANGELOG.md", ".arun/"},
 		ArchitectureGuidance: []string{
 			"Gather evidence from run records, artifacts, logs, GitHub issues or PRs, repository files, memory, and guidelines before drawing conclusions.",
 			"Separate observed facts from inferences, include confidence level, and call out missing or unavailable sources explicitly.",
@@ -389,13 +389,13 @@ func DefaultRegistry() *Registry {
 		Name:          "reporter",
 		Description:   "Reporter agent — turns findings into structured Markdown reports, stakeholder summaries, and optional GitHub-ready updates",
 		Version:       "1.0.0",
-		Author:        "AgentOS",
+		Author:        "ARUN",
 		RequiredTools: []string{"read_file", "write_file", "search", "git"},
 		Domains:       []string{"reporting", "markdown", "incident-report", "release-readiness", "repository-health", "stakeholder-summary"},
 		TriggerKeywords: []string{
 			"report", "summary", "summarize", "stakeholder", "incident report", "release readiness", "repository health", "findings", "recommendations", "write-up",
 		},
-		TriggerFiles:     []string{"README.md", "docs/", "CHANGELOG.md", "reports/", ".agentos/"},
+		TriggerFiles:     []string{"README.md", "docs/", "CHANGELOG.md", "reports/", ".arun/"},
 		RecommendedAfter: []string{"analyst", "security", "qa", "release-manager"},
 		ArchitectureGuidance: []string{
 			"Use the requested output language and repository templates when provided, preserving existing Markdown and documentation conventions.",

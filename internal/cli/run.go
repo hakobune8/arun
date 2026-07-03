@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package cli implements the command-line interface commands for AgentOS.
+// Package cli implements the command-line interface commands for ARUN.
 package cli
 
 import (
@@ -21,15 +21,15 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/kazyamaz200/agentos/internal/agent"
-	"github.com/kazyamaz200/agentos/internal/apphome"
-	"github.com/kazyamaz200/agentos/internal/factory"
-	agentosgh "github.com/kazyamaz200/agentos/internal/github"
-	"github.com/kazyamaz200/agentos/internal/llm"
-	"github.com/kazyamaz200/agentos/internal/profile"
-	"github.com/kazyamaz200/agentos/internal/runtime"
-	"github.com/kazyamaz200/agentos/internal/sandbox"
-	"github.com/kazyamaz200/agentos/internal/task"
+	"github.com/hakobune8/arun/internal/agent"
+	"github.com/hakobune8/arun/internal/apphome"
+	"github.com/hakobune8/arun/internal/factory"
+	arungh "github.com/hakobune8/arun/internal/github"
+	"github.com/hakobune8/arun/internal/llm"
+	"github.com/hakobune8/arun/internal/profile"
+	"github.com/hakobune8/arun/internal/runtime"
+	"github.com/hakobune8/arun/internal/sandbox"
+	"github.com/hakobune8/arun/internal/task"
 	"github.com/spf13/cobra"
 )
 
@@ -47,13 +47,13 @@ var (
 var runCmd = &cobra.Command{
 	Use:   "run --task <task.yaml> (--profile <profile.yaml> | --definition <definition.yaml>)",
 	Short: "Run a coding task",
-	Long: `Run a coding task with AgentOS.
+	Long: `Run a coding task with ARUN.
 Reads a task YAML and profile or definition YAML, plans the implementation,
 executes the plan against the target repository, and produces a patch.
 
 Example:
-  agentos run --task examples/task.issue.yaml --profile profiles/go_backend.yaml
-  agentos run --task examples/task.issue.yaml --definition definitions/go-backend.yaml`,
+  arun run --task examples/task.issue.yaml --profile profiles/go_backend.yaml
+  arun run --task examples/task.issue.yaml --definition definitions/go-backend.yaml`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runTask(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -157,8 +157,8 @@ func createPRFromRun(tk *task.Task) error {
 		prBody = tk.Description
 	}
 
-	client := agentosgh.NewClient(owner, name)
-	pr, err := client.CreatePR(agentosgh.CreatePRRequest{
+	client := arungh.NewClient(owner, name)
+	pr, err := client.CreatePR(arungh.CreatePRRequest{
 		Title: tk.Title,
 		Body:  prBody,
 		Head:  tk.Branch,

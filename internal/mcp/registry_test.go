@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ package mcp
 import (
 	"testing"
 
-	"github.com/kazyamaz200/agentos/internal/tools"
+	"github.com/hakobune8/arun/internal/tools"
 )
 
 func TestToolAdapter_Name(t *testing.T) {

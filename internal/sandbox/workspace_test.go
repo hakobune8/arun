@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -76,7 +76,7 @@ func TestWorkspace_RunPath(t *testing.T) {
 
 func TestWorkspace_PrepareRun(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("AGENTOS_HOME", home)
+	t.Setenv("ARUN_HOME", home)
 	ws := NewWorkspace(t.TempDir())
 	err := ws.PrepareRun("task-42")
 	if err != nil {

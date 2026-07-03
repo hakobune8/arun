@@ -211,7 +211,7 @@ func LoadRepositoryDirectory(ctx context.Context, store *RepositoryStore, repoPa
 	if store == nil {
 		return nil, fmt.Errorf("store is required")
 	}
-	dir := filepath.Join(repoPath, ".agentos", "guidelines")
+	dir := filepath.Join(repoPath, ".arun", "guidelines")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -242,7 +242,7 @@ func LoadRepositoryDirectory(ctx context.Context, store *RepositoryStore, repoPa
 			guidelines[i].Repo = repo
 			guidelines[i].Branch = branch
 			guidelines[i].Source = "repository"
-			guidelines[i].Path = filepath.ToSlash(filepath.Join(".agentos", "guidelines", entry.Name()))
+			guidelines[i].Path = filepath.ToSlash(filepath.Join(".arun", "guidelines", entry.Name()))
 			if strings.TrimSpace(guidelines[i].ID) == "" {
 				guidelines[i].ID = repositoryGuidelineID(guidelines[i].Repo, guidelines[i].Branch, guidelines[i].Path, guidelines[i].Title)
 			}

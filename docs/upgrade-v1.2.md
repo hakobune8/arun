@@ -24,13 +24,13 @@ implementation, and review.
 
 ## Repository-Defined Agents
 
-Target repositories can provide custom AgentOS profiles under:
+Target repositories can provide custom ARUN profiles under:
 
 ```text
-.agentos/agents/*.yaml
+.arun/agents/*.yaml
 ```
 
-The Web UI can load these profiles from the selected repository. AgentOS
+The Web UI can load these profiles from the selected repository. ARUN
 validates custom agents before use, rejects attempts to override built-in agent
 names, and persists selected definitions on the orchestration record for
 reproducibility.
@@ -47,7 +47,7 @@ preference, and variables.
 Repository-specific templates live under:
 
 ```text
-.agentos/scenarios/*.yaml
+.arun/scenarios/*.yaml
 ```
 
 The New Orchestrate form can preview and apply templates before starting a run.
@@ -62,7 +62,7 @@ sources:
 - Repository memory stores approved lessons by repository and branch. Completed
   runs can propose pending memory for human approval before future reuse.
 - Repository guidelines store branch-scoped rules from the Web UI and load
-  `.agentos/guidelines/*.md`, `*.yaml`, and `*.yml` from target repositories
+  `.arun/guidelines/*.md`, `*.yaml`, and `*.yml` from target repositories
   during planning.
 - Repository context search spans memory, guidelines, orchestration runs, run
   artifacts, GitHub artifacts, and code/files for the selected repository and
@@ -104,7 +104,7 @@ GitHub OAuth sessions can protect work-triggering APIs, while repository clone
 and write operations use server-side GitHub credentials or GitHub App
 installation tokens.
 
-GitHub-to-AgentOS webhook delivery is still not required for v1.2.0 unless a
+GitHub-to-ARUN webhook delivery is still not required for v1.2.0 unless a
 later release task changes this before tagging. The `on_pr_merge` close policy
 remains recorded for conservative manual follow-up; automatic PR merge
 detection remains deferred.
@@ -117,14 +117,14 @@ orchestration records survive pod restarts:
 
 ```bash
 helm repo update
-helm upgrade --install agentos agentos/agentos \
-  --namespace agentos \
+helm upgrade --install arun arun/arun \
+  --namespace arun \
   --set image.tag=v1.2.0 \
   --set env.LITELLM_BASE_URL=http://litellm:4000
 ```
 
 The v1.2.0 chart defaults `image.tag` to `v1.2.0`. Before publishing, confirm
-that both `version` and `appVersion` in `charts/agentos/Chart.yaml` still match
+that both `version` and `appVersion` in `charts/arun/Chart.yaml` still match
 the intended release so the chart release workflow can publish a new immutable
 chart version.
 
@@ -134,8 +134,8 @@ chart version.
 - Verify README feature summaries match the final agent registry and Web UI.
 - Verify the README screenshot shows the current React/Tailwind Web UI rather
   than the legacy static HTML UI.
-- Verify `charts/agentos/Chart.yaml` has the final release `version` and
-  `appVersion`, and `charts/agentos/values.yaml` defaults `image.tag` to the
+- Verify `charts/arun/Chart.yaml` has the final release `version` and
+  `appVersion`, and `charts/arun/values.yaml` defaults `image.tag` to the
   final release image tag.
 - Verify `docs/deployment.md` and README install examples either rely on the
   chart default image tag or explicitly reference the final v1.2.0 image tag.

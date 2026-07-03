@@ -1,25 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "agentos.fullname" . }}
+  name: {{ include "arun.fullname" . }}
   labels:
-    {{- include "agentos.labels" . | nindent 4 }}
+    {{- include "arun.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "agentos.selectorLabels" . | nindent 6 }}
+      {{- include "arun.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "agentos.selectorLabels" . | nindent 8 }}
+        {{- include "arun.selectorLabels" . | nindent 8 }}
     spec:
       {{- $podSecurityContext := default dict (get .Values "podSecurityContext") }}
       {{- $securityContext := default dict (get .Values "securityContext") }}
       {{- $capabilities := default dict (get $securityContext "capabilities") }}
       {{- $env := default dict (get .Values "env") }}
       {{- $secrets := default dict (get .Values "secrets") }}
-      {{- $secretName := default (include "agentos.fullname" .) (get $secrets "existingSecret") }}
+      {{- $secretName := default (include "arun.fullname" .) (get $secrets "existingSecret") }}
       securityContext:
         fsGroup: {{ default 101 (get $podSecurityContext "fsGroup") }}
         runAsGroup: {{ default 101 (get $podSecurityContext "runAsGroup") }}
@@ -38,7 +38,7 @@ spec:
           args:
             - serve
             - --port
-            - "{{ .Values.env.AGENTOS_PORT }}"
+            - "{{ .Values.env.ARUN_PORT }}"
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
@@ -59,7 +59,7 @@ spec:
           {{- end }}
           env:
             - name: HOME
-              value: "/home/agentos"
+              value: "/home/arun"
             - name: LITELLM_BASE_URL
               value: "{{ .Values.env.LITELLM_BASE_URL }}"
             - name: LITELLM_API_KEY
@@ -68,20 +68,22 @@ spec:
                   name: {{ $secretName }}
                   key: LITELLM_API_KEY
                   optional: true
-            - name: AGENTOS_MODEL_CODER
-              value: "{{ .Values.env.AGENTOS_MODEL_CODER }}"
-            - name: AGENTOS_LLM_DEFAULT_PRESET
+            - name: ARUN_MODEL_CODER
+              value: "{{ .Values.env.ARUN_MODEL_CODER }}"
+            - name: ARUN_LLM_DEFAULT_PRESET
               value: "{{ .Values.llm.defaultPreset }}"
-            - name: AGENTOS_LLM_PRESETS
+            - name: ARUN_LLM_PRESETS
               value: {{ toJson .Values.llm.presets | quote }}
-            - name: AGENTOS_HOME
-              value: "{{ default "/home/agentos/.agentos" (get $env "AGENTOS_HOME") }}"
-            - name: AGENTOS_PUBLIC_URL
-              value: "{{ get $env "AGENTOS_PUBLIC_URL" }}"
-            - name: AGENTOS_ADMIN_USERS
-              value: "{{ get $env "AGENTOS_ADMIN_USERS" }}"
-            - name: AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT
-              value: "{{ default "10m" (get $env "AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT") }}"
+            - name: ARUN_HOME
+              value: "{{ default "/home/arun/.arun" (get $env "ARUN_HOME") }}"
+            - name: ARUN_PUBLIC_URL
+              value: "{{ get $env "ARUN_PUBLIC_URL" }}"
+            - name: ARUN_ADMIN_USERS
+              value: "{{ get $env "ARUN_ADMIN_USERS" }}"
+            - name: ARUN_ORCHESTRATE_SUBTASK_TIMEOUT
+              value: "{{ default "10m" (get $env "ARUN_ORCHESTRATE_SUBTASK_TIMEOUT") }}"
+            - name: ARUN_ORCHESTRATE_PLAN_TIMEOUT
+              value: "{{ default "90s" (get $env "ARUN_ORCHESTRATE_PLAN_TIMEOUT") }}"
             - name: QDRANT_URL
               value: "{{ .Values.env.QDRANT_URL }}"
             - name: QDRANT_API_KEY
@@ -104,7 +106,7 @@ spec:
                   optional: true
             - name: GITHUB_APP_PRIVATE_KEY_FILE
               value: "{{ .Values.env.GITHUB_APP_PRIVATE_KEY_FILE }}"
-            - name: AGENTOS_AUTH_REQUIRED
+            - name: ARUN_AUTH_REQUIRED
               value: "{{ .Values.auth.required }}"
             - name: GITHUB_OAUTH_CLIENT_ID
               value: "{{ .Values.auth.github.clientId }}"
@@ -122,22 +124,22 @@ spec:
                   name: {{ $secretName }}
                   key: GITHUB_OAUTH_CLIENT_SECRET
                   optional: true
-            - name: AGENTOS_SESSION_SECRET
+            - name: ARUN_SESSION_SECRET
               valueFrom:
                 secretKeyRef:
                   name: {{ $secretName }}
-                  key: AGENTOS_SESSION_SECRET
+                  key: ARUN_SESSION_SECRET
                   optional: true
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - name: runs
-              mountPath: /home/agentos/.agentos
+              mountPath: /home/arun/.arun
       volumes:
         - name: runs
           {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ include "agentos.fullname" . }}
+            claimName: {{ include "arun.fullname" . }}
           {{- else }}
           emptyDir: {}
           {{- end }}

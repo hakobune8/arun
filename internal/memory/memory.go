@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,9 +22,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/kazyamaz200/agentos/internal/apphome"
-	"github.com/kazyamaz200/agentos/internal/embedding"
-	"github.com/kazyamaz200/agentos/internal/vector"
+	"github.com/hakobune8/arun/internal/apphome"
+	"github.com/hakobune8/arun/internal/embedding"
+	"github.com/hakobune8/arun/internal/vector"
 )
 
 // Entry represents a single memory entry with content, type, and metadata.

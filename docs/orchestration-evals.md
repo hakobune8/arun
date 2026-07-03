@@ -1,6 +1,6 @@
 # Orchestration Evals
 
-AgentOS includes a repeatable orchestration eval suite for v1.4 release
+ARUN includes a repeatable orchestration eval suite for v1.4 release
 regression checks.
 
 ## Deterministic Suite
@@ -9,7 +9,7 @@ The default suite runs without external LLM, GitHub, Kubernetes, or staging
 secrets:
 
 ```sh
-agentos evals --format markdown --output .agentos/evals/orchestration-report.md
+arun evals --format markdown --output .arun/evals/orchestration-report.md
 ```
 
 It validates:
@@ -27,16 +27,16 @@ It validates:
 Run a single scenario:
 
 ```sh
-agentos evals --scenario empty-go-service-bootstrap --format json --output -
+arun evals --scenario empty-go-service-bootstrap --format json --output -
 ```
 
 Run the three-sprint scrum simulation:
 
 ```sh
-agentos evals \
+arun evals \
   --scenario three-sprint-agile-scrum \
   --format markdown \
-  --output .agentos/evals/three-sprint-scrum-report.md
+  --output .arun/evals/three-sprint-scrum-report.md
 ```
 
 The scrum scenario is deterministic by default. It models three iterations with
@@ -44,10 +44,10 @@ backlog refinement, sprint planning, execution, QA, review, reporting,
 retrospective notes, and next-sprint planning. The report includes
 sprint-by-sprint planned work, completed work, carried work, blockers, stage
 checks, required reports, and functional coverage. Set
-`AGENTOS_EVAL_SCRUM_LIVE=true` only when live GitHub and LiteLLM preset
+`ARUN_EVAL_SCRUM_LIVE=true` only when live GitHub and LiteLLM preset
 configuration is ready; in that mode the scenario makes missing
-`AGENTOS_EVAL_GITHUB_REPO` and `AGENTOS_EVAL_LLM_PRESET_MATRIX` /
-`AGENTOS_LLM_PRESETS` settings fail the run.
+`ARUN_EVAL_GITHUB_REPO` and `ARUN_EVAL_LLM_PRESET_MATRIX` /
+`ARUN_LLM_PRESETS` settings fail the run.
 
 ## Functional Coverage
 
@@ -67,11 +67,11 @@ Live smoke checks are opt-in because they require a reachable deployment and
 environment-specific auth/network behavior:
 
 ```sh
-agentos evals \
+arun evals \
   --live \
-  --live-url https://agentos.nakanoshima.hakobune8.com \
+  --live-url https://arun.hakobune8.com \
   --format markdown \
-  --output .agentos/evals/live-orchestration-report.md
+  --output .arun/evals/live-orchestration-report.md
 ```
 
 The live smoke checks cover:
@@ -88,19 +88,19 @@ Authenticated browser checks are a separate opt-in layer on top of live smoke.
 They require Playwright dependencies from `web/` and explicit session material:
 
 ```sh
-AGENTOS_EVAL_AUTH_COOKIE='agentos_session=<signed-session-cookie>' \
-agentos evals \
+ARUN_EVAL_AUTH_COOKIE='arun_session=<signed-session-cookie>' \
+arun evals \
   --auth-e2e \
-  --live-url https://agentos.nakanoshima.hakobune8.com \
+  --live-url https://arun.hakobune8.com \
   --format markdown \
-  --output .agentos/evals/auth-webui-report.md
+  --output .arun/evals/auth-webui-report.md
 ```
 
 Alternatively, provide a Playwright storage state file:
 
 ```sh
-AGENTOS_EVAL_AUTH_STORAGE_STATE=/secure/path/storage-state.json \
-agentos evals --auth-e2e --live-url https://agentos.example.com
+ARUN_EVAL_AUTH_STORAGE_STATE=/secure/path/storage-state.json \
+arun evals --auth-e2e --live-url https://arun.hakobune8.com
 ```
 
 The authenticated Web UI E2E covers:
@@ -112,7 +112,7 @@ The authenticated Web UI E2E covers:
 
 Session cookies and storage state paths are only read from environment
 configuration. They are not printed in eval reports. Set
-`AGENTOS_EVAL_AUTH_E2E_OUT` to capture optional desktop and mobile screenshots
+`ARUN_EVAL_AUTH_E2E_OUT` to capture optional desktop and mobile screenshots
 outside the repository.
 
 Real GitHub writes and Kubernetes rollout checks are separate v1.4.x
@@ -126,18 +126,18 @@ base branch, with a token or GitHub App installation that can create issues,
 branches, files, and pull requests:
 
 ```sh
-AGENTOS_EVAL_GITHUB_REPO='owner/test-repo' \
-AGENTOS_EVAL_GITHUB_BASE_BRANCH='main' \
+ARUN_EVAL_GITHUB_REPO='owner/test-repo' \
+ARUN_EVAL_GITHUB_BASE_BRANCH='main' \
 GITHUB_TOKEN='<token-with-repo-access>' \
-agentos evals \
+arun evals \
   --github-workflow-e2e \
   --scenario github-workflow-e2e \
   --format markdown \
-  --output .agentos/evals/github-workflow-report.md
+  --output .arun/evals/github-workflow-report.md
 ```
 
-The scenario creates a titled `[AgentOS Eval]` issue, comments on it, creates a
-temporary branch, commits a small `.agentos-evals/` file, opens a draft pull
+The scenario creates a titled `[ARUN Eval]` issue, comments on it, creates a
+temporary branch, commits a small `.arun-evals/` file, opens a draft pull
 request, looks up check runs and workflow runs for the base branch, then closes
 the PR and issue and deletes the branch. The report records the issue URL, PR
 URL, branch, file path, cleanup state, and check/workflow lookup counts.
@@ -149,28 +149,28 @@ The executable scrum GitHub scenario extends the deterministic
 by default and refuses to run unless the target repository is explicitly
 allowlisted.
 
-Use a dedicated test repository such as `kazyamaz200/agentos-test`:
+Use a dedicated test repository such as `hakobune8/arun-test`:
 
 ```sh
-AGENTOS_EVAL_GITHUB_REPO='kazyamaz200/agentos-test' \
-AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST='kazyamaz200/agentos-test' \
-AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP='close' \
+ARUN_EVAL_GITHUB_REPO='hakobune8/arun-test' \
+ARUN_EVAL_GITHUB_REPO_ALLOWLIST='hakobune8/arun-test' \
+ARUN_EVAL_SCRUM_GITHUB_CLEANUP='close' \
 GITHUB_TOKEN='<token-with-repo-access>' \
-agentos evals \
+arun evals \
   --scrum-github-e2e \
   --scenario three-sprint-scrum-github-e2e \
   --format markdown \
-  --output .agentos/evals/scrum-github-report.md
+  --output .arun/evals/scrum-github-report.md
 ```
 
-The scenario creates `[AgentOS Eval]` backlog issues, comments sprint status on
+The scenario creates `[ARUN Eval]` backlog issues, comments sprint status on
 each planned item, carries one blocked item from sprint 2 to sprint 3, closes
 completed work, and records issue URLs plus sprint-by-sprint state in the
 report.
 
-Set `AGENTOS_EVAL_SCRUM_LLM_PRESETS=true` to replace deterministic scrum stage
+Set `ARUN_EVAL_SCRUM_LLM_PRESETS=true` to replace deterministic scrum stage
 notes with live LiteLLM preset calls. When enabled, the scenario requires
-`AGENTOS_EVAL_LLM_PRESET_MATRIX` or `AGENTOS_LLM_PRESETS` to include these
+`ARUN_EVAL_LLM_PRESET_MATRIX` or `ARUN_LLM_PRESETS` to include these
 preset IDs:
 
 - `planning` for backlog refinement and sprint planning.
@@ -183,8 +183,8 @@ preset IDs:
 Example matrix for the scrum preset pass:
 
 ```sh
-AGENTOS_EVAL_SCRUM_LLM_PRESETS=true \
-AGENTOS_EVAL_LLM_PRESET_MATRIX='[
+ARUN_EVAL_SCRUM_LLM_PRESETS=true \
+ARUN_EVAL_LLM_PRESET_MATRIX='[
   {"id":"planning","model":"staips-chat","baseUrl":"http://litellm:4000/v1","apiKeyEnv":"LITELLM_API_KEY","timeout":"45s","temperature":0.1,"maxTokens":1024,"tokenBudget":10000,"costBudget":"normal"},
   {"id":"coding","model":"staips-chat","baseUrl":"http://litellm:4000/v1","apiKeyEnv":"LITELLM_API_KEY","timeout":"45s","temperature":0.1,"maxTokens":1024,"tokenBudget":10000,"costBudget":"normal"},
   {"id":"review","model":"staips-chat","baseUrl":"http://litellm:4000/v1","apiKeyEnv":"LITELLM_API_KEY","timeout":"45s","temperature":0,"maxTokens":1024,"tokenBudget":10000,"costBudget":"normal"},
@@ -192,11 +192,11 @@ AGENTOS_EVAL_LLM_PRESET_MATRIX='[
   {"id":"reporting","model":"staips-chat","baseUrl":"http://litellm:4000/v1","apiKeyEnv":"LITELLM_API_KEY","timeout":"45s","temperature":0.2,"maxTokens":1024,"tokenBudget":10000,"costBudget":"normal"}
 ]' \
 LITELLM_API_KEY='<litellm-api-key>' \
-agentos evals \
+arun evals \
   --scrum-github-e2e \
   --scenario three-sprint-scrum-github-e2e \
   --format markdown \
-  --output .agentos/evals/scrum-github-report.md
+  --output .arun/evals/scrum-github-report.md
 ```
 
 The report records `llmPresetMode`, each stage's preset ID, agent name, model,
@@ -204,13 +204,13 @@ duration, token usage, configured token/cost budget, and failure reason. API key
 values are not printed. If a required preset is missing, the scenario fails
 before creating GitHub artifacts.
 
-Cleanup is controlled by `AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP`:
+Cleanup is controlled by `ARUN_EVAL_SCRUM_GITHUB_CLEANUP`:
 
 - `close` (default) closes eval issues after recording sprint evidence.
 - `keep` leaves eval issues open for manual inspection.
 
-Set `AGENTOS_EVAL_SCRUM_GITHUB_RUN_ID` to reuse or reconcile a known run id.
-When matching `[AgentOS Eval][<run-id>]` issues already exist, the scenario
+Set `ARUN_EVAL_SCRUM_GITHUB_RUN_ID` to reuse or reconcile a known run id.
+When matching `[ARUN Eval][<run-id>]` issues already exist, the scenario
 discovers them instead of creating duplicates and applies the requested cleanup
 mode. The report records each issue URL, final state, cleanup status, and
 cleanup error if one occurred.
@@ -222,29 +222,29 @@ context, and namespace. Run them only in a disposable namespace or another
 controlled canary target:
 
 ```sh
-AGENTOS_EVAL_KUBECONFIG=/secure/path/kubeconfig.yaml \
-AGENTOS_EVAL_KUBE_CONTEXT=mgmt-k3s \
-AGENTOS_EVAL_KUBE_NAMESPACE=agentos-evals \
-agentos evals \
+ARUN_EVAL_KUBECONFIG=/secure/path/kubeconfig.yaml \
+ARUN_EVAL_KUBE_CONTEXT=mgmt-k3s \
+ARUN_EVAL_KUBE_NAMESPACE=arun-evals \
+arun evals \
   --kubernetes-rollout-e2e \
   --scenario kubernetes-rollout-e2e \
   --format markdown \
-  --output .agentos/evals/kubernetes-rollout-report.md
+  --output .arun/evals/kubernetes-rollout-report.md
 ```
 
 The scenario creates a small disposable Helm release
-(`AGENTOS_EVAL_KUBE_RELEASE`, default `agentos-eval-rollout`) using a generated
+(`ARUN_EVAL_KUBE_RELEASE`, default `arun-eval-rollout`) using a generated
 chart, installs a baseline image, upgrades to a target image, waits for
 Deployment rollout and readiness, observes the deployed image, runs
 `helm rollback` to the baseline revision, observes the rollback image, and then
-uninstalls the test release. Set `AGENTOS_EVAL_KUBE_KEEP_RELEASE=true` only
+uninstalls the test release. Set `ARUN_EVAL_KUBE_KEEP_RELEASE=true` only
 when you need to inspect the release after a failed run.
 
 Optional image overrides:
 
 ```sh
-AGENTOS_EVAL_KUBE_BASE_IMAGE=registry.k8s.io/pause:3.9
-AGENTOS_EVAL_KUBE_TARGET_IMAGE=registry.k8s.io/pause:3.10
+ARUN_EVAL_KUBE_BASE_IMAGE=registry.k8s.io/pause:3.9
+ARUN_EVAL_KUBE_TARGET_IMAGE=registry.k8s.io/pause:3.10
 ```
 
 The report includes namespace, context, release, Deployment name, deployed
@@ -256,35 +256,35 @@ events without printing configured auth cookies or GitHub tokens.
 
 Real LLM smoke checks are opt-in and make live LiteLLM calls. They run a single
 bounded docs-agent orchestration against a disposable local repository and
-verify that the agent creates `AGENTOS_REAL_LLM_SMOKE.md` with the required
+verify that the agent creates `ARUN_REAL_LLM_SMOKE.md` with the required
 smoke phrase and residual-risk section:
 
 ```sh
-AGENTOS_EVAL_LIVE_LLM=true \
-AGENTOS_EVAL_LLM_REPO_ALLOWLIST=temp \
-AGENTOS_EVAL_LLM_MODEL=coder \
-AGENTOS_EVAL_LLM_TIMEOUT=2m \
-AGENTOS_EVAL_LLM_MAX_TOKENS=1024 \
+ARUN_EVAL_LIVE_LLM=true \
+ARUN_EVAL_LLM_REPO_ALLOWLIST=temp \
+ARUN_EVAL_LLM_MODEL=coder \
+ARUN_EVAL_LLM_TIMEOUT=2m \
+ARUN_EVAL_LLM_MAX_TOKENS=1024 \
 LITELLM_BASE_URL=http://litellm:4000 \
 LITELLM_API_KEY='<litellm-api-key>' \
-agentos evals \
+arun evals \
   --real-llm-smoke-e2e \
   --scenario real-llm-orchestration-smoke \
   --format markdown \
-  --output .agentos/evals/real-llm-smoke-report.md
+  --output .arun/evals/real-llm-smoke-report.md
 ```
 
 The scenario is disabled by default and requires
-`AGENTOS_EVAL_LIVE_LLM=true`, an explicit `LITELLM_BASE_URL`, a model via
-`AGENTOS_EVAL_LLM_MODEL` or `AGENTOS_MODEL_CODER`, and an allowlist containing
-`temp`. The LLM wrapper caps each request at `AGENTOS_EVAL_LLM_MAX_TOKENS` and
-the orchestration context is bounded by `AGENTOS_EVAL_LLM_TIMEOUT`.
+`ARUN_EVAL_LIVE_LLM=true`, an explicit `LITELLM_BASE_URL`, a model via
+`ARUN_EVAL_LLM_MODEL` or `ARUN_MODEL_CODER`, and an allowlist containing
+`temp`. The LLM wrapper caps each request at `ARUN_EVAL_LLM_MAX_TOKENS` and
+the orchestration context is bounded by `ARUN_EVAL_LLM_TIMEOUT`.
 
 The report records plan/subtask count, execution success/failure, required
 artifact status, quality-gate results, LLM request/response counts, token usage
 when the LiteLLM response includes it, the configured timeout/token budget, and
 residual risk. Cost is reported only when supplied externally through
-`AGENTOS_EVAL_LLM_COST_BUDGET`.
+`ARUN_EVAL_LLM_COST_BUDGET`.
 
 ## LiteLLM Preset Matrix
 
@@ -293,8 +293,8 @@ short marker prompt to each configured preset and compare success, duration,
 failure reason, retry policy, token usage, and budget metadata:
 
 ```sh
-AGENTOS_EVAL_LLM_PRESETS=true \
-AGENTOS_EVAL_LLM_PRESET_MATRIX='[
+ARUN_EVAL_LLM_PRESETS=true \
+ARUN_EVAL_LLM_PRESET_MATRIX='[
   {
     "id": "coding",
     "name": "Coding",
@@ -342,15 +342,15 @@ AGENTOS_EVAL_LLM_PRESET_MATRIX='[
   }
 ]' \
 LITELLM_API_KEY='<litellm-api-key>' \
-agentos evals \
+arun evals \
   --litellm-preset-evals \
   --scenario litellm-preset-matrix \
   --format markdown \
-  --output .agentos/evals/litellm-preset-report.md
+  --output .arun/evals/litellm-preset-report.md
 ```
 
-If `AGENTOS_EVAL_LLM_PRESET_MATRIX` is omitted, the scenario falls back to
-`AGENTOS_LLM_PRESETS` and default eval values. The scenario never prints API key
+If `ARUN_EVAL_LLM_PRESET_MATRIX` is omitted, the scenario falls back to
+`ARUN_LLM_PRESETS` and default eval values. The scenario never prints API key
 values; it reports only preset IDs, public endpoint metadata, model names,
 duration, token usage when LiteLLM returns it, and the budget metadata supplied
 in the matrix. By default a non-empty model response is considered a successful
@@ -365,17 +365,17 @@ verifies the schedule execution history, verifies the `started` inbox
 notification, then deletes the test schedule and notification:
 
 ```sh
-AGENTOS_EVAL_AUTH_COOKIE='agentos_session=<signed-session-cookie>' \
-agentos evals \
+ARUN_EVAL_AUTH_COOKIE='arun_session=<signed-session-cookie>' \
+arun evals \
   --schedule-notification-e2e \
   --scenario schedule-notification-e2e \
-  --live-url https://agentos.nakanoshima.hakobune8.com \
+  --live-url https://arun.hakobune8.com \
   --format markdown \
-  --output .agentos/evals/schedule-notification-report.md
+  --output .arun/evals/schedule-notification-report.md
 ```
 
-Optional `AGENTOS_EVAL_SCHEDULE_REPO` and
-`AGENTOS_EVAL_SCHEDULE_BASE_BRANCH` values override the default safe local
+Optional `ARUN_EVAL_SCHEDULE_REPO` and
+`ARUN_EVAL_SCHEDULE_BASE_BRANCH` values override the default safe local
 repository scope (`.` / `main`). The report includes the schedule ID, trigger
 time, run ID, execution status, notification ID, notification trigger, and
 notification status.
@@ -387,15 +387,15 @@ scoped by repository and base branch. Do not run this scenario against broad
 production data. Seed test orchestration records first, then run:
 
 ```sh
-AGENTOS_EVAL_AUTH_COOKIE='agentos_session=<signed-session-cookie>' \
-AGENTOS_EVAL_STORAGE_REPO='agentos-evals/storage-cleanup' \
-AGENTOS_EVAL_STORAGE_BASE_BRANCH='agentos-eval-storage-cleanup' \
-agentos evals \
+ARUN_EVAL_AUTH_COOKIE='arun_session=<signed-session-cookie>' \
+ARUN_EVAL_STORAGE_REPO='arun-evals/storage-cleanup' \
+ARUN_EVAL_STORAGE_BASE_BRANCH='arun-eval-storage-cleanup' \
+arun evals \
   --storage-cleanup-e2e \
   --scenario storage-cleanup-e2e \
-  --live-url https://agentos.nakanoshima.hakobune8.com \
+  --live-url https://arun.hakobune8.com \
   --format markdown \
-  --output .agentos/evals/storage-cleanup-report.md
+  --output .arun/evals/storage-cleanup-report.md
 ```
 
 The scenario calls authenticated `/api/storage/cleanup` with a policy that

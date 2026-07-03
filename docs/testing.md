@@ -1,16 +1,16 @@
 # Web UI Testing Guide
 
 This guide provides step-by-step instructions for testing all features
-of the AgentOS Web UI at `https://agentos.nakanoshima.hakobune8.com`.
+of the ARUN Web UI at `https://arun.hakobune8.com`.
 
 For release regression checks, see the repeatable orchestration eval suite in
 [Orchestration Evals](orchestration-evals.md). The default evals run without
 external secrets and report functional coverage by scenario. Live deployment
-smoke checks are opt-in with `agentos evals --live --live-url <url>`.
+smoke checks are opt-in with `arun evals --live --live-url <url>`.
 
 ## Prerequisites
 
-- Access to `https://agentos.nakanoshima.hakobune8.com`
+- Access to `https://arun.hakobune8.com`
 - A running [LiteLLM](https://litellm.vercel.app) proxy configured for the cluster
 - A local Git repository with Go code for test runs
 - A GitHub repository for testing GitHub integration
@@ -20,24 +20,24 @@ smoke checks are opt-in with `agentos evals --live --live-url <url>`.
 ## 1. Orchestrate
 
 ### Steps
-1. Open `https://agentos.nakanoshima.hakobune8.com`
+1. Open `https://arun.hakobune8.com`
 2. The Orchestrate view is shown by default
 
 ### Expected Results
-- [ ] Header shows "AgentOS" and the authenticated GitHub user when auth is enabled
-- [ ] `agentos evals --auth-e2e --live-url <url>` can run with an explicit
-  `AGENTOS_EVAL_AUTH_COOKIE` or `AGENTOS_EVAL_AUTH_STORAGE_STATE`
-- [ ] `agentos evals --schedule-notification-e2e --scenario schedule-notification-e2e`
+- [ ] Header shows "ARUN" and the authenticated GitHub user when auth is enabled
+- [ ] `arun evals --auth-e2e --live-url <url>` can run with an explicit
+  `ARUN_EVAL_AUTH_COOKIE` or `ARUN_EVAL_AUTH_STORAGE_STATE`
+- [ ] `arun evals --schedule-notification-e2e --scenario schedule-notification-e2e`
   can create, run, verify, and clean up a test schedule notification flow
-- [ ] `agentos evals --github-workflow-e2e --scenario github-workflow-e2e`
+- [ ] `arun evals --github-workflow-e2e --scenario github-workflow-e2e`
   can create and clean up test GitHub issue/PR artifacts in a dedicated repo
-- [ ] `agentos evals --kubernetes-rollout-e2e --scenario kubernetes-rollout-e2e`
+- [ ] `arun evals --kubernetes-rollout-e2e --scenario kubernetes-rollout-e2e`
   can install, upgrade, verify readiness, rollback, and clean up a disposable
   Helm release in an explicitly configured namespace
-- [ ] `agentos evals --real-llm-smoke-e2e --scenario real-llm-orchestration-smoke`
+- [ ] `arun evals --real-llm-smoke-e2e --scenario real-llm-orchestration-smoke`
   can run a bounded docs-agent orchestration against a disposable repository
   with explicit LiteLLM and repo allowlist settings
-- [ ] `agentos evals --storage-cleanup-e2e --scenario storage-cleanup-e2e`
+- [ ] `arun evals --storage-cleanup-e2e --scenario storage-cleanup-e2e`
   can run against disposable storage fixtures scoped by repo and branch
 - [ ] Main navigation exposes Orchestrate, Agents, and Audit
 - [ ] Orchestrate has New, List, and Detail segments
@@ -47,7 +47,7 @@ smoke checks are opt-in with `agentos evals --live --live-url <url>`.
 
 ### Input Values
 - No input required
-- Orchestration records display from `${AGENTOS_HOME}/orchestrations/`
+- Orchestration records display from `${ARUN_HOME}/orchestrations/`
 
 ---
 
@@ -141,7 +141,7 @@ smoke checks are opt-in with `agentos evals --live --live-url <url>`.
 
 ### Steps
 1. Click the **GitHub** tab
-2. Enter a repository (e.g., `kazyamaz200/agentos`)
+2. Enter a repository (e.g., `hakobune8/arun`)
 3. Click **Load**
 4. Switch tabs: Issues, Pull Requests, CI Checks
 
@@ -155,7 +155,7 @@ smoke checks are opt-in with `agentos evals --live --live-url <url>`.
 ### Input Values
 | Field | Value |
 |-------|-------|
-| Repository | `kazyamaz200/agentos` |
+| Repository | `hakobune8/arun` |
 | Tab | Issues / Pull Requests / CI Checks |
 
 ---

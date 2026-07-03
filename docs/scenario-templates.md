@@ -20,7 +20,7 @@ Selecting a template renders variable inputs and a preview of the generated task
 text. Applying the template replaces declared `{{variableName}}` placeholders
 from those inputs and fills the task description, recommended agents, strategy,
 limits, issue preference, and pull request preference. When an orchestration
-starts, AgentOS saves the selected template as `scenarioTemplate` on the
+starts, ARUN saves the selected template as `scenarioTemplate` on the
 orchestration record.
 
 The Web UI sends the selected UI language when it loads templates. For built-in
@@ -46,7 +46,7 @@ LiteLLM preset IDs by default:
 | `analyst` | `planning` |
 | `reporter` | `reporting` |
 
-If a recommended preset is not configured, AgentOS falls back to the selected
+If a recommended preset is not configured, ARUN falls back to the selected
 or default orchestration preset and records the fallback reason as
 `stagePresets` on the orchestration record. The Web UI detail view displays the
 resolved stage and agent preset routing.
@@ -56,7 +56,7 @@ resolved stage and agent preset routing.
 Repositories can add custom templates under:
 
 ```text
-.agentos/scenarios/*.yaml
+.arun/scenarios/*.yaml
 ```
 
 Example:
@@ -108,7 +108,7 @@ Repository templates are validated before they are returned to the Web UI:
 - `id` must use kebab-case style names matching `^[a-z][a-z0-9-]{1,62}$`.
 - `strategy` must be `sequential` or `parallel`; empty defaults to
   `sequential`.
-- Every `agents` entry must exist in the AgentOS registry.
+- Every `agents` entry must exist in the ARUN registry.
 - Variable names must match `^[A-Za-z][A-Za-z0-9_]{0,62}$`.
 - Duplicate variable names are rejected.
 

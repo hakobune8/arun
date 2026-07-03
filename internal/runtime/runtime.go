@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,14 +24,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kazyamaz200/agentos/internal/event"
-	"github.com/kazyamaz200/agentos/internal/llm"
-	"github.com/kazyamaz200/agentos/internal/profile"
-	"github.com/kazyamaz200/agentos/internal/safety"
-	"github.com/kazyamaz200/agentos/internal/sandbox"
-	"github.com/kazyamaz200/agentos/internal/state"
-	"github.com/kazyamaz200/agentos/internal/task"
-	"github.com/kazyamaz200/agentos/internal/tools"
+	"github.com/hakobune8/arun/internal/event"
+	"github.com/hakobune8/arun/internal/llm"
+	"github.com/hakobune8/arun/internal/profile"
+	"github.com/hakobune8/arun/internal/safety"
+	"github.com/hakobune8/arun/internal/sandbox"
+	"github.com/hakobune8/arun/internal/state"
+	"github.com/hakobune8/arun/internal/task"
+	"github.com/hakobune8/arun/internal/tools"
 	"gopkg.in/yaml.v3"
 )
 

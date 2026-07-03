@@ -1,7 +1,7 @@
-# Binaries (prefix with / to only match root-level files, not cmd/agentos/)
-/agentos
-/agentos.exe
-/agentos-*
+# Binaries (prefix with / to only match root-level files, not cmd/arun/)
+/arun
+/arun.exe
+/arun-*
 *.test
 *.test.exe
 *.out
@@ -11,8 +11,8 @@ coverage.out
 coverage.html
 cover.html
 
-# AgentOS runtime data
-.agentos/
+# ARUN runtime data
+.arun/
 run.log
 run_state.json
 

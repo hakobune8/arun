@@ -1,7 +1,7 @@
 # Deployment
 
-AgentOS can be deployed in Kubernetes using the official Helm chart.
-This deploys the AgentOS Web UI server with persistent storage for
+ARUN can be deployed in Kubernetes using the official Helm chart.
+This deploys the ARUN Web UI server with persistent storage for
 run artifacts.
 
 ## Prerequisites
@@ -14,26 +14,26 @@ run artifacts.
 ## Quick Install
 
 ```bash
-# Add the AgentOS Helm repository
-helm repo add agentos https://kazyamaz200.github.io/agentos
+# Add the ARUN Helm repository
+helm repo add arun https://hakobune8.github.io/arun
 helm repo update
 
-# Install AgentOS
-helm install agentos agentos/agentos \
-  --namespace agentos --create-namespace \
+# Install ARUN
+helm install arun arun/arun \
+  --namespace arun --create-namespace \
   --set env.LITELLM_BASE_URL=http://litellm:4000 \
   --set secrets.litellmApiKey=<litellm-api-key>
 ```
 
 The chart repository is published from the `gh-pages` branch by the Helm Chart
 workflow. Already published chart versions are skipped, so bump
-`charts/agentos/Chart.yaml` before publishing a new chart release.
+`charts/arun/Chart.yaml` before publishing a new chart release.
 
 ### From Local Chart
 
 ```bash
-helm install agentos ./charts/agentos \
-  --namespace agentos --create-namespace \
+helm install arun ./charts/arun \
+  --namespace arun --create-namespace \
   --set env.LITELLM_BASE_URL=http://litellm:4000 \
   --set secrets.litellmApiKey=<litellm-api-key>
 ```
@@ -45,20 +45,20 @@ helm install agentos ./charts/agentos \
 | Parameter | Description | Example |
 |-----------|-------------|---------|
 | `env.LITELLM_BASE_URL` | LiteLLM proxy URL | `http://litellm:4000` |
-| `secrets.litellmApiKey` or `secrets.existingSecret` | LiteLLM API key source | `agentos-secrets` |
+| `secrets.litellmApiKey` or `secrets.existingSecret` | LiteLLM API key source | `arun-secrets` |
 
 ### Optional
 
-See [values.yaml](../charts/agentos/values.yaml) for all available options.
+See [values.yaml](../charts/arun/values.yaml) for all available options.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `image.tag` | `v1.3.0` | Container image tag |
-| `env.AGENTOS_MODEL_CODER` | `coder` | LLM model for coding tasks |
-| `env.AGENTOS_HOME` | `/home/agentos/.agentos` | State directory for run artifacts and local vector indexes |
-| `env.AGENTOS_PUBLIC_URL` | `""` | Public AgentOS base URL used in GitHub Issue comments |
-| `env.AGENTOS_ADMIN_USERS` | `""` | Optional comma-separated GitHub logins allowed to run sensitive automation and view audit history |
-| `env.AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT` | `10m` | Maximum runtime for one orchestration subtask |
+| `env.ARUN_MODEL_CODER` | `coder` | LLM model for coding tasks |
+| `env.ARUN_HOME` | `/home/arun/.arun` | State directory for run artifacts and local vector indexes |
+| `env.ARUN_PUBLIC_URL` | `""` | Public ARUN base URL used in GitHub Issue comments |
+| `env.ARUN_ADMIN_USERS` | `""` | Optional comma-separated GitHub logins allowed to run sensitive automation and view audit history |
+| `env.ARUN_ORCHESTRATE_SUBTASK_TIMEOUT` | `10m` | Maximum runtime for one orchestration subtask |
 | `env.QDRANT_URL` | `""` | Qdrant vector DB URL (optional) |
 | `env.GITHUB_TOKEN` | `""` | GitHub API token fallback (optional) |
 | `env.GITHUB_APP_ID` | `""` | GitHub App ID for installation-token authentication |
@@ -77,14 +77,14 @@ See [values.yaml](../charts/agentos/values.yaml) for all available options.
 
 ## State and Persistence
 
-AgentOS stores run artifacts and the local vector index under `AGENTOS_HOME`.
-The chart sets `AGENTOS_HOME=/home/agentos/.agentos` and mounts persistence at
+ARUN stores run artifacts and the local vector index under `ARUN_HOME`.
+The chart sets `ARUN_HOME=/home/arun/.arun` and mounts persistence at
 the same path. If persistence is disabled, the chart uses `emptyDir` and state
 is lost when the pod is recreated.
 
 ## Security
 
-The container runs as a non-root `agentos` user by default. For shared
+The container runs as a non-root `arun` user by default. For shared
 environments, enable GitHub login and keep API keys in Kubernetes Secrets.
 Optional NetworkPolicy rendering can be enabled with
 `networkPolicy.enabled=true`.
@@ -95,24 +95,24 @@ Create a GitHub OAuth App with a callback URL that matches the public URL for
 your deployment:
 
 ```text
-https://agentos.example.com/auth/callback
+https://arun.hakobune8.com/auth/callback
 ```
 
 Then install or upgrade with authentication enabled:
 
 ```bash
-kubectl -n agentos create secret generic agentos-secrets \
+kubectl -n arun create secret generic arun-secrets \
   --from-literal=LITELLM_API_KEY=<litellm-api-key> \
   --from-literal=GITHUB_TOKEN=<github-token> \
   --from-literal=GITHUB_OAUTH_CLIENT_SECRET=<oauth-client-secret> \
-  --from-literal=AGENTOS_SESSION_SECRET=<random-32-byte-secret>
+  --from-literal=ARUN_SESSION_SECRET=<random-32-byte-secret>
 
-helm upgrade --install agentos ./charts/agentos \
-  --namespace agentos --create-namespace \
-  --set secrets.existingSecret=agentos-secrets \
+helm upgrade --install arun ./charts/arun \
+  --namespace arun --create-namespace \
+  --set secrets.existingSecret=arun-secrets \
   --set auth.required=true \
   --set auth.github.clientId=<oauth-client-id> \
-  --set auth.github.callbackUrl=https://agentos.example.com/auth/callback
+  --set auth.github.callbackUrl=https://arun.hakobune8.com/auth/callback
 ```
 
 When authentication is enabled, the Web UI shows the signed-in GitHub identity
@@ -152,8 +152,8 @@ llm:
 Safe rollout flow for preset changes:
 
 1. Add the new preset while keeping the current default.
-2. Run `agentos evals --litellm-preset-evals --scenario litellm-preset-matrix`
-   in staging with `AGENTOS_EVAL_LLM_PRESET_MATRIX`.
+2. Run `arun evals --litellm-preset-evals --scenario litellm-preset-matrix`
+   in staging with `ARUN_EVAL_LLM_PRESET_MATRIX`.
 3. Deploy the preset list with Helm and verify `/api/settings/llm` only exposes
    public metadata and `keyConfigured`.
 4. Switch `llm.defaultPreset` after staging reports are acceptable.
@@ -162,11 +162,11 @@ Safe rollout flow for preset changes:
 
 ### GitHub Container Registry
 
-The chart uses images from `ghcr.io/kazyamaz200/agentos`. If your
+The chart uses images from `ghcr.io/hakobune8/arun`. If your
 cluster requires pull credentials, create a secret:
 
 ```bash
-kubectl -n agentos create secret docker-registry ghcr \
+kubectl -n arun create secret docker-registry ghcr \
   --docker-server=ghcr.io \
   --docker-username=<your-username> \
   --docker-password=<your-token>
@@ -181,9 +181,9 @@ kubectl -n agentos create secret docker-registry ghcr \
                           └──────┬──────┘
                                  │
                     ┌────────────▼────────────┐
-                    │  agentos (Deployment)    │
+                    │  arun (Deployment)    │
                     │  ┌────────────────────┐ │
-                    │  │  agentos serve     │ │
+                    │  │  arun serve     │ │
                     │  │  (port 8080)       │ │
                     │  └────────────────────┘ │
                     └────────────┬────────────┘
@@ -198,10 +198,10 @@ kubectl -n agentos create secret docker-registry ghcr \
 
 ```bash
 # Check pod status
-kubectl -n agentos get pods
+kubectl -n arun get pods
 
 # Port-forward to test
-kubectl -n agentos port-forward svc/agentos 8080:8080
+kubectl -n arun port-forward svc/arun 8080:8080
 
 # Test health endpoint
 curl http://localhost:8080/api/health

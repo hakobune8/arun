@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,9 +16,9 @@
 package factory
 
 import (
-	"github.com/kazyamaz200/agentos/internal/llm"
-	"github.com/kazyamaz200/agentos/internal/profile"
-	"github.com/kazyamaz200/agentos/internal/tools"
+	"github.com/hakobune8/arun/internal/llm"
+	"github.com/hakobune8/arun/internal/profile"
+	"github.com/hakobune8/arun/internal/tools"
 )
 
 // AgentDef defines an agent's configuration from a YAML template.

@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,10 +22,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kazyamaz200/agentos/internal/llm"
-	"github.com/kazyamaz200/agentos/internal/profile"
-	"github.com/kazyamaz200/agentos/internal/sandbox"
-	"github.com/kazyamaz200/agentos/internal/task"
+	"github.com/hakobune8/arun/internal/llm"
+	"github.com/hakobune8/arun/internal/profile"
+	"github.com/hakobune8/arun/internal/sandbox"
+	"github.com/hakobune8/arun/internal/task"
 )
 
 type mockAgent struct {
@@ -122,7 +122,7 @@ func TestNewRuntime_RespectsAllowedTools(t *testing.T) {
 
 func TestRuntime_RunSavesExecutionArtifactsOnFailure(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("AGENTOS_HOME", home)
+	t.Setenv("ARUN_HOME", home)
 
 	prof := profile.DefaultProfile()
 	ws := sandbox.NewWorkspace(t.TempDir())
@@ -158,7 +158,7 @@ func TestRuntime_RunSavesExecutionArtifactsOnFailure(t *testing.T) {
 
 func TestRuntime_RunRedactsExecutionArtifacts(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("AGENTOS_HOME", home)
+	t.Setenv("ARUN_HOME", home)
 
 	prof := profile.DefaultProfile()
 	ws := sandbox.NewWorkspace(t.TempDir())
@@ -166,7 +166,7 @@ func TestRuntime_RunRedactsExecutionArtifacts(t *testing.T) {
 		plan: &Plan{Summary: "test"},
 		executeResult: &ExecutionResult{
 			Diff:    "+token: ghp_123456789012345678901234567890123456\n",
-			TestLog: "Cookie: agentos_session=signed-session-value",
+			TestLog: "Cookie: arun_session=signed-session-value",
 		},
 		executeErr: fmt.Errorf("validation failed"),
 	}
@@ -203,7 +203,7 @@ func TestRuntime_RunRedactsExecutionArtifacts(t *testing.T) {
 
 func TestRuntime_RunCompletesWhenReviewReturnsError(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("AGENTOS_HOME", home)
+	t.Setenv("ARUN_HOME", home)
 
 	prof := profile.DefaultProfile()
 	ws := sandbox.NewWorkspace(t.TempDir())

@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kazyamaz200/agentos/internal/github"
-	"github.com/kazyamaz200/agentos/internal/llm"
+	"github.com/hakobune8/arun/internal/github"
+	"github.com/hakobune8/arun/internal/llm"
 )
 
 // CIFixer analyzes CI check failures and generates fix suggestions using an LLM.

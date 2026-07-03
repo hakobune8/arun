@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kazyamaz200/agentos/internal/safety"
+	"github.com/hakobune8/arun/internal/safety"
 )
 
 // ReadFileTool reads file contents from within the configured workspace.

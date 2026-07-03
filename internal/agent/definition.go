@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,14 +22,14 @@ import (
 )
 
 // CurrentSchemaVersion is the current version of the agent definition schema.
-const CurrentSchemaVersion = "agentos.io/v1"
+const CurrentSchemaVersion = "arun.io/v1"
 
 // Definition is a versioned, declarative agent configuration that the
 // runtime can load and use to instantiate a working agent.
 //
 // Target YAML:
 //
-//	apiVersion: agentos.io/v1
+//	apiVersion: arun.io/v1
 //	kind: Agent
 //	metadata:
 //	  name: go-backend

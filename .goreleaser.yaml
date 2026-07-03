@@ -1,15 +1,15 @@
 version: 2
-project_name: agentos
+project_name: arun
 
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - main: ./cmd/agentos
-    binary: agentos
+  - main: ./cmd/arun
+    binary: arun
     ldflags:
-      - -X github.com/kazyamaz200/agentos/internal/cli.Version={{ .Version }}
+      - -X github.com/hakobune8/arun/internal/cli.Version={{ .Version }}
     env:
       - CGO_ENABLED=0
     goos:
@@ -48,7 +48,7 @@ changelog:
 
 release:
   github:
-    owner: kazyamaz200
-    name: agentos
+    owner: hakobune8
+    name: arun
   draft: false
   prerelease: auto

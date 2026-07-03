@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kazyamaz200/agentos/internal/vector"
+	"github.com/hakobune8/arun/internal/vector"
 )
 
 type mockEmbedder struct {
@@ -41,9 +41,9 @@ func (m *mockEmbedder) EmbedQuery(_ context.Context, _ string) ([]float32, error
 
 func (m *mockEmbedder) Model() string { return "test" }
 
-func TestDefaultConfig_UsesAgentOSHome(t *testing.T) {
+func TestDefaultConfig_UsesARUNHome(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("AGENTOS_HOME", home)
+	t.Setenv("ARUN_HOME", home)
 
 	cfg := DefaultConfig()
 	if cfg.Path != filepath.Join(home, "memory.jsonl") {

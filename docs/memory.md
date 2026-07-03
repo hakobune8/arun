@@ -1,6 +1,6 @@
 # Memory Layer
 
-AgentOS provides a pluggable memory abstraction for agent state retention
+ARUN provides a pluggable memory abstraction for agent state retention
 across runs. The runtime does not know which implementation is in use.
 
 ## Store Interface

@@ -57,11 +57,11 @@ func TestRepositoryStore_ApproveAndDelete(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	approved, err := store.Approve(ctx, entry.ID, "kazyamaz200")
+	approved, err := store.Approve(ctx, entry.ID, "maintainer")
 	if err != nil {
 		t.Fatalf("Approve() error = %v", err)
 	}
-	if approved.Status != RepositoryMemoryApproved || approved.ApprovedBy != "kazyamaz200" || approved.ApprovedAt == nil {
+	if approved.Status != RepositoryMemoryApproved || approved.ApprovedBy != "maintainer" || approved.ApprovedAt == nil {
 		t.Fatalf("approved entry = %+v", approved)
 	}
 

@@ -1,6 +1,6 @@
 # Quick Start
 
-This guide walks through setting up AgentOS and running your first
+This guide walks through setting up ARUN and running your first
 coding task end-to-end.
 
 ## Prerequisites
@@ -13,21 +13,21 @@ coding task end-to-end.
 ### From Source
 
 ```bash
-git clone https://github.com/kazyamaz200/agentos.git
-cd agentos
-go build -o agentos ./cmd/agentos/
-./agentos version
+git clone https://github.com/hakobune8/arun.git
+cd arun
+go build -o arun ./cmd/arun/
+./arun version
 ```
 
 ### From Release
 
 Download the latest binary from the
-[Releases page](https://github.com/kazyamaz200/agentos/releases) for your
+[Releases page](https://github.com/hakobune8/arun/releases) for your
 platform.
 
 ## 2. Start LiteLLM
 
-AgentOS requires an OpenAI-compatible LLM API. The simplest way is to
+ARUN requires an OpenAI-compatible LLM API. The simplest way is to
 start a LiteLLM proxy:
 
 ```bash
@@ -40,7 +40,7 @@ Or use any OpenAI-compatible endpoint:
 ```bash
 export LITELLM_BASE_URL=http://localhost:4000
 export LITELLM_API_KEY=sk-local
-export AGENTOS_MODEL_CODER=coder
+export ARUN_MODEL_CODER=coder
 ```
 
 ## 3. Create a Task
@@ -48,7 +48,7 @@ export AGENTOS_MODEL_CODER=coder
 Create a file called `task.yaml`:
 
 ```yaml
-id: "hello-agentos"
+id: "hello-arun"
 type: "issue_to_patch"
 repo: "./my-project"
 base_branch: "main"
@@ -63,10 +63,10 @@ Replace `repo` with the path to a local Git repository.
 
 ## 4. Choose a Profile
 
-AgentOS ships with built-in profiles. For a Go project, use:
+ARUN ships with built-in profiles. For a Go project, use:
 
 ```bash
-agentos run \
+arun run \
   --task task.yaml \
   --profile profiles/go_backend.yaml
 ```
@@ -74,7 +74,7 @@ agentos run \
 Or use a definition file (v1.0 format):
 
 ```bash
-agentos run \
+arun run \
   --task task.yaml \
   --definition definitions/go-backend.yaml
 ```
@@ -82,7 +82,7 @@ agentos run \
 ## 5. View Results
 
 After the run completes, artifacts are saved to
-`~/.agentos/runs/<task-id>/`:
+`~/.arun/runs/<task-id>/`:
 
 | File | Description |
 |------|-------------|
@@ -97,4 +97,4 @@ After the run completes, artifacts are saved to
 - Browse the [CLI reference](README.md#quick-start) for more commands
 - Read the [Agent Definitions](agent-definitions.md) guide
 - Learn about [multi-agent orchestration](orchestrator.md)
-- Set up the [Web UI](api.md) with `agentos serve --port 8080`
+- Set up the [Web UI](api.md) with `arun serve --port 8080`

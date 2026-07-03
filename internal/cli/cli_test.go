@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,8 +20,8 @@ import (
 )
 
 func TestRootCommand_HasUse(t *testing.T) {
-	if rootCmd.Use != "agentos" {
-		t.Errorf("rootCmd.Use = %q, want %q", rootCmd.Use, "agentos")
+	if rootCmd.Use != "arun" {
+		t.Errorf("rootCmd.Use = %q, want %q", rootCmd.Use, "arun")
 	}
 }
 
@@ -61,7 +61,7 @@ func TestRunCommand_HasDefinitionFlag(t *testing.T) {
 }
 
 func TestParseOrchestrateSubtaskTimeout(t *testing.T) {
-	t.Setenv("AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT", "")
+	t.Setenv("ARUN_ORCHESTRATE_SUBTASK_TIMEOUT", "")
 	got, err := parseOrchestrateSubtaskTimeout("5m")
 	if err != nil {
 		t.Fatalf("parseOrchestrateSubtaskTimeout() error = %v", err)
@@ -70,7 +70,7 @@ func TestParseOrchestrateSubtaskTimeout(t *testing.T) {
 		t.Fatalf("timeout = %s, want 5m", got)
 	}
 
-	t.Setenv("AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT", "2m")
+	t.Setenv("ARUN_ORCHESTRATE_SUBTASK_TIMEOUT", "2m")
 	got, err = parseOrchestrateSubtaskTimeout("")
 	if err != nil {
 		t.Fatalf("parseOrchestrateSubtaskTimeout(env) error = %v", err)

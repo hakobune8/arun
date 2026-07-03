@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,8 +26,8 @@ import (
 )
 
 const (
-	sessionCookieName = "agentos_session"
-	stateCookieName   = "agentos_oauth_state"
+	sessionCookieName = "arun_session"
+	stateCookieName   = "arun_oauth_state"
 )
 
 type authConfig struct {
@@ -79,13 +79,13 @@ func loadAuthConfig() authConfig {
 		ClientID:      strings.TrimSpace(os.Getenv("GITHUB_OAUTH_CLIENT_ID")),
 		ClientSecret:  os.Getenv("GITHUB_OAUTH_CLIENT_SECRET"),
 		RedirectURL:   strings.TrimSpace(os.Getenv("GITHUB_OAUTH_CALLBACK_URL")),
-		SessionSecret: os.Getenv("AGENTOS_SESSION_SECRET"),
+		SessionSecret: os.Getenv("ARUN_SESSION_SECRET"),
 		AuthorizeURL:  envOrDefault("GITHUB_OAUTH_AUTHORIZE_URL", "https://github.com/login/oauth/authorize"),
 		TokenURL:      envOrDefault("GITHUB_OAUTH_TOKEN_URL", "https://github.com/login/oauth/access_token"),
 		UserURL:       envOrDefault("GITHUB_OAUTH_USER_URL", "https://api.github.com/user"),
-		AdminUsers:    parseAdminUsers(os.Getenv("AGENTOS_ADMIN_USERS")),
+		AdminUsers:    parseAdminUsers(os.Getenv("ARUN_ADMIN_USERS")),
 	}
-	cfg.Required = strings.EqualFold(os.Getenv("AGENTOS_AUTH_REQUIRED"), "true") || (cfg.ClientID != "" && cfg.ClientSecret != "")
+	cfg.Required = strings.EqualFold(os.Getenv("ARUN_AUTH_REQUIRED"), "true") || (cfg.ClientID != "" && cfg.ClientSecret != "")
 	if cfg.SessionSecret == "" {
 		cfg.SessionSecret = os.Getenv("GITHUB_OAUTH_CLIENT_SECRET")
 	}

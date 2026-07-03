@@ -1,6 +1,6 @@
-# AgentOS Web UI
+# ARUN Web UI
 
-React + TypeScript + Tailwind CSS frontend for the AgentOS Web UI.
+React + TypeScript + Tailwind CSS frontend for the ARUN Web UI.
 
 ## Commands
 

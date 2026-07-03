@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -74,7 +74,7 @@ func (c *Client) Connect(ctx context.Context) error {
 				Name    string `json:"name"`
 				Version string `json:"version"`
 			}{
-				Name:    "agentos",
+				Name:    "arun",
 				Version: "0.4.0",
 			},
 		},

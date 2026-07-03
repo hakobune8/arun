@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -43,7 +43,7 @@ func LoadTemplate(path string) (*AgentTemplate, error) {
 // DefaultTemplate returns a default agent template with coder and reviewer agents.
 func DefaultTemplate() *AgentTemplate {
 	return &AgentTemplate{
-		Schema: "agentos/v1",
+		Schema: "arun/v1",
 		Agents: []AgentDef{
 			{
 				Name:  "coder",

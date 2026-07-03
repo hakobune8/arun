@@ -1,6 +1,6 @@
 # v1.4.1 Release Notes
 
-AgentOS v1.4.1 is a patch release for the v1.4 operational-flow hardening
+ARUN v1.4.1 is a patch release for the v1.4 operational-flow hardening
 track. It collects fixes from production verification of the
 `implementation-heavy-scrum` Web UI flow.
 
@@ -20,15 +20,15 @@ track. It collects fixes from production verification of the
 
 ## Upgrade
 
-Use image tag `ghcr.io/kazyamaz200/agentos:v1.4.1` and Helm chart version
+Use image tag `ghcr.io/hakobune8/arun:v1.4.1` and Helm chart version
 `1.4.1`.
 
 ```bash
 helm --kubeconfig /Users/ssl222/Downloads/kubeconfig/mgmt-k3s.yaml \
-  upgrade --install agentos charts/agentos \
-  -n agentos \
+  upgrade --install arun charts/arun \
+  -n arun \
   --reuse-values \
-  --set image.repository=ghcr.io/kazyamaz200/agentos \
+  --set image.repository=ghcr.io/hakobune8/arun \
   --set image.tag=v1.4.1 \
   --set image.pullPolicy=Always \
   --server-side=true \
@@ -56,10 +56,10 @@ runtime values:
 
 ```bash
 helm --kubeconfig /Users/ssl222/Downloads/kubeconfig/mgmt-k3s.yaml \
-  upgrade --install agentos charts/agentos \
-  -n agentos \
+  upgrade --install arun charts/arun \
+  -n arun \
   --reuse-values \
-  --set image.repository=ghcr.io/kazyamaz200/agentos \
+  --set image.repository=ghcr.io/hakobune8/arun \
   --set image.tag=<previous-tag> \
   --set image.pullPolicy=Always \
   --server-side=true \

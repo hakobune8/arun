@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,13 +23,13 @@ import (
 var completionCmd = &cobra.Command{
 	Use:   "completion [bash|zsh|fish|powershell]",
 	Short: "Generate shell completion scripts",
-	Long: `Generate shell completion scripts for AgentOS.
+	Long: `Generate shell completion scripts for ARUN.
 
 Examples:
-  agentos completion bash > /etc/bash_completion.d/agentos
-  agentos completion zsh > "${fpath[1]}/_agentos"
-  agentos completion fish > ~/.config/fish/completions/agentos.fish
-  agentos completion powershell > agentos.ps1`,
+  arun completion bash > /etc/bash_completion.d/arun
+  arun completion zsh > "${fpath[1]}/_arun"
+  arun completion fish > ~/.config/fish/completions/arun.fish
+  arun completion powershell > arun.ps1`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		switch args[0] {

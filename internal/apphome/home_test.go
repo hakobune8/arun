@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,9 +19,9 @@ import (
 	"testing"
 )
 
-func TestDir_UsesAgentOSHome(t *testing.T) {
+func TestDir_UsesARUNHome(t *testing.T) {
 	expected := t.TempDir()
-	t.Setenv("AGENTOS_HOME", expected)
+	t.Setenv("ARUN_HOME", expected)
 
 	if got := Dir(); got != expected {
 		t.Fatalf("Dir() = %q, want %q", got, expected)
@@ -30,7 +30,7 @@ func TestDir_UsesAgentOSHome(t *testing.T) {
 
 func TestSubdirectories(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("AGENTOS_HOME", root)
+	t.Setenv("ARUN_HOME", root)
 
 	if got := RunsDir(); got != filepath.Join(root, "runs") {
 		t.Fatalf("RunsDir() = %q", got)

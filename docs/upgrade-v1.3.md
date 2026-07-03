@@ -41,8 +41,8 @@ Repository context search can use:
 - repository memory and guidelines
 - orchestration records and run artifacts
 - GitHub issues, PRs, checks, workflow runs, and workflow logs
-- Kubernetes pod logs when `AGENTOS_KUBERNETES_NAMESPACE` and
-  `AGENTOS_KUBERNETES_SELECTOR` are configured
+- Kubernetes pod logs when `ARUN_KUBERNETES_NAMESPACE` and
+  `ARUN_KUBERNETES_SELECTOR` are configured
 - repository code/files
 
 Evidence results include provenance metadata and secret redaction.
@@ -100,7 +100,7 @@ Destinations are:
 - `github_issue` for comments on a created Issue
 - `github_pr` for comments on a created PR
 
-Notification history is stored under `AGENTOS_HOME/notifications` and exposed
+Notification history is stored under `ARUN_HOME/notifications` and exposed
 through `GET /api/notifications`.
 
 ## Deployment Notes
@@ -110,14 +110,14 @@ storage enabled:
 
 ```bash
 helm repo update
-helm upgrade --install agentos agentos/agentos \
-  --namespace agentos \
+helm upgrade --install arun arun/arun \
+  --namespace arun \
   --set image.tag=v1.3.0 \
   --set env.LITELLM_BASE_URL=http://litellm:4000
 ```
 
 The v1.3.0 chart defaults `image.tag` to `v1.3.0`. Before publishing, confirm
-that both `version` and `appVersion` in `charts/agentos/Chart.yaml` match the
+that both `version` and `appVersion` in `charts/arun/Chart.yaml` match the
 intended release so the chart release workflow can publish a new immutable
 chart version.
 
@@ -125,7 +125,7 @@ chart version.
 
 - Scheduled jobs run inside the Web server process. Do not scale the server
   horizontally without adding external scheduler coordination.
-- Webhook delivery is outbound notification delivery only. GitHub-to-AgentOS
+- Webhook delivery is outbound notification delivery only. GitHub-to-ARUN
   webhook delivery remains optional for issue-triggered workflows.
 - The Docker sandbox backend remains an extension point for task execution;
   the new Docker agent is an operations specialist for repository/container
@@ -140,7 +140,7 @@ chart version.
 - Verify README feature summaries match the final 15-agent built-in registry.
 - Verify the Web UI header and release docs refer to v1.3 where current
   release identity is displayed.
-- Verify `charts/agentos/Chart.yaml` and `charts/agentos/values.yaml` use the
+- Verify `charts/arun/Chart.yaml` and `charts/arun/values.yaml` use the
   final release version and image tag.
 - Build and deploy the final v1.3.0 image, then run health, Web UI asset,
   agent registry, schedule template, notification, and ops recommendation

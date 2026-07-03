@@ -46,7 +46,7 @@ metadata for policy visibility and follow-up enforcement work.
 ## Storage Retention And Cleanup
 
 v1.4 adds storage usage reporting and retention cleanup for persistent
-AgentOS state under `AGENTOS_HOME`.
+ARUN state under `ARUN_HOME`.
 
 Cleanup supports dry-run preview and execution. It archives before deletion and
 skips records that are active or linked to GitHub artifacts so operators can
@@ -60,14 +60,14 @@ APIs without a valid session. This is expected.
 Run the deterministic suite locally or in CI:
 
 ```bash
-agentos evals
+arun evals
 ```
 
 Generate machine-readable and reviewable reports:
 
 ```bash
-agentos evals --format json --output report.json
-agentos evals --format markdown --output report.md
+arun evals --format json --output report.json
+arun evals --format markdown --output report.md
 ```
 
 Live smoke checks are opt-in and should only be enabled in environments with
@@ -82,10 +82,10 @@ keeping existing runtime values:
 
 ```bash
 helm --kubeconfig /Users/ssl222/Downloads/kubeconfig/mgmt-k3s.yaml \
-  upgrade --install agentos charts/agentos \
-  -n agentos \
+  upgrade --install arun charts/arun \
+  -n arun \
   --reuse-values \
-  --set image.repository=ghcr.io/kazyamaz200/agentos \
+  --set image.repository=ghcr.io/hakobune8/arun \
   --set image.tag=v1.4.1 \
   --set image.pullPolicy=Always \
   --server-side=true \
@@ -103,29 +103,29 @@ Check the running deployment:
 
 ```bash
 kubectl --kubeconfig /Users/ssl222/Downloads/kubeconfig/mgmt-k3s.yaml \
-  -n agentos get deploy agentos -o wide
+  -n arun get deploy arun -o wide
 
 kubectl --kubeconfig /Users/ssl222/Downloads/kubeconfig/mgmt-k3s.yaml \
-  -n agentos rollout status deploy/agentos --timeout=180s
+  -n arun rollout status deploy/arun --timeout=180s
 ```
 
 Check the public service and Web UI assets:
 
 ```bash
-curl -fsS https://agentos.nakanoshima.hakobune8.com/api/health
+curl -fsS https://arun.hakobune8.com/api/health
 
-INDEX=$(curl -fsS https://agentos.nakanoshima.hakobune8.com/)
+INDEX=$(curl -fsS https://arun.hakobune8.com/)
 JS=$(printf '%s\n' "$INDEX" | sed -n 's/.*src="\([^"]*index-[^"]*\.js\)".*/\1/p')
 CSS=$(printf '%s\n' "$INDEX" | sed -n 's/.*href="\([^"]*index-[^"]*\.css\)".*/\1/p')
 
-curl -fsSI "https://agentos.nakanoshima.hakobune8.com$JS"
-curl -fsSI "https://agentos.nakanoshima.hakobune8.com$CSS"
+curl -fsSI "https://arun.hakobune8.com$JS"
+curl -fsSI "https://arun.hakobune8.com$CSS"
 ```
 
 Confirm the built-in agent registry:
 
 ```bash
-curl -fsS https://agentos.nakanoshima.hakobune8.com/api/agents \
+curl -fsS https://arun.hakobune8.com/api/agents \
   | jq -r '.[].Name' | sort
 ```
 
@@ -153,7 +153,7 @@ For the v1.4 feature scope, also confirm:
 
 - storage usage is visible in the Web UI for an authenticated session
 - storage cleanup preview responds before cleanup execution is enabled
-- `agentos evals` produces deterministic JSON and Markdown reports
+- `arun evals` produces deterministic JSON and Markdown reports
 - unauthenticated storage and schedule APIs return `401` when
   `auth.required` is enabled
 
@@ -162,7 +162,7 @@ For the v1.4 feature scope, also confirm:
 - Confirm `CHANGELOG.md` includes the target v1.4.x release notes and every
   issue included in the patch release.
 - Verify README roadmap separates v1.4.0 completed work from v1.4.x hardening.
-- Verify `charts/agentos/Chart.yaml` and `charts/agentos/values.yaml` use the
+- Verify `charts/arun/Chart.yaml` and `charts/arun/values.yaml` use the
   final release version and image tag.
 - Build and deploy the final v1.4.x image, then run health, Web UI asset,
   agent registry, storage, and eval checks.

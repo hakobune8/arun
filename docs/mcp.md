@@ -1,12 +1,12 @@
 # MCP Client
 
-AgentOS supports the Model Context Protocol (MCP) for integrating with
+ARUN supports the Model Context Protocol (MCP) for integrating with
 external tools via JSON-RPC over stdio.
 
 ## Architecture
 
 ```
-AgentOS Runtime → Tool Registry → MCP ToolAdapter → MCP Server (stdio)
+ARUN Runtime → Tool Registry → MCP ToolAdapter → MCP Server (stdio)
 ```
 
 ## Registering an MCP Server

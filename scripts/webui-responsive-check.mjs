@@ -7,13 +7,13 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const html = await readFile(join(root, 'internal/server/static/index.html'), 'utf8');
 
-const longRepo = 'https://github.com/kazyamaz200/agentos-example-with-a-very-long-repository-name.git';
+const longRepo = 'https://github.com/hakobune8/arun-example-with-a-very-long-repository-name.git';
 const longTask = 'Investigate a long-running orchestration on a narrow mobile screen, preserve readable task text, logs, diffs, repository URLs, and action buttons without causing full-page horizontal overflow.';
 const detail = {
   id: 'run-0123456789abcdef',
   status: 'running',
   repo: longRepo,
-  repoPath: '/workspace/agentos-example-with-a-very-long-repository-name',
+  repoPath: '/workspace/arun-example-with-a-very-long-repository-name',
   baseBranch: 'feature/very-long-branch-name-for-mobile-layout-checks',
   strategy: 'sequential',
   llmPreset: 'default',
@@ -44,8 +44,8 @@ const detail = {
     },
   ],
   github: {
-    branchName: 'agentos/run-0123456789abcdef-with-long-generated-branch-name',
-    issueUrl: 'https://github.com/kazyamaz200/agentos/issues/191',
+    branchName: 'arun/run-0123456789abcdef-with-long-generated-branch-name',
+    issueUrl: 'https://github.com/hakobune8/arun/issues/191',
     issueNumber: 191,
   },
 };
@@ -94,7 +94,7 @@ if (process.argv.includes('--serve-only')) {
   await new Promise(() => {});
 }
 
-const screenshotDir = resolve(process.env.AGENTOS_RESPONSIVE_OUT || '/tmp/agentos-webui-responsive');
+const screenshotDir = resolve(process.env.ARUN_RESPONSIVE_OUT || '/tmp/arun-webui-responsive');
 await mkdir(screenshotDir, { recursive: true });
 
 const { chromium } = await import('playwright');

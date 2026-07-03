@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,9 +27,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kazyamaz200/agentos/internal/apphome"
-	agentosgh "github.com/kazyamaz200/agentos/internal/github"
-	"github.com/kazyamaz200/agentos/internal/safety"
+	"github.com/hakobune8/arun/internal/apphome"
+	arungh "github.com/hakobune8/arun/internal/github"
+	"github.com/hakobune8/arun/internal/safety"
 )
 
 var notificationIDPattern = regexp.MustCompile(`^notification-[0-9a-f]{16}$`)
@@ -269,7 +269,7 @@ func deliverGitHubNotification(record *orchestrationRecord, destination string, 
 		return attempt
 	}
 	body := notificationGitHubBody(notification)
-	comment, err := agentosgh.NewClient(owner, name).CreateIssueComment(number, agentosgh.CreateIssueCommentRequest{Body: body})
+	comment, err := arungh.NewClient(owner, name).CreateIssueComment(number, arungh.CreateIssueCommentRequest{Body: body})
 	attempt.Attempts = 1
 	if err != nil {
 		attempt.Status = notificationDeliveryFailure
@@ -340,7 +340,7 @@ func buildExecutionNotification(schedule *scheduleDefinition, execution *schedul
 
 func notificationGitHubBody(notification *notificationRecord) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "AgentOS scheduled orchestration notification.\n\n")
+	fmt.Fprintf(&b, "ARUN scheduled orchestration notification.\n\n")
 	fmt.Fprintf(&b, "- Trigger: %s\n", notification.Trigger)
 	fmt.Fprintf(&b, "- Status: %s\n", notification.Status)
 	if notification.RunURL != "" {

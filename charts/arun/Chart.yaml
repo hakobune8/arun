@@ -1,0 +1,16 @@
+apiVersion: v2
+name: arun
+description: A Go runtime for autonomous coding agents — Web UI server
+type: application
+version: 1.5.0
+appVersion: "v1.5.0"
+home: https://github.com/hakobune8/arun
+sources:
+  - https://github.com/hakobune8/arun
+keywords:
+  - arun
+  - coding-agent
+  - ai
+maintainers:
+  - name: ARUN maintainers
+    url: https://github.com/hakobune8/arun

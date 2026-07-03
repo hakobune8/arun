@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	agentosgh "github.com/kazyamaz200/agentos/internal/github"
-	"github.com/kazyamaz200/agentos/internal/guideline"
-	"github.com/kazyamaz200/agentos/internal/memory"
-	"github.com/kazyamaz200/agentos/internal/safety"
+	arungh "github.com/hakobune8/arun/internal/github"
+	"github.com/hakobune8/arun/internal/guideline"
+	"github.com/hakobune8/arun/internal/memory"
+	"github.com/hakobune8/arun/internal/safety"
 )
 
 type repositoryContextSearchQuery struct {
@@ -304,7 +304,7 @@ func repositoryContextLiveGitHub(q repositoryContextSearchQuery) ([]repositoryCo
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("repo must be owner/name")
 	}
-	client := agentosgh.NewClient(parts[0], parts[1])
+	client := arungh.NewClient(parts[0], parts[1])
 	redactor := safety.NewRedactor()
 	var results []repositoryContextSearchResult
 
@@ -410,7 +410,7 @@ func repositoryContextLiveGitHub(q repositoryContextSearchQuery) ([]repositoryCo
 	return results, nil
 }
 
-func repositoryContextWorkflowRunResults(q repositoryContextSearchQuery, client *agentosgh.Client, redactor *safety.Redactor, runs []agentosgh.WorkflowRun) []repositoryContextSearchResult {
+func repositoryContextWorkflowRunResults(q repositoryContextSearchQuery, client *arungh.Client, redactor *safety.Redactor, runs []arungh.WorkflowRun) []repositoryContextSearchResult {
 	var results []repositoryContextSearchResult
 	for i := range runs {
 		run := runs[i]
@@ -453,25 +453,25 @@ func repositoryContextWorkflowRunResults(q repositoryContextSearchQuery, client 
 
 func repositoryContextKubernetesLogs(ctx context.Context, q repositoryContextSearchQuery) repositoryContextSearchResult {
 	now := time.Now().UTC()
-	namespace := strings.TrimSpace(os.Getenv("AGENTOS_KUBERNETES_NAMESPACE"))
-	selector := strings.TrimSpace(os.Getenv("AGENTOS_KUBERNETES_SELECTOR"))
+	namespace := strings.TrimSpace(os.Getenv("ARUN_KUBERNETES_NAMESPACE"))
+	selector := strings.TrimSpace(os.Getenv("ARUN_KUBERNETES_SELECTOR"))
 	if namespace == "" || selector == "" {
-		return repositoryContextSourceError(q, "kubernetes", fmt.Errorf("AGENTOS_KUBERNETES_NAMESPACE and AGENTOS_KUBERNETES_SELECTOR are required"))
+		return repositoryContextSourceError(q, "kubernetes", fmt.Errorf("ARUN_KUBERNETES_NAMESPACE and ARUN_KUBERNETES_SELECTOR are required"))
 	}
 
-	kubectl := strings.TrimSpace(os.Getenv("AGENTOS_KUBECTL"))
+	kubectl := strings.TrimSpace(os.Getenv("ARUN_KUBECTL"))
 	if kubectl == "" {
 		kubectl = "kubectl"
 	}
 	args := []string{}
-	if kubeconfig := strings.TrimSpace(os.Getenv("AGENTOS_KUBECONFIG")); kubeconfig != "" {
+	if kubeconfig := strings.TrimSpace(os.Getenv("ARUN_KUBECONFIG")); kubeconfig != "" {
 		args = append(args, "--kubeconfig", kubeconfig)
 	}
-	if contextName := strings.TrimSpace(os.Getenv("AGENTOS_KUBERNETES_CONTEXT")); contextName != "" {
+	if contextName := strings.TrimSpace(os.Getenv("ARUN_KUBERNETES_CONTEXT")); contextName != "" {
 		args = append(args, "--context", contextName)
 	}
 	args = append(args, "-n", namespace, "logs", "-l", selector, "--tail=200")
-	if container := strings.TrimSpace(os.Getenv("AGENTOS_KUBERNETES_CONTAINER")); container != "" {
+	if container := strings.TrimSpace(os.Getenv("ARUN_KUBERNETES_CONTAINER")); container != "" {
 		args = append(args, "-c", container)
 	}
 

@@ -1,6 +1,6 @@
 # Safety
 
-AgentOS includes multiple safety mechanisms to prevent accidental damage.
+ARUN includes multiple safety mechanisms to prevent accidental damage.
 
 ## Command Denylist
 
@@ -26,14 +26,14 @@ names:
 
 ## Main Branch Protection
 
-- AgentOS attempts to create and work on the task branch for each run.
+- ARUN attempts to create and work on the task branch for each run.
 - Repository-level branch protection should still be enforced by GitHub or your
   Git server.
 
 ## Run Isolation
 
-- Each run creates `${AGENTOS_HOME}/runs/{task_id}/` for all artifacts. If
-  `AGENTOS_HOME` is not set, AgentOS uses `~/.agentos`.
+- Each run creates `${ARUN_HOME}/runs/{task_id}/` for all artifacts. If
+  `ARUN_HOME` is not set, ARUN uses `~/.arun`.
 - All file changes are tracked via git diff
 - Before/after state is preserved
 

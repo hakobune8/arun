@@ -1,6 +1,6 @@
 # Embedding
 
-AgentOS uses embeddings for semantic search across memory, guidelines, and
+ARUN uses embeddings for semantic search across memory, guidelines, and
 past PRs. The embedder interface abstracts the underlying embedding model.
 
 ## Embedder Interface
@@ -21,7 +21,7 @@ variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LITELLM_BASE_URL` | `http://localhost:4000` | LiteLLM proxy URL |
-| `AGENTOS_MODEL_EMBEDDING` | `text-embedding-ada-002` | Embedding model |
+| `ARUN_MODEL_EMBEDDING` | `text-embedding-ada-002` | Embedding model |
 
 ```go
 emb := embedding.NewLiteLLMEmbedder()

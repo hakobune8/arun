@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package cli implements the command-line interface commands for AgentOS.
+// Package cli implements the command-line interface commands for ARUN.
 package cli
 
 import (
@@ -22,7 +22,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/kazyamaz200/agentos/internal/server"
+	"github.com/hakobune8/arun/internal/server"
 	"github.com/spf13/cobra"
 )
 
@@ -30,7 +30,7 @@ var servePort int
 
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "Start the AgentOS Web UI server",
+	Short: "Start the ARUN Web UI server",
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runServe(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
