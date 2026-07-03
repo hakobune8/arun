@@ -14,7 +14,20 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags "-X gi
 
 FROM golang:1.22-alpine
 
-RUN apk add --no-cache ca-certificates tzdata bash git
+ARG TARGETARCH=amd64
+ENV PATH="/usr/local/go/bin:${PATH}"
+
+RUN apk add --no-cache ca-certificates tzdata bash git curl docker-cli && \
+    case "${TARGETARCH}" in \
+      amd64|arm64) helm_arch="${TARGETARCH}" ;; \
+      arm) helm_arch="arm" ;; \
+      *) echo "unsupported helm arch: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac && \
+    curl -fsSL "https://get.helm.sh/helm-v3.15.4-linux-${helm_arch}.tar.gz" -o /tmp/helm.tar.gz && \
+    tar -xzf /tmp/helm.tar.gz -C /tmp && \
+    mv "/tmp/linux-${helm_arch}/helm" /usr/local/bin/helm && \
+    chmod +x /usr/local/bin/helm && \
+    rm -rf /tmp/helm.tar.gz "/tmp/linux-${helm_arch}"
 RUN addgroup -S agentos && adduser -S agentos -G agentos
 RUN mkdir -p /workspace /home/agentos/.agentos && chown -R agentos:agentos /workspace /home/agentos
 

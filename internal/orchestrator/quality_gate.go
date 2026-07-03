@@ -49,7 +49,7 @@ const goVetValidationCommand = `sh -c 'if command -v go >/dev/null 2>&1; then go
 
 const goModTidyValidationCommand = `sh -c 'if command -v go >/dev/null 2>&1; then go mod tidy -diff; else test -f go.mod; fi'`
 
-const dockerValidationCommand = `sh -c 'test -f Dockerfile && grep -Eiq "^FROM[[:space:]]" Dockerfile && if command -v docker >/dev/null 2>&1; then docker build -t agentos-validation .; fi'`
+const dockerValidationCommand = `sh -c 'test -f Dockerfile && grep -Eiq "^FROM[[:space:]]" Dockerfile && if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then docker build -t agentos-validation .; fi'`
 
 const helmValidationCommand = `sh -c 'chart=$(find . -path "*/Chart.yaml" -not -path "./.git/*" -print -quit); test -n "$chart"; dir=$(dirname "$chart"); if command -v helm >/dev/null 2>&1; then helm lint "$dir" && helm template agentos-validation "$dir" >/dev/null; fi'`
 
