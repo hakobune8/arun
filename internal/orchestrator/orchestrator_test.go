@@ -842,6 +842,19 @@ func TestValidateQualityGate_BlocksEscapingPath(t *testing.T) {
 	}
 }
 
+func TestDockerQualityGate_AllowsMissingDockerDaemon(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repo, "Dockerfile"), []byte("FROM scratch\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName: "docker",
+	}))
+	if !status.Passed {
+		t.Fatalf("docker quality gate failed without daemon: %+v", status)
+	}
+}
+
 func TestRecoverGoBackend_CreatesValidService(t *testing.T) {
 	t.Parallel()
 
