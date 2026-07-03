@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [v1.5.4] - 2026-07-03
+
+### Fixed
+- Recognized Japanese implementation-heavy scrum template wording such as
+  `minimal Go HTTP server` when deciding whether Go QA recovery applies.
+- Kept deterministic Go QA recovery active for Japanese UI runs that fail
+  runtime QA validation despite a valid generated Go service.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.4.
+
 ## [v1.5.3] - 2026-07-03
 
 ### Fixed
