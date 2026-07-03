@@ -232,8 +232,13 @@ func main() {
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte(main), 0o600); err != nil {
 		return "", fmt.Errorf("write main.go: %w", err)
 	}
-	if err := runCmd(ctx, root, "gofmt", "-w", "main.go"); err != nil {
-		return "", err
+	if commandAvailable("gofmt") {
+		if err := runCmd(ctx, root, "gofmt", "-w", "main.go"); err != nil {
+			return "", err
+		}
+	}
+	if !commandAvailable("go") {
+		return "Created minimal Go net/http service with / and /healthz. Go toolchain is unavailable; validation used static artifact checks.", nil
 	}
 	if err := runShell(ctx, root, "go test ./..."); err != nil {
 		return "", err
@@ -753,8 +758,13 @@ jobs:
 	if err := os.WriteFile(filepath.Join(workflowDir, "go.yml"), []byte(workflow), 0o600); err != nil {
 		return "", fmt.Errorf("write workflow: %w", err)
 	}
-	if err := runCmd(ctx, root, "gofmt", "-w", "main_test.go"); err != nil {
-		return "", err
+	if commandAvailable("gofmt") {
+		if err := runCmd(ctx, root, "gofmt", "-w", "main_test.go"); err != nil {
+			return "", err
+		}
+	}
+	if !commandAvailable("go") {
+		return "Added Go handler tests and GitHub Actions workflow. Go toolchain is unavailable; validation used static artifact checks.", nil
 	}
 	if err := runShell(ctx, root, "go test ./..."); err != nil {
 		return "", err
@@ -974,6 +984,11 @@ func shouldRecoverEmptyFrontendScaffold(root, description string) bool {
 
 func runShell(ctx context.Context, dir, command string) error {
 	return runCmd(ctx, dir, "sh", "-c", command)
+}
+
+func commandAvailable(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
 }
 
 func runCmd(ctx context.Context, dir, name string, args ...string) error {

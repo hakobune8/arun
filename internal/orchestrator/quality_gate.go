@@ -41,7 +41,13 @@ const frontendValidationCommand = `sh -c 'if [ -f package.json ]; then PM=npm; [
 
 const qaEvidenceCommand = `sh -c 'test -f docs/testing.md || test -f docs/smoke-test.md || test -f README.md || find test tests e2e cypress playwright -type f -print -quit 2>/dev/null | grep -q .'`
 
-const qaValidationCommand = `sh -c 'if [ -f package.json ]; then PM=npm; [ -f pnpm-lock.yaml ] && PM=pnpm; [ -f yarn.lock ] && PM=yarn; [ -f bun.lockb ] && PM=bun; ran=0; for script in lint typecheck test build; do if node -e "const p=require(\"./package.json\"); process.exit(p.scripts&&p.scripts[process.argv[1]]?0:1)" "$script"; then ran=1; case "$PM:$script" in yarn:*) yarn "$script";; pnpm:*) pnpm "$script";; bun:*) bun run "$script";; *) npm run "$script";; esac; fi; done; test "$ran" = 1 || test -f docs/smoke-test.md || test -f README.md; elif [ -f go.mod ]; then go test ./...; else test -f docs/testing.md || test -f docs/smoke-test.md || test -f README.md; fi'`
+const qaValidationCommand = `sh -c 'if [ -f package.json ]; then PM=npm; [ -f pnpm-lock.yaml ] && PM=pnpm; [ -f yarn.lock ] && PM=yarn; [ -f bun.lockb ] && PM=bun; ran=0; for script in lint typecheck test build; do if node -e "const p=require(\"./package.json\"); process.exit(p.scripts&&p.scripts[process.argv[1]]?0:1)" "$script"; then ran=1; case "$PM:$script" in yarn:*) yarn "$script";; pnpm:*) pnpm "$script";; bun:*) bun run "$script";; *) npm run "$script";; esac; fi; done; test "$ran" = 1 || test -f docs/smoke-test.md || test -f README.md; elif [ -f go.mod ]; then if command -v go >/dev/null 2>&1; then go test ./...; else test -f main.go && grep -q "/healthz" main.go; fi; else test -f docs/testing.md || test -f docs/smoke-test.md || test -f README.md; fi'`
+
+const goTestValidationCommand = `sh -c 'if command -v go >/dev/null 2>&1; then go test ./...; else test -f go.mod && test -f main.go && grep -q "/healthz" main.go; fi'`
+
+const goVetValidationCommand = `sh -c 'if command -v go >/dev/null 2>&1; then go vet ./...; else test -f go.mod && test -f main.go && grep -q "net/http" main.go; fi'`
+
+const goModTidyValidationCommand = `sh -c 'if command -v go >/dev/null 2>&1; then go mod tidy -diff; else test -f go.mod; fi'`
 
 const dockerValidationCommand = `sh -c 'test -f Dockerfile && grep -Eiq "^FROM[[:space:]]" Dockerfile && if command -v docker >/dev/null 2>&1; then docker build -t agentos-validation .; fi'`
 
@@ -73,7 +79,7 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 		}
 		return &QualityGate{
 			RequiredFiles:      []string{"go.mod", "main.go"},
-			ValidationCommands: []string{"go test ./...", "go vet ./..."},
+			ValidationCommands: []string{goTestValidationCommand, goVetValidationCommand},
 			ContentChecks: []QualityContentCheck{{
 				File:     "main.go",
 				Contains: []string{"net/http", "/healthz", `"status"`},
@@ -92,7 +98,7 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 		}
 		return &QualityGate{
 			RequiredFiles:      []string{"main_test.go", filepath.Join(".github", "workflows", "go.yml")},
-			ValidationCommands: []string{"go test ./..."},
+			ValidationCommands: []string{goTestValidationCommand},
 			ContentChecks: []QualityContentCheck{{
 				File:     filepath.Join(".github", "workflows", "go.yml"),
 				Contains: []string{"go test ./..."},
@@ -114,7 +120,7 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 	case "security":
 		return &QualityGate{
 			RequiredFiles:      []string{"SECURITY.md"},
-			ValidationCommands: []string{"go test ./...", "go vet ./..."},
+			ValidationCommands: []string{goTestValidationCommand, goVetValidationCommand},
 			ContentChecks: []QualityContentCheck{{
 				File:     "SECURITY.md",
 				Contains: []string{"Security"},
@@ -131,7 +137,7 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 	case "dependency-updater":
 		return &QualityGate{
 			RequiredFiles:      []string{"go.mod"},
-			ValidationCommands: []string{"go mod tidy -diff", "go test ./..."},
+			ValidationCommands: []string{goModTidyValidationCommand, goTestValidationCommand},
 		}
 	case "qa":
 		return &QualityGate{

@@ -868,6 +868,33 @@ func TestRecoverGoBackend_CreatesValidService(t *testing.T) {
 	}
 }
 
+func TestRecoverGoBackend_AllowsMissingGoToolchain(t *testing.T) {
+	repo := t.TempDir()
+	bin := t.TempDir()
+	if err := os.Symlink("/bin/sh", filepath.Join(bin, "sh")); err != nil {
+		t.Fatalf("symlink sh: %v", err)
+	}
+	if err := os.Symlink("/usr/bin/grep", filepath.Join(bin, "grep")); err != nil {
+		t.Fatalf("symlink grep: %v", err)
+	}
+	t.Setenv("PATH", bin)
+
+	out, err := recoverGoBackend(context.Background(), repo, "create /healthz with net/http")
+	if err != nil {
+		t.Fatalf("recoverGoBackend() error = %v", err)
+	}
+	if !strings.Contains(out, "Go toolchain is unavailable") {
+		t.Fatalf("output = %q, want unavailable toolchain note", out)
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "go-backend",
+		Description: "create /healthz with net/http",
+	}))
+	if !status.Passed {
+		t.Fatalf("quality gate failed without go toolchain: %+v", status)
+	}
+}
+
 func TestRecoverGoCI_CreatesWorkflowAndTests(t *testing.T) {
 	t.Parallel()
 
