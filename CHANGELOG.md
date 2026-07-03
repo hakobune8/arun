@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [v1.5.2] - 2026-07-03
+
+### Fixed
+- Added deterministic recovery for implementation-heavy Go QA validation
+  failures so a transient or recoverable `go test`/`go vet` failure does not
+  cascade through the remaining scrum subtasks.
+- Repaired generated Go Dockerfiles that assume `go.sum` exists when the
+  generated service has no external module dependencies.
+- Added QA recovery artifacts that document local test and smoke-test commands.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.2.
+
 ## [v1.5.1] - 2026-07-03
 
 ### Changed
