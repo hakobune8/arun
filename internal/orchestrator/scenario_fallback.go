@@ -29,7 +29,7 @@ import (
 )
 
 func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask *Subtask, runSandbox sandbox.Sandbox, runtimeErr error) (SubtaskResult, bool) {
-	if subtask.AgentName == "frontend" && shouldRecoverEmptyFrontendScaffold(runSandbox.RootDir(), subtask.Description) {
+	if subtask.AgentName == "frontend" && shouldRecoverFrontendScaffold(runSandbox.RootDir(), subtask.Description) {
 		out, err := recoverFrontendStaticApp(runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
 	}
@@ -1417,9 +1417,11 @@ func staticFrontendProjectExists(root string) bool {
 		fileExists(filepath.Join(root, "src", "main.js"))
 }
 
-func shouldRecoverEmptyFrontendScaffold(root, description string) bool {
+func shouldRecoverFrontendScaffold(root, description string) bool {
 	desc := strings.ToLower(description)
-	if !strings.Contains(desc, "empty repositor") && !strings.Contains(desc, "completely empty") && !strings.Contains(desc, "initial minimal app scaffold") {
+	isEmptyRepoTask := strings.Contains(desc, "empty repositor") || strings.Contains(desc, "completely empty") || strings.Contains(desc, "initial minimal app scaffold")
+	isGoServiceFrontendTask := isCanonicalGoServiceTask(description) && (strings.Contains(desc, "frontend") || strings.Contains(desc, "static"))
+	if !isEmptyRepoTask && !isGoServiceFrontendTask {
 		return false
 	}
 	return !fileExists(filepath.Join(root, "package.json")) &&
