@@ -46,11 +46,24 @@ func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask *Subta
 			return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
 		}
 	}
+	recoveryCtx, cancel := fallbackRecoveryContext()
+	defer cancel()
+
+	switch subtask.AgentName {
+	case "docker":
+		out, err := recoverDockerfile(recoveryCtx, runSandbox.RootDir(), subtask.Description)
+		return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
+	case "helm":
+		out, err := recoverHelmChart(recoveryCtx, runSandbox.RootDir(), subtask.Description)
+		return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
+	case "kubernetes":
+		out, err := recoverHelmChart(recoveryCtx, runSandbox.RootDir(), subtask.Description)
+		return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
+	}
+
 	if !isCanonicalGoServiceTask(subtask.Description) {
 		return SubtaskResult{}, false
 	}
-	recoveryCtx, cancel := fallbackRecoveryContext()
-	defer cancel()
 
 	switch subtask.AgentName {
 	case "go-backend":

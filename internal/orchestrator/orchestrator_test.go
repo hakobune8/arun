@@ -916,6 +916,66 @@ func TestRecoverDockerfileCreatesValidDockerArtifacts(t *testing.T) {
 	}
 }
 
+func TestRecoverBuiltInSubtask_DockerRuntimeErrorRecovers(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-step-1"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"docker": &recordingAgent{name: "docker"}},
+		&runtime.Config{},
+	)
+	subtask := &Subtask{
+		ID:          "step-1",
+		AgentName:   "docker",
+		Description: "Add or improve a Dockerfile and container-focused run instructions for a minimal Go HTTP server with /healthz.",
+	}
+	applyDefaultQualityGate(subtask)
+
+	result, ok := o.recoverBuiltInSubtask(context.Background(), subtask, runSandbox, errors.New("validation failed after 1 retries: tests"))
+	if !ok || !result.Success {
+		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "Dockerfile")); err != nil {
+		t.Fatalf("Dockerfile not created: %v", err)
+	}
+}
+
+func TestRecoverBuiltInSubtask_HelmRuntimeErrorRecovers(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-step-1"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"helm": &recordingAgent{name: "helm"}},
+		&runtime.Config{},
+	)
+	subtask := &Subtask{
+		ID:          "step-1",
+		AgentName:   "helm",
+		Description: "Add Helm chart for local empty invaders repository with Deployment and Service.",
+	}
+	applyDefaultQualityGate(subtask)
+
+	result, ok := o.recoverBuiltInSubtask(context.Background(), subtask, runSandbox, errors.New("validation failed after 1 retries: tests"))
+	if !ok || !result.Success {
+		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "charts", "invaders", "Chart.yaml")); err != nil {
+		t.Fatalf("Chart.yaml not created: %v", err)
+	}
+}
+
 func TestHelmQualityGateFailsWithoutChart(t *testing.T) {
 	t.Parallel()
 
