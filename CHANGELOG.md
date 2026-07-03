@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [v1.5.8] - 2026-07-04
+
+### Changed
+- Collapsed long orchestration task text, run descriptions, parent task
+  context, and run output by default so active runs are easier to scan.
+- Added a status-colored subtask timeline with dependency tags in the Runs tab
+  so the execution flow and task relationships are visible.
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.8.
+
 ## [v1.5.7] - 2026-07-04
 
 ### Changed
