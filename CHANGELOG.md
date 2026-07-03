@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+- Increased the built-in `implementation-heavy-scrum` template default
+  `maxDuration` from `60m` to `120m` so three-sprint live runs have enough
+  time to complete after Sprint 2 validation and reporting.
+
 ## [v1.5.6] - 2026-07-03
 
 ### Fixed

@@ -3247,7 +3247,7 @@ Expected output:
 			CreateIssue:       true,
 			CreatePullRequest: true,
 			Limits: governanceLimits{
-				MaxDuration:          "60m",
+				MaxDuration:          "120m",
 				MaxSubtasks:          30,
 				MaxConcurrentRepoRun: 1,
 			},

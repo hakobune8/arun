@@ -1285,8 +1285,8 @@ func TestServer_OrchestrateTemplates_ReturnsBuiltIns(t *testing.T) {
 			t.Fatalf("implementation-heavy-scrum task missing %q", want)
 		}
 	}
-	if heavy.Limits.MaxDuration != "60m" || heavy.Limits.MaxSubtasks != 30 || heavy.Limits.MaxConcurrentRepoRun != 1 {
-		t.Fatalf("implementation-heavy-scrum limits = %+v, want 60m/30/1", heavy.Limits)
+	if heavy.Limits.MaxDuration != "120m" || heavy.Limits.MaxSubtasks != 30 || heavy.Limits.MaxConcurrentRepoRun != 1 {
+		t.Fatalf("implementation-heavy-scrum limits = %+v, want 120m/30/1", heavy.Limits)
 	}
 	for _, want := range []string{"analyst", "go-backend", "frontend", "docs", "qa", "reviewer", "release-manager", "docker", "helm", "kubernetes", "devops"} {
 		if !containsString(heavy.Agents, want) {
