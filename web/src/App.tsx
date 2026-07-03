@@ -1454,9 +1454,14 @@ function OrchestrationDetail({ current, selectedID, tab, setTab, refresh }: { cu
 
 function OverviewTab({ record }: { record: Orchestration }) {
   const results = record.results ?? []
-  const passed = results.filter((x) => x.success).length
-  const failed = results.filter((x) => x.success === false).length
-  const total = record.plan?.subtasks?.length ?? results.length
+  const subtaskStates = record.subtasks ?? []
+  const passed = subtaskStates.length
+    ? subtaskStates.filter((x) => x.status === 'completed' || x.result?.success === true).length
+    : results.filter((x) => x.success).length
+  const failed = subtaskStates.length
+    ? subtaskStates.filter((x) => x.status === 'failed' || x.result?.success === false).length
+    : results.filter((x) => x.success === false).length
+  const total = record.plan?.subtasks?.length ?? (subtaskStates.length || results.length)
   const usage = record.usage ?? {}
   const limits = record.limits ?? {}
   const stagePresets = record.stagePresets ?? []
