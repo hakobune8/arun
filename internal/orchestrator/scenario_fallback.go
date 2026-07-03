@@ -120,6 +120,9 @@ func (o *Orchestrator) recoverNoOpBuiltInSubtaskWithStatus(ctx context.Context, 
 	case "ci-fixer":
 		out, err := recoverGoCI(recoveryCtx, runSandbox.RootDir())
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
+	case "docker":
+		out, err := recoverDockerfile(recoveryCtx, runSandbox.RootDir(), subtask.Description)
+		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 	case "helm":
 		out, err := recoverHelmChart(recoveryCtx, runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
@@ -864,6 +867,74 @@ jobs:
 		return "", err
 	}
 	return "Added Go handler tests and GitHub Actions workflow.", nil
+}
+
+func recoverDockerfile(ctx context.Context, root, description string) (string, error) {
+	if !fileExists(filepath.Join(root, "go.mod")) || !fileExists(filepath.Join(root, "main.go")) {
+		if _, err := recoverGoBackend(ctx, root, description); err != nil {
+			return "", err
+		}
+	}
+	dockerfile := `FROM golang:1.22-alpine AS build
+WORKDIR /src
+COPY go.mod ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/app .
+
+FROM alpine:3.20
+RUN addgroup -S app && adduser -S app -G app
+WORKDIR /app
+COPY --from=build /out/app /app/app
+USER app
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
+ENTRYPOINT ["/app/app"]
+`
+	dockerignore := `.git
+run.log
+run_state.json
+tool_log.jsonl
+tmp
+dist
+node_modules
+`
+	if err := os.WriteFile(filepath.Join(root, "Dockerfile"), []byte(dockerfile), 0o600); err != nil {
+		return "", fmt.Errorf("write Dockerfile: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".dockerignore"), []byte(dockerignore), 0o600); err != nil {
+		return "", fmt.Errorf("write .dockerignore: %w", err)
+	}
+	docsDir := filepath.Join(root, "docs")
+	if err := os.MkdirAll(docsDir, 0o755); err != nil {
+		return "", err
+	}
+	containerDocs := strings.Join([]string{
+		"# Container Run",
+		"",
+		"Build the application image:",
+		"",
+		"```sh",
+		"docker build -t invaders:local .",
+		"```",
+		"",
+		"Run it locally:",
+		"",
+		"```sh",
+		"docker run --rm -p 8080:8080 invaders:local",
+		"curl http://127.0.0.1:8080/healthz",
+		"```",
+		"",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(docsDir, "container-run.md"), []byte(containerDocs), 0o600); err != nil {
+		return "", fmt.Errorf("write container docs: %w", err)
+	}
+	if commandAvailable("docker") {
+		if err := runShell(ctx, root, dockerValidationCommand); err != nil {
+			return "", err
+		}
+	}
+	return "Created Dockerfile, .dockerignore, and container run documentation.", nil
 }
 
 func recoverHelmChart(ctx context.Context, root, description string) (string, error) {
