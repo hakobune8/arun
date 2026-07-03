@@ -17,7 +17,7 @@ FROM golang:1.22-alpine
 ARG TARGETARCH=amd64
 ENV PATH="/usr/local/go/bin:${PATH}"
 
-RUN apk add --no-cache ca-certificates tzdata bash git curl docker-cli && \
+RUN apk add --no-cache ca-certificates tzdata bash git curl docker-cli nodejs npm && \
     case "${TARGETARCH}" in \
       amd64|arm64) helm_arch="${TARGETARCH}" ;; \
       arm) helm_arch="arm" ;; \

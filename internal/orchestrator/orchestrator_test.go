@@ -388,6 +388,45 @@ func TestQAQualityGate_AllowsStaticFrontendSmokeEvidence(t *testing.T) {
 	}
 }
 
+func TestFrontendQualityGate_AllowsStaticEvidenceWithoutNodeRuntime(t *testing.T) {
+	if goruntime.GOOS == "windows" {
+		t.Skip("PATH-limited POSIX shell validation is covered on Unix runners")
+	}
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"package.json":                         `{"scripts":{"test":"node --check src/main.js","build":"node --check src/main.js"}}`,
+		"index.html":                           `<script type="module" src="./src/main.js"></script>`,
+		filepath.Join("src", "main.js"):        `console.log("ok");`,
+		filepath.Join("docs", "smoke-test.md"): "# Smoke Test\n\nRun npm test when Node.js is available.\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	bin := t.TempDir()
+	if err := os.Symlink("/bin/sh", filepath.Join(bin, "sh")); err != nil {
+		t.Fatalf("symlink sh: %v", err)
+	}
+	t.Setenv("PATH", bin)
+
+	for _, agent := range []string{"frontend", "qa"} {
+		subtask := &Subtask{AgentName: agent, Description: "Validate static frontend assets"}
+		applyDefaultQualityGate(subtask)
+		status := validateQualityGate(context.Background(), repo, subtask.QualityGate)
+		if !status.Passed {
+			t.Fatalf("%s quality gate failed without node runtime: %+v", agent, status)
+		}
+	}
+}
+
 func TestPlan_EnrichesGeneratedSubtasksWithParentRequirements(t *testing.T) {
 	t.Parallel()
 
