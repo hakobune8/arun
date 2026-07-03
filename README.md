@@ -258,6 +258,8 @@ release that changes `charts/arun/**`, update both `version` and
 `appVersion` in `charts/arun/Chart.yaml` intentionally so chart-releaser can
 publish a new immutable chart release.
 
+- [v1.5.2 release notes](docs/release-v1.5.2.md) — implementation-heavy Go QA
+  recovery hardening.
 - [v1.5.1 release notes](docs/release-v1.5.1.md) — Japanese Web UI task
   template and agent description localization
 - [v1.5.0 release notes](docs/release-v1.5.0.md) — repository transfer to
