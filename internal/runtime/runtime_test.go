@@ -33,6 +33,8 @@ type mockAgent struct {
 	err           error
 	executeResult *ExecutionResult
 	executeErr    error
+	reviewResult  *ReviewResult
+	reviewErr     error
 }
 
 func (m *mockAgent) Name() string { return "mock-agent" }
@@ -49,6 +51,9 @@ func (m *mockAgent) Execute(ctx *RunContext, plan *Plan) (*ExecutionResult, erro
 }
 
 func (m *mockAgent) Review(ctx *RunContext, result *ExecutionResult) (*ReviewResult, error) {
+	if m.reviewResult != nil || m.reviewErr != nil {
+		return m.reviewResult, m.reviewErr
+	}
 	return &ReviewResult{Approved: true, Summary: "mock review"}, nil
 }
 
@@ -193,6 +198,42 @@ func TestRuntime_RunRedactsExecutionArtifacts(t *testing.T) {
 				t.Fatalf("%s leaked %q: %s", name, leaked, text)
 			}
 		}
+	}
+}
+
+func TestRuntime_RunCompletesWhenReviewReturnsError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("AGENTOS_HOME", home)
+
+	prof := profile.DefaultProfile()
+	ws := sandbox.NewWorkspace(t.TempDir())
+	agt := &mockAgent{
+		plan: &Plan{Summary: "test plan"},
+		executeResult: &ExecutionResult{
+			Success: true,
+			Diff:    "diff --git a/file.txt b/file.txt\n",
+		},
+		reviewErr: fmt.Errorf("parse review JSON"),
+	}
+	rt := NewRuntime(llm.NewMockLLMClient(nil), &prof, ws, &Config{}, agt)
+
+	err := rt.Run(context.Background(), &task.Task{
+		ID:         "review-error",
+		Repo:       ws.RootDir(),
+		BaseBranch: "main",
+		Branch:     "agent/review-error",
+		Title:      "review error",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, want review error to be non-fatal", err)
+	}
+
+	summary, err := os.ReadFile(filepath.Join(home, "runs", "review-error", "summary.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(summary), "Review failed: parse review JSON") {
+		t.Fatalf("summary missing review failure:\n%s", summary)
 	}
 }
 
