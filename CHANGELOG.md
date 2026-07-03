@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [v1.5.3] - 2026-07-03
+
+### Fixed
+- Added deterministic recovery for built-in implementation-heavy scrum analyst
+  planning subtasks when runtime planner output is empty or unparsable.
+- Prevented empty planning output from cascading all scrum subtasks before the
+  first implementation stage can run.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.3.
+
 ## [v1.5.2] - 2026-07-03
 
 ### Fixed
