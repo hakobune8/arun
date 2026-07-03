@@ -1232,34 +1232,41 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 		appendOrchestrationEvent(record, "guidelines.loaded", "", fmt.Sprintf("Loaded %d repository guidelines", len(repositoryGuidelines)))
 	}
 
-	planCtx, cancelPlan := context.WithTimeout(runCtx, orchestratePlanTimeout())
-	defer cancelPlan()
-	planningTask := taskWithRepositoryMemory(record.Task, record.MemoryUsed)
-	planningTask = taskWithRepositoryGuidelines(planningTask, repositoryGuidelines)
-	plan, err := orch.Plan(planCtx, planningTask)
-	if err != nil {
-		if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
-			record.Status = "failed"
-			record.Error = fmt.Sprintf("governance limit exceeded: maxDuration %s", record.Limits.MaxDuration)
-			markGovernanceLimitExceeded(record, record.Error)
-			appendOrchestrationEvent(record, "budget.exceeded", "", record.Error)
-		} else if errors.Is(planCtx.Err(), context.Canceled) || errors.Is(runCtx.Err(), context.Canceled) {
-			s.stopCanceledOrchestration(record, "Orchestration canceled during planning")
+	var plan *orchestrator.TaskPlan
+	if usesImplementationHeavyScrumPlan(record) {
+		plan = implementationHeavyScrumPlan(record)
+		appendOrchestrationEvent(record, "planning.template", "", "Using implementation-heavy scrum sprint-stage workflow")
+	} else {
+		planCtx, cancelPlan := context.WithTimeout(runCtx, orchestratePlanTimeout())
+		defer cancelPlan()
+		planningTask := taskWithRepositoryMemory(record.Task, record.MemoryUsed)
+		planningTask = taskWithRepositoryGuidelines(planningTask, repositoryGuidelines)
+		var err error
+		plan, err = orch.Plan(planCtx, planningTask)
+		if err != nil {
+			if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+				record.Status = "failed"
+				record.Error = fmt.Sprintf("governance limit exceeded: maxDuration %s", record.Limits.MaxDuration)
+				markGovernanceLimitExceeded(record, record.Error)
+				appendOrchestrationEvent(record, "budget.exceeded", "", record.Error)
+			} else if errors.Is(planCtx.Err(), context.Canceled) || errors.Is(runCtx.Err(), context.Canceled) {
+				s.stopCanceledOrchestration(record, "Orchestration canceled during planning")
+				return
+			} else {
+				record.Status = "failed"
+				record.Error = "plan: " + err.Error()
+				appendOrchestrationEvent(record, "planning.failed", "", record.Error)
+			}
+			record.UpdatedAt = time.Now().UTC()
+			updateGovernanceUsage(record)
+			if saveErr := saveOrchestrationRecord(record); saveErr != nil {
+				slog.Warn("save orchestration failed", "id", record.ID, "error", saveErr)
+			}
+			s.auditOrchestrationOutcome(record, auditOutcomeFailure, record.Error)
+			s.postSourceIssueFinalComment(record)
+			s.notifyScheduledRun(record)
 			return
-		} else {
-			record.Status = "failed"
-			record.Error = "plan: " + err.Error()
-			appendOrchestrationEvent(record, "planning.failed", "", record.Error)
 		}
-		record.UpdatedAt = time.Now().UTC()
-		updateGovernanceUsage(record)
-		if saveErr := saveOrchestrationRecord(record); saveErr != nil {
-			slog.Warn("save orchestration failed", "id", record.ID, "error", saveErr)
-		}
-		s.auditOrchestrationOutcome(record, auditOutcomeFailure, record.Error)
-		s.postSourceIssueFinalComment(record)
-		s.notifyScheduledRun(record)
-		return
 	}
 	if err := enforceGovernancePlan(record, plan); err != nil {
 		record.Plan = plan
@@ -1306,6 +1313,10 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 		}
 		applySubtaskEvent(record, &event)
 		appendTimelineForSubtaskEvent(record, &event)
+		if err := commitScrumSprintCheckpoint(record, &event); err != nil {
+			appendOrchestrationEvent(record, "sprint.commit_failed", event.Subtask.ID, err.Error())
+			slog.Warn("commit scrum sprint checkpoint failed", "id", record.ID, "subtask", event.Subtask.ID, "error", err)
+		}
 		record.UpdatedAt = time.Now().UTC()
 		updateGovernanceUsage(record)
 		if err := saveOrchestrationRecord(record); err != nil {
@@ -1653,6 +1664,108 @@ func appendOrchestrationEvent(record *orchestrationRecord, eventType, subtaskID,
 		SubtaskID: subtaskID,
 		Message:   safety.NewRedactor().RedactString(message),
 	})
+}
+
+func usesImplementationHeavyScrumPlan(record *orchestrationRecord) bool {
+	return record != nil && record.Scenario != nil && record.Scenario.ID == "implementation-heavy-scrum"
+}
+
+func implementationHeavyScrumPlan(record *orchestrationRecord) *orchestrator.TaskPlan {
+	task := ""
+	if record != nil {
+		task = strings.TrimSpace(record.Task)
+	}
+	if task == "" {
+		task = "Build the requested product increment."
+	}
+	step := func(id, agentName, description string, deps ...string) orchestrator.Subtask {
+		return orchestrator.Subtask{
+			ID:          id,
+			AgentName:   agentName,
+			Description: description + "\n\nParent task:\n" + task,
+			Deps:        deps,
+		}
+	}
+	return &orchestrator.TaskPlan{
+		Description: "Implementation-heavy scrum workflow with three PDCA-style sprint checkpoints. Each sprint runs planning, implementation, QA, adjustment planning, remediation, reporting, and one checkpoint commit in one pull request.",
+		Subtasks: []orchestrator.Subtask{
+			step("sprint-1-plan", "analyst", "Sprint 1 planning: inspect the repository state, identify the smallest playable/serviceable baseline, and write concrete implementation notes for backend, frontend, tests, and acceptance criteria."),
+			step("sprint-1-backend", "go-backend", "Sprint 1 coding: create or improve a minimal Go HTTP server with a health endpoint and tests. For an empty repository, initialize the Go module and keep the service easy to containerize.", "sprint-1-plan"),
+			step("sprint-1-frontend", "frontend", "Sprint 1 coding: create or connect a minimal user-facing frontend/static experience that can be served by the project. Preserve any backend work from the previous step.", "sprint-1-backend"),
+			step("sprint-1-qa", "qa", "Sprint 1 QA: run available tests or smoke checks, record gaps in repository artifacts, and explicitly call out backend/frontend follow-up work for this sprint adjustment pass.", "sprint-1-frontend"),
+			step("sprint-1-adjust-plan", "analyst", "Sprint 1 adjustment planning: read Sprint 1 QA evidence and turn failures or missing baseline behavior into concrete backend/frontend remediation tasks before the Sprint 1 checkpoint.", "sprint-1-qa"),
+			step("sprint-1-backend-fix", "go-backend", "Sprint 1 remediation: address QA findings that require backend, API, test, or integration changes. Keep the repository runnable from a fresh checkout.", "sprint-1-adjust-plan"),
+			step("sprint-1-frontend-fix", "frontend", "Sprint 1 remediation: address QA findings that require frontend or static asset changes, preserving the backend fixes from this sprint.", "sprint-1-backend-fix"),
+			step("sprint-1-report", "release-manager", "Sprint 1 reporting: summarize delivered baseline, QA evidence, remediation performed, and remaining backlog before the Sprint 1 checkpoint commit.", "sprint-1-frontend-fix"),
+
+			step("sprint-2-plan", "analyst", "Sprint 2 planning: read Sprint 1 report and repository state, then plan deployment packaging work and any unresolved product gaps.", "sprint-1-report"),
+			step("sprint-2-backend", "go-backend", "Sprint 2 coding: harden app startup, configuration, and tests before packaging. Address remaining product gaps from Sprint 1 if they block deployment.", "sprint-2-plan"),
+			step("sprint-2-docker", "docker", "Sprint 2 coding: add or improve a Dockerfile and container-focused run instructions for the application produced so far.", "sprint-2-backend"),
+			step("sprint-2-helm", "helm", "Sprint 2 coding: add or improve a Helm chart suitable for deploying this application into the same Kubernetes environment as AgentOS. Ingress is not required.", "sprint-2-docker"),
+			step("sprint-2-kubernetes", "kubernetes", "Sprint 2 coding: add Kubernetes Deployment and Service manifests or chart templates for the application. Avoid ingress unless explicitly requested.", "sprint-2-helm"),
+			step("sprint-2-qa", "qa", "Sprint 2 QA: validate Docker, Helm, Kubernetes, and app-level smoke paths where tooling is available. Record packaging or deployment gaps for this sprint adjustment pass.", "sprint-2-kubernetes"),
+			step("sprint-2-adjust-plan", "analyst", "Sprint 2 adjustment planning: read Sprint 2 QA evidence and turn deployment/package failures into concrete remediation tasks before the Sprint 2 checkpoint.", "sprint-2-qa"),
+			step("sprint-2-infra-fix", "kubernetes", "Sprint 2 remediation: fix Kubernetes, Helm, or deployment manifest issues found by QA, coordinating with existing Docker and app artifacts.", "sprint-2-adjust-plan"),
+			step("sprint-2-report", "release-manager", "Sprint 2 reporting: summarize deployment artifacts, QA evidence, remediation performed, and remaining CI/release backlog before the Sprint 2 checkpoint commit.", "sprint-2-infra-fix"),
+
+			step("sprint-3-plan", "analyst", "Sprint 3 planning: read Sprint 2 report and repository state, then plan CI, documentation, final QA, review, and release-readiness work.", "sprint-2-report"),
+			step("sprint-3-devops", "devops", "Sprint 3 coding: add or improve GitHub Actions CI so future pull requests can continuously run the available backend/frontend/container checks.", "sprint-3-plan"),
+			step("sprint-3-docs", "docs", "Sprint 3 documentation: update README or docs with local run, test, Docker, Helm/Kubernetes deploy, and rollback or operations notes.", "sprint-3-devops"),
+			step("sprint-3-qa", "qa", "Sprint 3 QA: run final smoke and validation checks across app, CI, docs, Docker, Helm, and Kubernetes artifacts. Record any release-blocking gaps for this sprint adjustment pass.", "sprint-3-docs"),
+			step("sprint-3-adjust-plan", "analyst", "Sprint 3 adjustment planning: read final QA evidence and convert release-blocking issues into concrete remediation tasks before review.", "sprint-3-qa"),
+			step("sprint-3-backend-fix", "go-backend", "Sprint 3 remediation: fix any final app, test, startup, or integration issues discovered by QA before review.", "sprint-3-adjust-plan"),
+			step("sprint-3-review", "reviewer", "Sprint 3 review: inspect the final diff for correctness, maintainability, missing tests, and deployment risks. Leave actionable notes in repository artifacts where appropriate.", "sprint-3-backend-fix"),
+			step("sprint-3-report", "release-manager", "Sprint 3 reporting: produce a concise final report covering what was built, the three sprint checkpoints, validation results, GitHub artifacts, and remaining backlog.", "sprint-3-review"),
+		},
+	}
+}
+
+func commitScrumSprintCheckpoint(record *orchestrationRecord, event *orchestrator.SubtaskEvent) error {
+	if !usesImplementationHeavyScrumPlan(record) || event == nil || event.Type != orchestrator.SubtaskCompleted {
+		return nil
+	}
+	if event.Result == nil || !event.Result.Success {
+		return nil
+	}
+	sprint, ok := scrumSprintCheckpoint(event.Subtask.ID)
+	if !ok {
+		return nil
+	}
+	if strings.TrimSpace(record.RepoPath) == "" {
+		return fmt.Errorf("missing repository workspace")
+	}
+	if err := gitAddAll(record.RepoPath, record.GitHubToken); err != nil {
+		return err
+	}
+	if err := gitConfig(record.RepoPath, record.GitHubToken, "user.email", "agentos@example.invalid"); err != nil {
+		return err
+	}
+	if err := gitConfig(record.RepoPath, record.GitHubToken, "user.name", "AgentOS"); err != nil {
+		return err
+	}
+	message := fmt.Sprintf("AgentOS %s sprint %d checkpoint", record.ID, sprint)
+	if gitTreeClean(record.RepoPath, record.GitHubToken) {
+		if err := gitCommitAllowEmpty(record.RepoPath, record.GitHubToken, message); err != nil {
+			return err
+		}
+	} else if err := gitCommit(record.RepoPath, record.GitHubToken, message); err != nil {
+		return err
+	}
+	appendOrchestrationEvent(record, "sprint.commit", event.Subtask.ID, fmt.Sprintf("Committed Sprint %d checkpoint", sprint))
+	return nil
+}
+
+func scrumSprintCheckpoint(subtaskID string) (int, bool) {
+	switch subtaskID {
+	case "sprint-1-report":
+		return 1, true
+	case "sprint-2-report":
+		return 2, true
+	case "sprint-3-report":
+		return 3, true
+	default:
+		return 0, false
+	}
 }
 
 func orchestrateSubtaskTimeout() time.Duration {
@@ -2536,6 +2649,12 @@ func gitCommit(dir, token, message string) error {
 	return runPreparedGitCommand(cmd, dir, token)
 }
 
+func gitCommitAllowEmpty(dir, token, message string) error {
+	// codeql[go/command-injection]
+	cmd := exec.Command("git", "commit", "--allow-empty", "-m", message)
+	return runPreparedGitCommand(cmd, dir, token)
+}
+
 func gitCreateEmptyCommit(dir, token, message string) (string, error) {
 	// codeql[go/command-injection]
 	treeCmd := exec.Command("git", "mktree")
@@ -3093,7 +3212,7 @@ Expected output:
 			CreatePullRequest: true,
 			Limits: governanceLimits{
 				MaxDuration:          "60m",
-				MaxSubtasks:          24,
+				MaxSubtasks:          30,
 				MaxConcurrentRepoRun: 1,
 			},
 			TaskTemplate: `Run an implementation-heavy agile scrum workflow for {{repo}} on {{baseBranch}}.
