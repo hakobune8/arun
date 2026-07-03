@@ -83,7 +83,7 @@ func (c *QdrantClient) do(method, path string, body, respTarget interface{}) err
 	}
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("Qdrant error (status %d): %s", resp.StatusCode, string(respData))
+		return fmt.Errorf("qdrant error (status %d): %s", resp.StatusCode, string(respData))
 	}
 
 	if respTarget != nil {

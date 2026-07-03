@@ -798,7 +798,7 @@ func frontendChangelog(description string) string {
 
 func recoverGoCI(ctx context.Context, root string) (string, error) {
 	if !fileExists(filepath.Join(root, "go.mod")) || !fileExists(filepath.Join(root, "main.go")) {
-		return "", fmt.Errorf("Go service files are required before CI recovery")
+		return "", fmt.Errorf("go service files are required before CI recovery")
 	}
 	test := `package main
 

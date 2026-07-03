@@ -1811,7 +1811,7 @@ func resolveOrchestrateRepoWithToken(repo, baseBranch, token string) (string, er
 		return cloneRemoteRepoWithToken(cloneURL, defaultBaseBranch(baseBranch), token)
 	}
 	if repo != "." {
-		return "", fmt.Errorf("repo must be a GitHub HTTPS URL, owner/repo, or .")
+		return "", fmt.Errorf("repo must be a GitHub HTTPS URL, owner/repo, or current directory")
 	}
 
 	wd, err := os.Getwd()
@@ -1957,6 +1957,7 @@ func cloneRemoteRepoWithToken(cloneURL, baseBranch, token string) (string, error
 
 func runGitCloneWithToken(args []string, token string) ([]byte, error) {
 	// Inputs are constrained to HTTPS github.com owner/repo URLs and validated refs before args are built.
+	//
 	// codeql[go/command-injection]
 	cmd := exec.Command("git", args...)
 	cmd.Env = gitCloneEnvWithToken(args, token)
