@@ -198,6 +198,11 @@ func recoverGoBackend(ctx context.Context, root, description string) (string, er
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return "", err
 	}
+	if shouldResetCanonicalGoFallback(root, description) {
+		if err := removeGeneratedGoFiles(root); err != nil {
+			return "", err
+		}
+	}
 	modulePath := inferModulePath(description, root)
 	if !fileExists(filepath.Join(root, "go.mod")) {
 		if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module "+modulePath+"\n\ngo 1.22\n"), 0o600); err != nil {
@@ -232,8 +237,49 @@ func main() {
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte(main), 0o600); err != nil {
 		return "", fmt.Errorf("write main.go: %w", err)
 	}
+	test := `package main
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func TestHealthzHandler(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+
+	healthzHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", rec.Code, http.StatusOK)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode healthz response: %v", err)
+	}
+	if body["status"] != "ok" {
+		t.Fatalf("status = %q, want ok", body["status"])
+	}
+}
+
+func TestRootHandler(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	rootHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+`
+	if err := os.WriteFile(filepath.Join(root, "main_test.go"), []byte(test), 0o600); err != nil {
+		return "", fmt.Errorf("write main_test.go: %w", err)
+	}
 	if commandAvailable("gofmt") {
-		if err := runCmd(ctx, root, "gofmt", "-w", "main.go"); err != nil {
+		if err := runCmd(ctx, root, "gofmt", "-w", "main.go", "main_test.go"); err != nil {
 			return "", err
 		}
 	}
@@ -247,6 +293,45 @@ func main() {
 		return "", err
 	}
 	return "Created minimal Go net/http service with / and /healthz.", nil
+}
+
+func shouldResetCanonicalGoFallback(root, description string) bool {
+	desc := strings.ToLower(description)
+	if strings.Contains(desc, "empty repositor") ||
+		strings.Contains(desc, "completely empty") ||
+		strings.Contains(desc, "no commits") ||
+		strings.Contains(desc, "new repository") ||
+		strings.Contains(desc, "new or sandbox") {
+		return true
+	}
+	return repositoryHasNoCommits(root)
+}
+
+func repositoryHasNoCommits(root string) bool {
+	cmd := exec.Command("git", "rev-parse", "--verify", "HEAD")
+	cmd.Dir = root
+	return cmd.Run() != nil && fileExists(filepath.Join(root, ".git"))
+}
+
+func removeGeneratedGoFiles(root string) error {
+	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".go" {
+			return nil
+		}
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return nil
+	})
 }
 
 func recoverFrontendStaticApp(root, description string) (string, error) {
