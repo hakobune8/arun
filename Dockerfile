@@ -10,7 +10,7 @@ RUN cd web && npm ci && npm run build
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 ARG VERSION=dev
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags "-X github.com/kazyamaz200/agentos/internal/cli.Version=${VERSION}" -o agentos ./cmd/agentos
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags "-X github.com/hakobune8/arun/internal/cli.Version=${VERSION}" -o arun ./cmd/arun
 
 FROM golang:1.22-alpine
 
@@ -30,16 +30,16 @@ RUN apk add --no-cache ca-certificates tzdata bash git curl docker-cli && \
     ln -sf /usr/local/go/bin/go /usr/local/bin/go && \
     ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt && \
     rm -rf /tmp/helm.tar.gz "/tmp/linux-${helm_arch}"
-RUN addgroup -S agentos && adduser -S agentos -G agentos
-RUN mkdir -p /workspace /home/agentos/.agentos && chown -R agentos:agentos /workspace /home/agentos
+RUN addgroup -S arun && adduser -S arun -G arun
+RUN mkdir -p /workspace /home/arun/.arun && chown -R arun:arun /workspace /home/arun
 
 WORKDIR /workspace
-COPY --from=builder /build/agentos /usr/local/bin/agentos
-USER agentos
-ENV HOME=/home/agentos
-ENV AGENTOS_HOME=/home/agentos/.agentos
+COPY --from=builder /build/arun /usr/local/bin/arun
+USER arun
+ENV HOME=/home/arun
+ENV ARUN_HOME=/home/arun/.arun
 
 EXPOSE 8080
 
-ENTRYPOINT ["agentos"]
+ENTRYPOINT ["arun"]
 CMD ["--help"]

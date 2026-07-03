@@ -1,6 +1,6 @@
 # v1.4.0 Release Notes
 
-AgentOS v1.4.0 completes the Governance Scale & Evals milestone.
+ARUN v1.4.0 completes the Governance Scale & Evals milestone.
 
 ## Highlights
 
@@ -18,15 +18,15 @@ AgentOS v1.4.0 completes the Governance Scale & Evals milestone.
 
 ## Upgrade
 
-Use image tag `ghcr.io/kazyamaz200/agentos:v1.4.0` and Helm chart version
+Use image tag `ghcr.io/hakobune8/arun:v1.4.0` and Helm chart version
 `1.4.0`.
 
 ```bash
 helm --kubeconfig /Users/ssl222/Downloads/kubeconfig/mgmt-k3s.yaml \
-  upgrade --install agentos charts/agentos \
-  -n agentos \
+  upgrade --install arun charts/arun \
+  -n arun \
   --reuse-values \
-  --set image.repository=ghcr.io/kazyamaz200/agentos \
+  --set image.repository=ghcr.io/hakobune8/arun \
   --set image.tag=v1.4.0 \
   --set image.pullPolicy=Always \
   --server-side=true \
@@ -43,7 +43,7 @@ helm --kubeconfig /Users/ssl222/Downloads/kubeconfig/mgmt-k3s.yaml \
 - `/api/agents` returns the 15 built-in agents.
 - Authenticated Web UI storage usage loads.
 - Storage cleanup requires previewed selection before execution.
-- `agentos evals` completes the deterministic suite and writes JSON/Markdown
+- `arun evals` completes the deterministic suite and writes JSON/Markdown
   reports.
 - Unauthenticated protected APIs return `401` when production authentication is
   required.
@@ -64,10 +64,10 @@ runtime values:
 
 ```bash
 helm --kubeconfig /Users/ssl222/Downloads/kubeconfig/mgmt-k3s.yaml \
-  upgrade --install agentos charts/agentos \
-  -n agentos \
+  upgrade --install arun charts/arun \
+  -n arun \
   --reuse-values \
-  --set image.repository=ghcr.io/kazyamaz200/agentos \
+  --set image.repository=ghcr.io/hakobune8/arun \
   --set image.tag=<previous-tag> \
   --set image.pullPolicy=Always \
   --server-side=true \

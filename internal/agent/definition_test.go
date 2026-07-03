@@ -20,7 +20,7 @@ func TestLoadDefinition_Valid(t *testing.T) {
 	t.Parallel()
 
 	yaml := `
-apiVersion: agentos.io/v1
+apiVersion: arun.io/v1
 kind: Agent
 metadata:
   name: test-agent
@@ -33,8 +33,8 @@ spec:
 	if err != nil {
 		t.Fatalf("LoadDefinition() error = %v", err)
 	}
-	if def.APIVersion != "agentos.io/v1" {
-		t.Errorf("APIVersion = %q, want %q", def.APIVersion, "agentos.io/v1")
+	if def.APIVersion != "arun.io/v1" {
+		t.Errorf("APIVersion = %q, want %q", def.APIVersion, "arun.io/v1")
 	}
 	if def.Kind != "Agent" {
 		t.Errorf("Kind = %q, want %q", def.Kind, "Agent")
@@ -51,7 +51,7 @@ func TestLoadDefinition_Full(t *testing.T) {
 	t.Parallel()
 
 	yaml := `
-apiVersion: agentos.io/v1
+apiVersion: arun.io/v1
 kind: Agent
 metadata:
   name: go-backend
@@ -134,7 +134,7 @@ func TestLoadDefinition_MissingName(t *testing.T) {
 	t.Parallel()
 
 	yaml := `
-apiVersion: agentos.io/v1
+apiVersion: arun.io/v1
 kind: Agent
 metadata:
   name: ""
@@ -153,7 +153,7 @@ func TestLoadDefinition_MissingModel(t *testing.T) {
 	t.Parallel()
 
 	yaml := `
-apiVersion: agentos.io/v1
+apiVersion: arun.io/v1
 kind: Agent
 metadata:
   name: test
@@ -172,7 +172,7 @@ func TestLoadDefinition_WrongKind(t *testing.T) {
 	t.Parallel()
 
 	yaml := `
-apiVersion: agentos.io/v1
+apiVersion: arun.io/v1
 kind: Workflow
 metadata:
   name: test

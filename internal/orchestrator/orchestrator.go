@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,12 +23,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kazyamaz200/agentos/internal/llm"
-	"github.com/kazyamaz200/agentos/internal/profile"
-	"github.com/kazyamaz200/agentos/internal/runtime"
-	"github.com/kazyamaz200/agentos/internal/safety"
-	"github.com/kazyamaz200/agentos/internal/sandbox"
-	"github.com/kazyamaz200/agentos/internal/task"
+	"github.com/hakobune8/arun/internal/llm"
+	"github.com/hakobune8/arun/internal/profile"
+	"github.com/hakobune8/arun/internal/runtime"
+	"github.com/hakobune8/arun/internal/safety"
+	"github.com/hakobune8/arun/internal/sandbox"
+	"github.com/hakobune8/arun/internal/task"
 )
 
 // Strategy defines the execution strategy for multi-agent coordination.
@@ -485,7 +485,7 @@ func builtInAgentInfo(name, fallbackDescription string) AgentMetadata {
 		info.Description = "Documentation agent that updates practical docs while matching existing repository style"
 		info.Domains = []string{"documentation", "developer-experience", "release-notes"}
 		info.TriggerKeywords = []string{"docs", "documentation", "readme", "guide", "manual", "quickstart", "changelog"}
-		info.TriggerFiles = []string{"README.md", "docs/", "CHANGELOG.md", ".agentos/config.yaml"}
+		info.TriggerFiles = []string{"README.md", "docs/", "CHANGELOG.md", ".arun/config.yaml"}
 		info.RecommendedAfter = []string{"go-backend", "release-manager"}
 		info.ArchitectureGuidance = []string{
 			"Inspect README.md and docs/ structure before adding sections or files.",
@@ -605,7 +605,7 @@ func builtInAgentInfo(name, fallbackDescription string) AgentMetadata {
 		info.Description = "Analyst agent for log, run, artifact, GitHub, and repository-context investigations"
 		info.Domains = []string{"analysis", "investigation", "logs", "artifacts", "github", "observability", "root-cause"}
 		info.TriggerKeywords = []string{"analyze", "investigate", "investigation", "root cause", "rca", "logs", "artifacts", "run history", "failure pattern", "trend", "evidence", "findings"}
-		info.TriggerFiles = []string{"logs/", "artifacts/", ".github/workflows/", "README.md", "docs/", "CHANGELOG.md", ".agentos/"}
+		info.TriggerFiles = []string{"logs/", "artifacts/", ".github/workflows/", "README.md", "docs/", "CHANGELOG.md", ".arun/"}
 		info.ArchitectureGuidance = []string{
 			"Gather evidence from run records, artifacts, logs, GitHub issues or PRs, repository files, memory, and guidelines before drawing conclusions.",
 			"Separate observed facts from inferences, include confidence level, and call out missing or unavailable sources explicitly.",
@@ -616,7 +616,7 @@ func builtInAgentInfo(name, fallbackDescription string) AgentMetadata {
 		info.Description = "Reporter agent for Markdown reports, stakeholder summaries, and GitHub-ready updates"
 		info.Domains = []string{"reporting", "markdown", "incident-report", "release-readiness", "repository-health", "stakeholder-summary"}
 		info.TriggerKeywords = []string{"report", "summary", "summarize", "stakeholder", "incident report", "release readiness", "repository health", "findings", "recommendations", "write-up"}
-		info.TriggerFiles = []string{"README.md", "docs/", "CHANGELOG.md", "reports/", ".agentos/"}
+		info.TriggerFiles = []string{"README.md", "docs/", "CHANGELOG.md", "reports/", ".arun/"}
 		info.RecommendedAfter = []string{"analyst", "security", "qa", "release-manager"}
 		info.ArchitectureGuidance = []string{
 			"Use the requested output language and repository templates when provided, preserving existing Markdown and documentation conventions.",
@@ -863,7 +863,7 @@ func (o *Orchestrator) executeSubtask(ctx context.Context, subtask *Subtask, sha
 		BaseBranch:  o.baseBranch,
 		Title:       subtask.Description,
 		Description: subtask.Description,
-		Branch:      fmt.Sprintf("agentos/%s", o.runtimeTaskID(subtask.ID)),
+		Branch:      fmt.Sprintf("arun/%s", o.runtimeTaskID(subtask.ID)),
 	}
 
 	prof, ok := o.agentProfiles[agt.Name()]

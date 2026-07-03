@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,11 +21,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kazyamaz200/agentos/internal/agent"
-	"github.com/kazyamaz200/agentos/internal/llm"
-	"github.com/kazyamaz200/agentos/internal/orchestrator"
-	"github.com/kazyamaz200/agentos/internal/runtime"
-	"github.com/kazyamaz200/agentos/internal/sandbox"
+	"github.com/hakobune8/arun/internal/agent"
+	"github.com/hakobune8/arun/internal/llm"
+	"github.com/hakobune8/arun/internal/orchestrator"
+	"github.com/hakobune8/arun/internal/runtime"
+	"github.com/hakobune8/arun/internal/sandbox"
 	"github.com/spf13/cobra"
 )
 
@@ -36,7 +36,7 @@ var orchestrateCmd = &cobra.Command{
 Agents are selected from the registry and can work sequentially or in parallel.
 
 Example:
-  agentos orchestrate \
+  arun orchestrate \
     --agents "go-backend,reviewer,docs" \
     --strategy parallel \
     --repo . \
@@ -63,7 +63,7 @@ func init() {
 	orchestrateCmd.Flags().StringVarP(&orchTask, "task", "", "", "Task description")
 	orchestrateCmd.Flags().StringVarP(&orchStrategy, "strategy", "s", "sequential", "Coordination strategy (sequential/parallel)")
 	orchestrateCmd.Flags().StringVarP(&orchRepo, "repo", "r", ".", "Repository path")
-	orchestrateCmd.Flags().StringVar(&orchSubtaskTimeout, "subtask-timeout", "", "Maximum runtime for each subtask, e.g. 5m. Defaults to AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT when set")
+	orchestrateCmd.Flags().StringVar(&orchSubtaskTimeout, "subtask-timeout", "", "Maximum runtime for each subtask, e.g. 5m. Defaults to ARUN_ORCHESTRATE_SUBTASK_TIMEOUT when set")
 	_ = orchestrateCmd.MarkFlagRequired("task") //nolint:errcheck // cobra returns error only for invalid flag name
 }
 
@@ -133,7 +133,7 @@ func runOrchestrate() error {
 func parseOrchestrateSubtaskTimeout(raw string) (time.Duration, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		raw = strings.TrimSpace(os.Getenv("AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT"))
+		raw = strings.TrimSpace(os.Getenv("ARUN_ORCHESTRATE_SUBTASK_TIMEOUT"))
 	}
 	if raw == "" {
 		return 0, nil

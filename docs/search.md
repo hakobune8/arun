@@ -31,7 +31,7 @@ The Web UI search endpoint also supports repository-scoped context discovery:
 GET /api/search?q=context&repo=owner/repo&baseBranch=main&source=memory
 ```
 
-With `repo` set, AgentOS searches only records scoped to that repository and
+With `repo` set, ARUN searches only records scoped to that repository and
 branch. Supported repository context sources are:
 
 | Source | Description |
@@ -49,20 +49,20 @@ timestamps, source metadata, and action links in the Web UI. Search result
 cards can be promoted into repository memory or guidelines, and stale memory can
 be archived directly from the result list.
 
-Live GitHub evidence is loaded only when `source=github` is selected. AgentOS
+Live GitHub evidence is loaded only when `source=github` is selected. ARUN
 redacts obvious tokens and secrets from issue bodies, check output, and workflow
 logs before returning them. If one GitHub source cannot be read, the search
 response includes a non-fatal `source_error` result while still returning any
 other evidence that was available.
 
 Kubernetes logs are loaded only when `source=kubernetes` is selected and
-`AGENTOS_KUBERNETES_NAMESPACE` plus `AGENTOS_KUBERNETES_SELECTOR` are set.
-`AGENTOS_KUBECONFIG`, `AGENTOS_KUBERNETES_CONTEXT`,
-`AGENTOS_KUBERNETES_CONTAINER`, and `AGENTOS_KUBECTL` can further constrain the
+`ARUN_KUBERNETES_NAMESPACE` plus `ARUN_KUBERNETES_SELECTOR` are set.
+`ARUN_KUBECONFIG`, `ARUN_KUBERNETES_CONTEXT`,
+`ARUN_KUBERNETES_CONTAINER`, and `ARUN_KUBECTL` can further constrain the
 source. Log output is redacted before it is returned.
 
 ## CLI
 
 ```bash
-agentos search "query"
+arun search "query"
 ```

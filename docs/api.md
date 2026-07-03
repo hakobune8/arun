@@ -1,6 +1,6 @@
 # API Reference
 
-AgentOS Web UI provides a minimal REST API for querying run history and search results.
+ARUN Web UI provides a minimal REST API for querying run history and search results.
 
 ## Base URL
 
@@ -153,8 +153,8 @@ PUT /api/repository-guidelines/{id}
 DELETE /api/repository-guidelines/{id}
 ```
 
-Repository guidelines are scoped by repository and branch. AgentOS loads
-`.agentos/guidelines/*.md`, `*.yaml`, and `*.yml` from the target repository at
+Repository guidelines are scoped by repository and branch. ARUN loads
+`.arun/guidelines/*.md`, `*.yaml`, and `*.yml` from the target repository at
 orchestration planning time, ranks relevant active guidelines by task and agent,
 and attaches them to planned subtasks.
 
@@ -228,7 +228,7 @@ DELETE /api/notifications/{id}
 ```
 
 Schedules define recurring Orchestrate jobs. They persist under
-`AGENTOS_HOME/schedules`, store execution history, and link each started
+`ARUN_HOME/schedules`, store execution history, and link each started
 execution to an orchestration record through `scheduleId`.
 
 `GET /api/schedules/templates` returns built-in maintenance and reporting
@@ -267,7 +267,7 @@ Create or update body:
     "enabled": true,
     "triggers": ["failed", "quality_gate_failed", "manual_intervention"],
     "destinations": ["inbox", "webhook"],
-    "webhookUrl": "https://example.com/agentos-hook"
+    "webhookUrl": "https://example.com/arun-hook"
   },
   "github": {
     "createIssue": false,
@@ -303,7 +303,7 @@ For interval schedules, use:
 previous schedule run is still planning or running. `POST /run` manually starts
 the same saved configuration and records the execution in schedule history.
 
-`limits` is optional. When omitted, AgentOS applies conservative defaults:
+`limits` is optional. When omitted, ARUN applies conservative defaults:
 `maxDuration: 30m`, `maxSubtasks: 12`, and `maxConcurrentRepoRuns: 1`.
 `maxDuration`, `maxSubtasks`, repository concurrency, and organization
 concurrency are enforced before or during execution. Token and GitHub request
@@ -364,7 +364,7 @@ Policy body:
 
 The cleanup response lists selected and skipped items. By default, active
 orchestrations and records with GitHub-linked Issues or PRs are skipped. Old
-orchestration records and run artifacts are moved under `AGENTOS_HOME/archive`
+orchestration records and run artifacts are moved under `ARUN_HOME/archive`
 when `archiveBeforeDelete` is true. Old repository memory and guidelines are
 marked `archived` rather than hard-deleted.
 
@@ -374,7 +374,7 @@ marked `archived` rather than hard-deleted.
 
 Authentication is optional. Local development can run without login. Production
 deployments can require GitHub OAuth sessions by setting
-`AGENTOS_AUTH_REQUIRED=true` or Helm `auth.required=true`.
+`ARUN_AUTH_REQUIRED=true` or Helm `auth.required=true`.
 
 ```
 GET /api/auth/session

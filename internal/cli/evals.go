@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/kazyamaz200/agentos/internal/evals"
+	"github.com/hakobune8/arun/internal/evals"
 	"github.com/spf13/cobra"
 )
 
@@ -58,11 +58,11 @@ var (
 func init() {
 	rootCmd.AddCommand(evalsCmd)
 	evalsCmd.Flags().StringVar(&evalsFormat, "format", "markdown", "Report format: markdown or json")
-	evalsCmd.Flags().StringVarP(&evalsOutput, "output", "o", "", "Report output path; defaults under AGENTOS_HOME/evals")
+	evalsCmd.Flags().StringVarP(&evalsOutput, "output", "o", "", "Report output path; defaults under ARUN_HOME/evals")
 	evalsCmd.Flags().StringVar(&evalsScenarios, "scenario", "", "Comma-separated scenario IDs to run")
 	evalsCmd.Flags().StringVar(&evalsWorkDir, "work-dir", "", "Directory for temporary eval repositories")
 	evalsCmd.Flags().BoolVar(&evalsLive, "live", false, "Include opt-in live deployment smoke checks")
-	evalsCmd.Flags().StringVar(&evalsLiveURL, "live-url", "", "Base URL for live smoke checks; defaults to AGENTOS_EVAL_LIVE_URL")
+	evalsCmd.Flags().StringVar(&evalsLiveURL, "live-url", "", "Base URL for live smoke checks; defaults to ARUN_EVAL_LIVE_URL")
 	evalsCmd.Flags().BoolVar(&evalsAuthE2E, "auth-e2e", false, "Include opt-in authenticated Web UI browser E2E checks")
 	evalsCmd.Flags().BoolVar(&evalsStorageCleanupE2E, "storage-cleanup-e2e", false, "Include opt-in authenticated storage cleanup dry-run and execution checks")
 	evalsCmd.Flags().BoolVar(&evalsScheduleNotifyE2E, "schedule-notification-e2e", false, "Include opt-in authenticated schedule execution notification checks")

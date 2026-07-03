@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/kazyamaz200/agentos/internal/agent"
-	"github.com/kazyamaz200/agentos/internal/factory"
+	"github.com/hakobune8/arun/internal/agent"
+	"github.com/hakobune8/arun/internal/factory"
 	"github.com/spf13/cobra"
 )
 
@@ -46,7 +46,7 @@ var agentCreateCmd = &cobra.Command{
 	Long: `Create runnable agent definitions from a template file.
 
 Example:
-  agentos agent create --template profiles/agents/template.yaml`,
+  arun agent create --template profiles/agents/template.yaml`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runAgentCreate(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -61,7 +61,7 @@ var agentRunCmd = &cobra.Command{
 	Long: `Run an agent from a template with an inline task description.
 
 Example:
-  agentos agent run \
+  arun agent run \
     --template profiles/agents/template.yaml \
     --agent coder \
     --task "Add validation and tests"`,

@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ func TestRedactor_RedactString(t *testing.T) {
 
 	raw := strings.Join([]string{
 		`Authorization: Bearer ghp_123456789012345678901234567890123456`,
-		`Cookie: agentos_session=signed-session-value; other=value`,
+		`Cookie: arun_session=signed-session-value; other=value`,
 		`LITELLM_API_KEY=sk-123456789012345678901234567890`,
 		`client-key-data: kube-private-key`,
 		`-----BEGIN PRIVATE KEY-----`,

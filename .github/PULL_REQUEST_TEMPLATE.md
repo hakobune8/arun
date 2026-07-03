@@ -14,7 +14,7 @@ Fixes # (issue)
 
 ## How Has This Been Tested?
 
-- [ ] `go build ./cmd/agentos` passes
+- [ ] `go build ./cmd/arun` passes
 - [ ] `go vet ./...` passes
 - [ ] `go test ./...` passes
 

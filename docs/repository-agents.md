@@ -1,22 +1,22 @@
 # Repository Agents
 
-Repository agents let a target repository provide custom AgentOS profiles
-without rebuilding AgentOS. Put versioned agent definitions under:
+Repository agents let a target repository provide custom ARUN profiles
+without rebuilding ARUN. Put versioned agent definitions under:
 
 ```text
-.agentos/agents/*.yaml
+.arun/agents/*.yaml
 ```
 
 The Web UI can import these definitions from the New Orchestration form with
 **Load Repository Agents**. Imported custom agents appear in the agent picker
-with a `custom` tag. When an orchestration starts, AgentOS stores the selected
+with a `custom` tag. When an orchestration starts, ARUN stores the selected
 custom agent definitions in the orchestration record as `customAgents` so later
 reviewers can reproduce which profile, tools, commands, limits, and guidance
 were used.
 
 ## Validation
 
-Repository-defined agents use the same `agentos.io/v1` Agent schema as normal
+Repository-defined agents use the same `arun.io/v1` Agent schema as normal
 agent definitions, with additional safety checks for orchestration use:
 
 - `metadata.name` must match `^[a-z][a-z0-9-]{1,62}$`.
@@ -34,7 +34,7 @@ execution starts.
 ## Frontend Example
 
 ```yaml
-apiVersion: agentos.io/v1
+apiVersion: arun.io/v1
 kind: Agent
 metadata:
   name: frontend-app
@@ -76,7 +76,7 @@ spec:
 ## Security Example
 
 ```yaml
-apiVersion: agentos.io/v1
+apiVersion: arun.io/v1
 kind: Agent
 metadata:
   name: repo-security
@@ -121,7 +121,7 @@ spec:
 ## Release Manager Example
 
 ```yaml
-apiVersion: agentos.io/v1
+apiVersion: arun.io/v1
 kind: Agent
 metadata:
   name: repo-release-manager

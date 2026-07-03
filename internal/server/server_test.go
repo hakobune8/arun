@@ -16,12 +16,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kazyamaz200/agentos/internal/agent"
-	"github.com/kazyamaz200/agentos/internal/apphome"
-	agentosgh "github.com/kazyamaz200/agentos/internal/github"
-	"github.com/kazyamaz200/agentos/internal/guideline"
-	"github.com/kazyamaz200/agentos/internal/memory"
-	"github.com/kazyamaz200/agentos/internal/orchestrator"
+	"github.com/hakobune8/arun/internal/agent"
+	"github.com/hakobune8/arun/internal/apphome"
+	arungh "github.com/hakobune8/arun/internal/github"
+	"github.com/hakobune8/arun/internal/guideline"
+	"github.com/hakobune8/arun/internal/memory"
+	"github.com/hakobune8/arun/internal/orchestrator"
 )
 
 func TestNewServer_ReturnsServer(t *testing.T) {
@@ -205,7 +205,7 @@ func TestServer_SearchEndpoint_WithQuery(t *testing.T) {
 }
 
 func TestServer_RepositoryMemoryLifecycle(t *testing.T) {
-	t.Setenv("AGENTOS_HOME", t.TempDir())
+	t.Setenv("ARUN_HOME", t.TempDir())
 	s := NewServer(0)
 
 	createBody := []byte(`{"repo":"owner/repo","baseBranch":"main","type":"validation","content":"Run go test ./...","status":"pending"}`)
@@ -254,7 +254,7 @@ func TestServer_RepositoryMemoryLifecycle(t *testing.T) {
 }
 
 func TestRepositoryMemory_PlanningContextAndProposals(t *testing.T) {
-	t.Setenv("AGENTOS_HOME", t.TempDir())
+	t.Setenv("ARUN_HOME", t.TempDir())
 	store, err := repositoryMemoryStore()
 	if err != nil {
 		t.Fatal(err)
@@ -315,7 +315,7 @@ func TestRepositoryMemory_PlanningContextAndProposals(t *testing.T) {
 }
 
 func TestServer_RepositoryGuidelineLifecycle(t *testing.T) {
-	t.Setenv("AGENTOS_HOME", t.TempDir())
+	t.Setenv("ARUN_HOME", t.TempDir())
 	s := NewServer(0)
 
 	createBody := []byte(`{"repo":"owner/repo","baseBranch":"main","title":"Server APIs","type":"architecture","content":"Place handlers under internal/server.","required":true}`)
@@ -361,7 +361,7 @@ func TestServer_RepositoryGuidelineLifecycle(t *testing.T) {
 }
 
 func TestRepositoryGuidelines_PlanningContextAndRequiredEnforcement(t *testing.T) {
-	t.Setenv("AGENTOS_HOME", t.TempDir())
+	t.Setenv("ARUN_HOME", t.TempDir())
 	store, err := repositoryGuidelineStore()
 	if err != nil {
 		t.Fatal(err)
@@ -407,7 +407,7 @@ func TestRepositoryGuidelines_PlanningContextAndRequiredEnforcement(t *testing.T
 }
 
 func TestRepositoryContextSearch_ScopesSourcesByRepository(t *testing.T) {
-	t.Setenv("AGENTOS_HOME", t.TempDir())
+	t.Setenv("ARUN_HOME", t.TempDir())
 	ctx := context.Background()
 	memStore, err := repositoryMemoryStore()
 	if err != nil {
@@ -496,7 +496,7 @@ func TestRepositoryContextSearch_ScopesSourcesByRepository(t *testing.T) {
 }
 
 func TestServer_SearchEndpoint_RepositoryContext(t *testing.T) {
-	t.Setenv("AGENTOS_HOME", t.TempDir())
+	t.Setenv("ARUN_HOME", t.TempDir())
 	s := NewServer(0)
 	store, err := repositoryMemoryStore()
 	if err != nil {
@@ -523,7 +523,7 @@ func TestServer_SearchEndpoint_RepositoryContext(t *testing.T) {
 }
 
 func TestRepositoryContextSearch_LiveGitHubSourcesRedactAndProvenance(t *testing.T) {
-	t.Setenv("AGENTOS_HOME", t.TempDir())
+	t.Setenv("ARUN_HOME", t.TempDir())
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -587,19 +587,19 @@ func TestRepositoryContextSearch_KubernetesLogsRedact(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake kubectl shell script is POSIX-only")
 	}
-	t.Setenv("AGENTOS_HOME", t.TempDir())
+	t.Setenv("ARUN_HOME", t.TempDir())
 	dir := t.TempDir()
 	kubectl := filepath.Join(dir, "kubectl")
-	if err := os.WriteFile(kubectl, []byte("#!/bin/sh\necho 'agentos failed token=ghp_123456789012345678901234567890123456'\n"), 0o600); err != nil {
+	if err := os.WriteFile(kubectl, []byte("#!/bin/sh\necho 'arun failed token=ghp_123456789012345678901234567890123456'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chmod(kubectl, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("AGENTOS_KUBECTL", kubectl)
-	t.Setenv("AGENTOS_KUBECONFIG", filepath.Join(dir, "config"))
-	t.Setenv("AGENTOS_KUBERNETES_NAMESPACE", "agentos")
-	t.Setenv("AGENTOS_KUBERNETES_SELECTOR", "app.kubernetes.io/name=agentos")
+	t.Setenv("ARUN_KUBECTL", kubectl)
+	t.Setenv("ARUN_KUBECONFIG", filepath.Join(dir, "config"))
+	t.Setenv("ARUN_KUBERNETES_NAMESPACE", "arun")
+	t.Setenv("ARUN_KUBERNETES_SELECTOR", "app.kubernetes.io/name=arun")
 
 	results, err := repositoryContextSearch(context.Background(), repositoryContextSearchQuery{
 		Repo:   "owner/repo",
@@ -617,7 +617,7 @@ func TestRepositoryContextSearch_KubernetesLogsRedact(t *testing.T) {
 	if strings.Contains(results[0].Content, "ghp_123456789012345678901234567890123456") {
 		t.Fatalf("kubernetes logs leaked token: %+v", results[0])
 	}
-	if results[0].Metadata["namespace"] != "agentos" || results[0].Metadata["selector"] != "app.kubernetes.io/name=agentos" {
+	if results[0].Metadata["namespace"] != "arun" || results[0].Metadata["selector"] != "app.kubernetes.io/name=arun" {
 		t.Fatalf("missing kubernetes provenance: %+v", results[0].Metadata)
 	}
 }
@@ -700,7 +700,7 @@ func TestServer_RunDetail_RejectsInvalidID(t *testing.T) {
 
 func TestServer_RunDetail_RedactsArtifacts(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("AGENTOS_HOME", home)
+	t.Setenv("ARUN_HOME", home)
 
 	runID := "run-0123456789abcdef"
 	runDir := filepath.Join(home, "runs", runID)
@@ -757,17 +757,17 @@ func testGitHubEndpoint(t *testing.T, path string) {
 
 func TestServer_GitHub_Issues_ValidRepo(t *testing.T) {
 	t.Parallel()
-	testGitHubEndpoint(t, "/api/github/issues?repo=kazyamaz200/agentos")
+	testGitHubEndpoint(t, "/api/github/issues?repo=hakobune8/arun")
 }
 
 func TestServer_GitHub_Pulls_ValidRepo(t *testing.T) {
 	t.Parallel()
-	testGitHubEndpoint(t, "/api/github/pulls?repo=kazyamaz200/agentos")
+	testGitHubEndpoint(t, "/api/github/pulls?repo=hakobune8/arun")
 }
 
 func TestServer_GitHub_Checks_ValidRepo(t *testing.T) {
 	t.Parallel()
-	testGitHubEndpoint(t, "/api/github/checks?repo=kazyamaz200/agentos")
+	testGitHubEndpoint(t, "/api/github/checks?repo=hakobune8/arun")
 }
 
 func TestServer_GitHub_EmptyListsReturnArrays(t *testing.T) {
@@ -842,7 +842,7 @@ func TestServer_GitHub_Repositories(t *testing.T) {
 	w := serveRequest(s, "GET", "/api/github/repositories", nil)
 	assertStatus(t, w.Code, http.StatusOK)
 
-	var repos []agentosgh.RepositorySummary
+	var repos []arungh.RepositorySummary
 	if err := json.Unmarshal(w.Body.Bytes(), &repos); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -863,9 +863,9 @@ func TestServer_GitHub_RepositoriesUsesOAuthToken(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			switch r.URL.Query().Get("page") {
 			case "1":
-				repos := make([]agentosgh.RepositorySummary, 100)
+				repos := make([]arungh.RepositorySummary, 100)
 				for i := range repos {
-					repos[i] = agentosgh.RepositorySummary{ID: int64(i + 1), Name: fmt.Sprintf("repo-%03d", i+1), FullName: fmt.Sprintf("owner/repo-%03d", i+1), DefaultBranch: "main"}
+					repos[i] = arungh.RepositorySummary{ID: int64(i + 1), Name: fmt.Sprintf("repo-%03d", i+1), FullName: fmt.Sprintf("owner/repo-%03d", i+1), DefaultBranch: "main"}
 				}
 				_ = json.NewEncoder(w).Encode(repos)
 			case "2":
@@ -879,8 +879,8 @@ func TestServer_GitHub_RepositoriesUsesOAuthToken(t *testing.T) {
 	}))
 	defer api.Close()
 	t.Setenv("GITHUB_API_URL", api.URL)
-	t.Setenv("AGENTOS_AUTH_REQUIRED", "true")
-	t.Setenv("AGENTOS_SESSION_SECRET", "test-secret")
+	t.Setenv("ARUN_AUTH_REQUIRED", "true")
+	t.Setenv("ARUN_SESSION_SECRET", "test-secret")
 
 	s := NewServer(0)
 	w := serveRequestAs(s, "GET", "/api/github/repositories", nil, &authUser{
@@ -890,7 +890,7 @@ func TestServer_GitHub_RepositoriesUsesOAuthToken(t *testing.T) {
 	})
 	assertStatus(t, w.Code, http.StatusOK)
 
-	var repos []agentosgh.RepositorySummary
+	var repos []arungh.RepositorySummary
 	if err := json.Unmarshal(w.Body.Bytes(), &repos); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -900,8 +900,8 @@ func TestServer_GitHub_RepositoriesUsesOAuthToken(t *testing.T) {
 }
 
 func TestServer_AuthSessionDoesNotExposeAccessToken(t *testing.T) {
-	t.Setenv("AGENTOS_AUTH_REQUIRED", "true")
-	t.Setenv("AGENTOS_SESSION_SECRET", "test-secret")
+	t.Setenv("ARUN_AUTH_REQUIRED", "true")
+	t.Setenv("ARUN_SESSION_SECRET", "test-secret")
 	s := NewServer(0)
 	w := serveRequestAs(s, "GET", "/api/auth/session", nil, &authUser{
 		Login:       "alice",
@@ -952,7 +952,7 @@ func TestServer_FetchGitHubUserRetriesUnauthorizedBearerWithTokenScheme(t *testi
 func TestServer_GitHub_UnknownResource(t *testing.T) {
 	t.Parallel()
 	s := NewServer(0)
-	w := serveRequest(s, "GET", "/api/github/unknown?repo=kazyamaz200/agentos", nil)
+	w := serveRequest(s, "GET", "/api/github/unknown?repo=hakobune8/arun", nil)
 	assertStatus(t, w.Code, http.StatusNotFound)
 }
 
@@ -1084,7 +1084,7 @@ func TestGitCloneEnv_SkipsNonGitHubRemote(t *testing.T) {
 func TestNormalizeRemoteRepo(t *testing.T) {
 	t.Parallel()
 	tests := map[string]string{
-		"kazyamaz200/agentos":                        "https://github.com/kazyamaz200/agentos.git",
+		"hakobune8/arun":                             "https://github.com/hakobune8/arun.git",
 		"https://github.com/owner/repo.git":          "https://github.com/owner/repo.git",
 		"https://github.com/owner/repo":              "https://github.com/owner/repo.git",
 		"https://github.com/owner/repo.git?ref=main": "",
@@ -1140,7 +1140,7 @@ func TestServer_Orchestrate_EmptyBody(t *testing.T) {
 }
 
 func TestServer_Orchestrates_EmptyList(t *testing.T) {
-	t.Setenv("AGENTOS_HOME", shortTestDir(t))
+	t.Setenv("ARUN_HOME", shortTestDir(t))
 	s := NewServer(0)
 	w := serveRequest(s, "GET", "/api/orchestrates", nil)
 	assertStatus(t, w.Code, http.StatusOK)
@@ -1150,7 +1150,7 @@ func TestServer_Orchestrates_EmptyList(t *testing.T) {
 }
 
 func TestOrchestrationRecordStore_RoundTrip(t *testing.T) {
-	t.Setenv("AGENTOS_HOME", shortTestDir(t))
+	t.Setenv("ARUN_HOME", shortTestDir(t))
 	now := time.Now().UTC().Truncate(time.Second)
 	record := &orchestrationRecord{
 		ID:         "run-0123456789abcdef",
@@ -1300,8 +1300,8 @@ func TestServer_OrchestrateTemplates_LocalizesBuiltInsForJapaneseUI(t *testing.T
 }
 
 func TestServer_OrchestrateTemplates_ReturnsBuiltInsWhenRepositoryUnavailable(t *testing.T) {
-	t.Setenv("AGENTOS_AUTH_REQUIRED", "true")
-	t.Setenv("AGENTOS_SESSION_SECRET", "test-secret")
+	t.Setenv("ARUN_AUTH_REQUIRED", "true")
+	t.Setenv("ARUN_SESSION_SECRET", "test-secret")
 	s := NewServer(0)
 	w := serveRequestAs(s, "POST", "/api/orchestrate/templates", []byte(`{"repo":"not-a-valid-repo","baseBranch":"main"}`), &authUser{
 		Login:       "alice",
@@ -1417,8 +1417,8 @@ func containsScenarioTemplate(templates []scenarioTemplate, id string) bool {
 }
 
 func TestServer_ResolveOrchestrationStagePresets_UsesRecommendedPresets(t *testing.T) {
-	t.Setenv("AGENTOS_LLM_DEFAULT_PRESET", "staips")
-	t.Setenv("AGENTOS_LLM_PRESETS", `[
+	t.Setenv("ARUN_LLM_DEFAULT_PRESET", "staips")
+	t.Setenv("ARUN_LLM_PRESETS", `[
 		{"id":"staips","name":"STAIPS","provider":"litellm","baseUrl":"http://litellm:4000","model":"default"},
 		{"id":"planning","name":"Planning","provider":"litellm","baseUrl":"http://litellm:4000","model":"planner"},
 		{"id":"coding","name":"Coding","provider":"litellm","baseUrl":"http://litellm:4000","model":"coder"},
@@ -1458,8 +1458,8 @@ func TestServer_ResolveOrchestrationStagePresets_UsesRecommendedPresets(t *testi
 }
 
 func TestServer_ResolveOrchestrationStagePresets_FallsBackToSelectedPreset(t *testing.T) {
-	t.Setenv("AGENTOS_LLM_DEFAULT_PRESET", "staips")
-	t.Setenv("AGENTOS_LLM_PRESETS", `[{"id":"staips","name":"STAIPS","provider":"litellm","baseUrl":"http://litellm:4000","model":"default"}]`)
+	t.Setenv("ARUN_LLM_DEFAULT_PRESET", "staips")
+	t.Setenv("ARUN_LLM_PRESETS", `[{"id":"staips","name":"STAIPS","provider":"litellm","baseUrl":"http://litellm:4000","model":"default"}]`)
 	s := NewServer(0)
 	routing := s.resolveOrchestrationStagePresets([]string{"go-backend", "reviewer"}, "staips")
 
@@ -1475,7 +1475,7 @@ func TestServer_ResolveOrchestrationStagePresets_FallsBackToSelectedPreset(t *te
 
 func TestLoadRepositoryScenarioTemplates_LoadsValidTemplates(t *testing.T) {
 	repo := t.TempDir()
-	dir := filepath.Join(repo, ".agentos", "scenarios")
+	dir := filepath.Join(repo, ".arun", "scenarios")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1511,7 +1511,7 @@ variables:
 
 func TestLoadRepositoryScenarioTemplates_RejectsUnknownAgent(t *testing.T) {
 	repo := t.TempDir()
-	dir := filepath.Join(repo, ".agentos", "scenarios")
+	dir := filepath.Join(repo, ".arun", "scenarios")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1532,11 +1532,11 @@ taskTemplate: Do work.
 
 func TestLoadRepositoryAgentDefinitions_LoadsValidDefinitions(t *testing.T) {
 	repo := t.TempDir()
-	dir := filepath.Join(repo, ".agentos", "agents")
+	dir := filepath.Join(repo, ".arun", "agents")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "frontend.yaml"), []byte(`apiVersion: agentos.io/v1
+	if err := os.WriteFile(filepath.Join(dir, "frontend.yaml"), []byte(`apiVersion: arun.io/v1
 kind: Agent
 metadata:
   name: frontend-app
@@ -1628,7 +1628,7 @@ func TestPrepareOrchestrationGitHub_Defaults(t *testing.T) {
 	if got.Repo != "owner/repo" {
 		t.Fatalf("Repo = %q, want owner/repo", got.Repo)
 	}
-	if got.BranchName != "agentos/run-0123456789abcdef" {
+	if got.BranchName != "arun/run-0123456789abcdef" {
 		t.Fatalf("BranchName = %q", got.BranchName)
 	}
 	if got.IssueTitle != "Implement feature" || got.PRTitle != "Implement feature" {
@@ -1684,7 +1684,7 @@ func TestEnforceGovernancePlan_RejectsTooManySubtasks(t *testing.T) {
 }
 
 func TestServer_EnforceGovernanceBeforeStartRejectsRepoConcurrency(t *testing.T) {
-	t.Setenv("AGENTOS_HOME", shortTestDir(t))
+	t.Setenv("ARUN_HOME", shortTestDir(t))
 	s := NewServer(0)
 	now := time.Now().UTC()
 	active := &orchestrationRecord{
@@ -1731,7 +1731,7 @@ func TestPrepareSchedule_NormalizesGovernanceLimits(t *testing.T) {
 
 func TestStorageCleanup_ArchivesOldOrchestrationAndArtifacts(t *testing.T) {
 	home := shortTestDir(t)
-	t.Setenv("AGENTOS_HOME", home)
+	t.Setenv("ARUN_HOME", home)
 	now := time.Now().UTC()
 	newRecord := &orchestrationRecord{
 		ID:         "run-1111111111111111",
@@ -1801,7 +1801,7 @@ func TestStorageCleanup_ArchivesOldOrchestrationAndArtifacts(t *testing.T) {
 }
 
 func TestStorageCleanup_SkipsGitHubLinkedOrchestrationByDefault(t *testing.T) {
-	t.Setenv("AGENTOS_HOME", shortTestDir(t))
+	t.Setenv("ARUN_HOME", shortTestDir(t))
 	now := time.Now().UTC()
 	if err := saveOrchestrationRecord(&orchestrationRecord{
 		ID:         "run-1111111111111111",
@@ -1860,7 +1860,7 @@ func entryCount(path string) int {
 }
 
 func TestStorageCleanup_ArchivesOldRepositoryMemory(t *testing.T) {
-	t.Setenv("AGENTOS_HOME", shortTestDir(t))
+	t.Setenv("ARUN_HOME", shortTestDir(t))
 	old := time.Now().UTC().Add(-2 * time.Hour)
 	data, err := json.Marshal([]memory.RepositoryEntry{
 		{
@@ -1915,7 +1915,7 @@ func TestStorageCleanup_ArchivesOldRepositoryMemory(t *testing.T) {
 }
 
 func TestOrchestrationRecordStore_PreservesGitHubArtifacts(t *testing.T) {
-	t.Setenv("AGENTOS_HOME", shortTestDir(t))
+	t.Setenv("ARUN_HOME", shortTestDir(t))
 	now := time.Now().UTC().Truncate(time.Second)
 	record := &orchestrationRecord{
 		ID:             "run-0123456789abcdef",
@@ -1928,7 +1928,7 @@ func TestOrchestrationRecordStore_PreservesGitHubArtifacts(t *testing.T) {
 		Status:         "completed",
 		GitHub: &orchestrationGitHubState{
 			Repo:                  "owner/repo",
-			BranchName:            "agentos/run-0123456789abcdef",
+			BranchName:            "arun/run-0123456789abcdef",
 			IssueTemplate:         "repository",
 			IssueURL:              "https://github.com/owner/repo/issues/1",
 			IssueNumber:           1,
@@ -1970,7 +1970,7 @@ func TestArtifactTemplates_DefaultEnglishAndJapanese(t *testing.T) {
 		Strategy:   "sequential",
 		GitHub: &orchestrationGitHubState{
 			Repo:          "owner/repo",
-			BranchName:    "agentos/run-0123456789abcdef",
+			BranchName:    "arun/run-0123456789abcdef",
 			IssueTemplate: "default",
 			PRTemplate:    "default",
 			PRBase:        "main",
@@ -1988,7 +1988,7 @@ func TestArtifactTemplates_DefaultEnglishAndJapanese(t *testing.T) {
 
 	record.OutputLanguage = "ja"
 	issue = orchestrationIssueBody(record)
-	if !strings.Contains(issue, "## タスク") || !strings.Contains(issue, "AgentOS Orchestrate により作成されました") {
+	if !strings.Contains(issue, "## タスク") || !strings.Contains(issue, "ARUN Orchestrate により作成されました") {
 		t.Fatalf("japanese issue body = %q", issue)
 	}
 	pr = orchestrationPRBody(record)
@@ -1999,10 +1999,10 @@ func TestArtifactTemplates_DefaultEnglishAndJapanese(t *testing.T) {
 
 func TestArtifactTemplates_RepositoryConfigFallback(t *testing.T) {
 	repo := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repo, ".agentos"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, ".arun"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(repo, ".agentos", "config.yaml"), []byte(`outputLanguage: ja
+	if err := os.WriteFile(filepath.Join(repo, ".arun", "config.yaml"), []byte(`outputLanguage: ja
 templates:
   issue:
     body: |
@@ -2079,7 +2079,7 @@ func TestPublishOrchestrationBranch_CommitsAndPushes(t *testing.T) {
 		GitHubToken: "oauth-token",
 		GitHub: &orchestrationGitHubState{
 			Repo:       "owner/repo",
-			BranchName: "agentos/run-0123456789abcdef",
+			BranchName: "arun/run-0123456789abcdef",
 			PRBase:     "main",
 		},
 	}
@@ -2089,14 +2089,14 @@ func TestPublishOrchestrationBranch_CommitsAndPushes(t *testing.T) {
 	if err := runTestGit(repo, "ls-remote", "--exit-code", "origin", "refs/heads/main"); err != nil {
 		t.Fatalf("base branch was not pushed: %v", err)
 	}
-	if err := runTestGit(repo, "ls-remote", "--exit-code", "origin", "refs/heads/agentos/run-0123456789abcdef"); err != nil {
+	if err := runTestGit(repo, "ls-remote", "--exit-code", "origin", "refs/heads/arun/run-0123456789abcdef"); err != nil {
 		t.Fatalf("branch was not pushed: %v", err)
 	}
 	base, err := runTestGitOutput(remote, "rev-parse", "refs/heads/main")
 	if err != nil {
 		t.Fatal(err)
 	}
-	headParent, err := runTestGitOutput(remote, "rev-parse", "refs/heads/agentos/run-0123456789abcdef^")
+	headParent, err := runTestGitOutput(remote, "rev-parse", "refs/heads/arun/run-0123456789abcdef^")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2106,9 +2106,9 @@ func TestPublishOrchestrationBranch_CommitsAndPushes(t *testing.T) {
 }
 
 func TestNormalizeGitHubArtifactTitle_UsesFirstTaskLine(t *testing.T) {
-	task := "Run an implementation-heavy agile scrum workflow for kazyamaz200/invaders on main.\n\nOperating mode: build-first."
+	task := "Run an implementation-heavy agile scrum workflow for hakobune8/invaders on main.\n\nOperating mode: build-first."
 	got := normalizeGitHubArtifactTitle("", task, "fallback")
-	want := "Run an implementation-heavy agile scrum workflow for kazyamaz200/invaders on main."
+	want := "Run an implementation-heavy agile scrum workflow for hakobune8/invaders on main."
 	if got != want {
 		t.Fatalf("title = %q, want %q", got, want)
 	}
@@ -2150,7 +2150,7 @@ func runTestGitCombinedOutput(dir string, args ...string) ([]byte, error) {
 }
 
 func TestReadOrchestrationRecord_RejectsInvalidID(t *testing.T) {
-	t.Setenv("AGENTOS_HOME", shortTestDir(t))
+	t.Setenv("ARUN_HOME", shortTestDir(t))
 	invalid := []string{"", ".", "../run-0123456789abcdef", "run-test", "run-0123456789abcdeg"}
 	for _, id := range invalid {
 		if _, err := readOrchestrationRecord(id); err == nil {
@@ -2167,8 +2167,8 @@ func TestServer_ServesIndexHTML(t *testing.T) {
 	w := serveRequest(s, "GET", "/", nil)
 	assertStatus(t, w.Code, http.StatusOK)
 	body := w.Body.String()
-	if !strings.Contains(body, "AgentOS") {
-		t.Error("index.html does not contain 'AgentOS'")
+	if !strings.Contains(body, "ARUN") {
+		t.Error("index.html does not contain 'ARUN'")
 	}
 	if !strings.Contains(body, "Orchestrates") {
 		t.Error("index.html does not contain 'Orchestrates'")
@@ -2329,8 +2329,8 @@ func TestServer_AuthDisabledByDefault(t *testing.T) {
 }
 
 func TestServer_AuthRequiredProtectsWorkAPIs(t *testing.T) {
-	t.Setenv("AGENTOS_AUTH_REQUIRED", "true")
-	t.Setenv("AGENTOS_SESSION_SECRET", "test-secret")
+	t.Setenv("ARUN_AUTH_REQUIRED", "true")
+	t.Setenv("ARUN_SESSION_SECRET", "test-secret")
 	s := NewServer(0)
 
 	protected := []string{
@@ -2366,7 +2366,7 @@ func TestAuthConfig_UserCanAutomate(t *testing.T) {
 
 func TestAuditEventsPersistAndRedact(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("AGENTOS_HOME", home)
+	t.Setenv("ARUN_HOME", home)
 
 	err := appendAuditEvent(&auditEvent{
 		Actor:   "alice",
@@ -2396,10 +2396,10 @@ func TestAuditEventsPersistAndRedact(t *testing.T) {
 
 func TestServer_OrchestrateDeniedForNonAdminAudits(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("AGENTOS_HOME", home)
-	t.Setenv("AGENTOS_AUTH_REQUIRED", "true")
-	t.Setenv("AGENTOS_SESSION_SECRET", "test-secret")
-	t.Setenv("AGENTOS_ADMIN_USERS", "admin")
+	t.Setenv("ARUN_HOME", home)
+	t.Setenv("ARUN_AUTH_REQUIRED", "true")
+	t.Setenv("ARUN_SESSION_SECRET", "test-secret")
+	t.Setenv("ARUN_ADMIN_USERS", "admin")
 	s := NewServer(0)
 
 	body := []byte(`{"agents":["go-backend"],"repo":".","task":"test task"}`)
@@ -2423,10 +2423,10 @@ func TestServer_OrchestrateDeniedForNonAdminAudits(t *testing.T) {
 
 func TestServer_AuditEndpointReturnsEventsForAdmin(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("AGENTOS_HOME", home)
-	t.Setenv("AGENTOS_AUTH_REQUIRED", "true")
-	t.Setenv("AGENTOS_SESSION_SECRET", "test-secret")
-	t.Setenv("AGENTOS_ADMIN_USERS", "admin")
+	t.Setenv("ARUN_HOME", home)
+	t.Setenv("ARUN_AUTH_REQUIRED", "true")
+	t.Setenv("ARUN_SESSION_SECRET", "test-secret")
+	t.Setenv("ARUN_ADMIN_USERS", "admin")
 	s := NewServer(0)
 
 	if err := appendAuditEvent(&auditEvent{Actor: "admin", Action: "orchestrate.create", Target: "orchestration", Outcome: auditOutcomeAllowed}); err != nil {
@@ -2448,7 +2448,7 @@ func TestServer_AuditEndpointReturnsEventsForAdmin(t *testing.T) {
 
 func TestServer_ScheduleCRUDPauseResume(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("AGENTOS_HOME", home)
+	t.Setenv("ARUN_HOME", home)
 	s := NewServer(0)
 
 	body := []byte(`{
@@ -2518,7 +2518,7 @@ func TestServer_ScheduleCRUDPauseResume(t *testing.T) {
 }
 
 func TestServer_ScheduleTemplates(t *testing.T) {
-	t.Setenv("AGENTOS_HOME", t.TempDir())
+	t.Setenv("ARUN_HOME", t.TempDir())
 	s := NewServer(0)
 
 	w := serveRequest(s, "GET", "/api/schedules/templates", nil)
@@ -2545,7 +2545,7 @@ func TestServer_ScheduleTemplates(t *testing.T) {
 }
 
 func TestScheduleNextRunCronTimezone(t *testing.T) {
-	t.Setenv("AGENTOS_HOME", t.TempDir())
+	t.Setenv("ARUN_HOME", t.TempDir())
 	schedule := &scheduleDefinition{
 		Name:      "weekday cron",
 		Repo:      ".",
@@ -2570,7 +2570,7 @@ func TestScheduleNextRunCronTimezone(t *testing.T) {
 
 func TestServer_RunDueSchedulesSkipsActiveForbidConcurrency(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("AGENTOS_HOME", home)
+	t.Setenv("ARUN_HOME", home)
 	s := NewServer(0)
 
 	now := time.Date(2026, 7, 1, 1, 0, 0, 0, time.UTC)
@@ -2625,8 +2625,8 @@ func TestServer_RunDueSchedulesSkipsActiveForbidConcurrency(t *testing.T) {
 
 func TestServer_ScheduledRunNotificationWebhookRetriesAndStoresHistory(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("AGENTOS_HOME", home)
-	t.Setenv("AGENTOS_PUBLIC_URL", "https://agentos.example.com")
+	t.Setenv("ARUN_HOME", home)
+	t.Setenv("ARUN_PUBLIC_URL", "https://arun.example.com")
 	s := NewServer(0)
 
 	attempts := 0
@@ -2699,7 +2699,7 @@ func TestServer_ScheduledRunNotificationWebhookRetriesAndStoresHistory(t *testin
 		t.Fatalf("notifications = %+v", notifications)
 	}
 	got := notifications[0]
-	if got.Trigger != notificationTriggerFailed || got.ScheduleID != schedule.ID || got.RunURL != "https://agentos.example.com/#orchestrates/run-3333333333333333" {
+	if got.Trigger != notificationTriggerFailed || got.ScheduleID != schedule.ID || got.RunURL != "https://arun.example.com/#orchestrates/run-3333333333333333" {
 		t.Fatalf("notification = %+v", got)
 	}
 	if len(got.Deliveries) != 2 || got.Deliveries[0].Status != notificationDeliverySuccess || got.Deliveries[1].Status != notificationDeliverySuccess || got.Deliveries[1].Attempts != 3 {
@@ -2718,7 +2718,7 @@ func TestServer_ScheduledRunNotificationWebhookRetriesAndStoresHistory(t *testin
 
 func TestServer_ScheduleNotificationFailureDeliveryHistory(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("AGENTOS_HOME", home)
+	t.Setenv("ARUN_HOME", home)
 	s := NewServer(0)
 
 	schedule := &scheduleDefinition{
@@ -2761,7 +2761,7 @@ func TestServer_ScheduleNotificationFailureDeliveryHistory(t *testing.T) {
 func TestServer_LLMSettingsDoesNotExposeSecret(t *testing.T) {
 	t.Setenv("LITELLM_BASE_URL", "http://litellm.test")
 	t.Setenv("LITELLM_API_KEY", "secret-key")
-	t.Setenv("AGENTOS_MODEL_CODER", "coder-test")
+	t.Setenv("ARUN_MODEL_CODER", "coder-test")
 	s := NewServer(0)
 
 	w := serveRequest(s, "GET", "/api/settings/llm", nil)
@@ -2922,8 +2922,8 @@ func TestRecommendOrchestration_UsesSpecializedBuiltInAgents(t *testing.T) {
 func TestIssueTriggerControls_LabelAndSlashCommand(t *testing.T) {
 	body := `Please handle this.
 
-/agentos run agents=docs,reviewer strategy=parallel create_pr=false close_policy=after_human_approval approval=true`
-	got := issueTriggerControls([]string{"agentos:create-pr"}, body)
+/arun run agents=docs,reviewer strategy=parallel create_pr=false close_policy=after_human_approval approval=true`
+	got := issueTriggerControls([]string{"arun:create-pr"}, body)
 	if got.Strategy != "parallel" {
 		t.Fatalf("Strategy = %q, want parallel", got.Strategy)
 	}
@@ -2940,13 +2940,13 @@ func TestIssueTriggerControls_LabelAndSlashCommand(t *testing.T) {
 
 func TestOrchestrationRequestFromIssue_UsesRecommendationAndSource(t *testing.T) {
 	req, source, err := orchestrationRequestFromIssue(&orchestrateFromIssueRequest{
-		Repo:        "kazyamaz200/agentos",
+		Repo:        "hakobune8/arun",
 		BaseBranch:  "main",
 		IssueNumber: 203,
 		IssueTitle:  "Fix GitHub Actions workflow check failed",
 		IssueBody:   "CI is failing on lint.",
-		IssueURL:    "https://github.com/kazyamaz200/agentos/issues/203",
-		Labels:      []string{"agentos:run", "agentos:create-pr"},
+		IssueURL:    "https://github.com/hakobune8/arun/issues/203",
+		Labels:      []string{"arun:run", "arun:create-pr"},
 	}, agent.DefaultRegistry())
 	if err != nil {
 		t.Fatalf("orchestrationRequestFromIssue() error = %v", err)
@@ -2954,7 +2954,7 @@ func TestOrchestrationRequestFromIssue_UsesRecommendationAndSource(t *testing.T)
 	if source.Number != 203 || source.URL == "" {
 		t.Fatalf("source = %+v", source)
 	}
-	if req.Repo != "kazyamaz200/agentos" || req.BaseBranch != "main" {
+	if req.Repo != "hakobune8/arun" || req.BaseBranch != "main" {
 		t.Fatalf("repo/base = %q/%q", req.Repo, req.BaseBranch)
 	}
 	if !strings.Contains(req.Task, "GitHub Issue #203") || !strings.Contains(req.Task, "CI is failing") {
@@ -2963,7 +2963,7 @@ func TestOrchestrationRequestFromIssue_UsesRecommendationAndSource(t *testing.T)
 	if strings.Join(req.Agents, ",") != "ci-fixer,reviewer" {
 		t.Fatalf("Agents = %+v, want ci-fixer/reviewer", req.Agents)
 	}
-	if req.GitHub == nil || !req.GitHub.CreatePullRequest || req.GitHub.BranchName != "agentos/issue-203" {
+	if req.GitHub == nil || !req.GitHub.CreatePullRequest || req.GitHub.BranchName != "arun/issue-203" {
 		t.Fatalf("GitHub = %+v", req.GitHub)
 	}
 	if source.ClosePolicy != "on_pr_merge" {
@@ -2972,18 +2972,18 @@ func TestOrchestrationRequestFromIssue_UsesRecommendationAndSource(t *testing.T)
 }
 
 func TestFindDuplicateIssueOrchestration_ActiveIssueAndTrigger(t *testing.T) {
-	t.Setenv("AGENTOS_HOME", shortTestDir(t))
+	t.Setenv("ARUN_HOME", shortTestDir(t))
 	now := time.Now().UTC()
 	record := &orchestrationRecord{
 		ID:         "run-0123456789abcdef",
-		Repo:       "kazyamaz200/agentos",
+		Repo:       "hakobune8/arun",
 		BaseBranch: "main",
 		Task:       "issue task",
 		Agents:     []string{"go-backend"},
 		Strategy:   "sequential",
 		Status:     "running",
 		GitHub: &orchestrationGitHubState{
-			Repo:              "kazyamaz200/agentos",
+			Repo:              "hakobune8/arun",
 			SourceIssueNumber: 203,
 			SourceTriggerID:   "delivery-1",
 		},
@@ -2993,16 +2993,16 @@ func TestFindDuplicateIssueOrchestration_ActiveIssueAndTrigger(t *testing.T) {
 	if err := saveOrchestrationRecord(record); err != nil {
 		t.Fatal(err)
 	}
-	if got, ok := findDuplicateIssueOrchestration("kazyamaz200/agentos", &orchestrationSourceIssue{Number: 203}); !ok || got.ID != record.ID {
+	if got, ok := findDuplicateIssueOrchestration("hakobune8/arun", &orchestrationSourceIssue{Number: 203}); !ok || got.ID != record.ID {
 		t.Fatalf("duplicate by issue = %+v/%v, want %s", got, ok, record.ID)
 	}
-	if got, ok := findDuplicateIssueOrchestration("kazyamaz200/agentos", &orchestrationSourceIssue{Number: 999, TriggerID: "delivery-1"}); !ok || got.ID != record.ID {
+	if got, ok := findDuplicateIssueOrchestration("hakobune8/arun", &orchestrationSourceIssue{Number: 999, TriggerID: "delivery-1"}); !ok || got.ID != record.ID {
 		t.Fatalf("duplicate by trigger = %+v/%v, want %s", got, ok, record.ID)
 	}
 }
 
 func TestSourceIssueCommentBodies(t *testing.T) {
-	t.Setenv("AGENTOS_PUBLIC_URL", "https://agentos.example.com")
+	t.Setenv("ARUN_PUBLIC_URL", "https://arun.example.com")
 	record := &orchestrationRecord{
 		ID:         "run-0123456789abcdef",
 		Repo:       "owner/repo",
@@ -3018,13 +3018,13 @@ func TestSourceIssueCommentBodies(t *testing.T) {
 		},
 	}
 	start := sourceIssueStartCommentBody(record)
-	if !strings.Contains(start, "AgentOS orchestration started") ||
-		!strings.Contains(start, "https://agentos.example.com/#orchestrates/run-0123456789abcdef") ||
+	if !strings.Contains(start, "ARUN orchestration started") ||
+		!strings.Contains(start, "https://arun.example.com/#orchestrates/run-0123456789abcdef") ||
 		!strings.Contains(start, "ci-fixer, reviewer") {
 		t.Fatalf("start comment = %q", start)
 	}
 	final := sourceIssueFinalCommentBody(record)
-	if !strings.Contains(final, "AgentOS orchestration finished") ||
+	if !strings.Contains(final, "ARUN orchestration finished") ||
 		!strings.Contains(final, "Status: completed") ||
 		!strings.Contains(final, "https://github.com/owner/repo/pull/2") ||
 		!strings.Contains(final, "CI fixed.") {
@@ -3134,10 +3134,10 @@ func TestAppendTimelineForSubtaskEvent(t *testing.T) {
 
 func TestServer_CancelOrchestration(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("AGENTOS_HOME", home)
-	t.Setenv("AGENTOS_AUTH_REQUIRED", "true")
-	t.Setenv("AGENTOS_SESSION_SECRET", "test-secret")
-	t.Setenv("AGENTOS_ADMIN_USERS", "admin")
+	t.Setenv("ARUN_HOME", home)
+	t.Setenv("ARUN_AUTH_REQUIRED", "true")
+	t.Setenv("ARUN_SESSION_SECRET", "test-secret")
+	t.Setenv("ARUN_ADMIN_USERS", "admin")
 	s := NewServer(0)
 
 	record := &orchestrationRecord{
@@ -3172,7 +3172,7 @@ func TestServer_CancelOrchestration(t *testing.T) {
 
 func TestServer_StopCanceledOrchestrationPreservesTerminalRecord(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("AGENTOS_HOME", home)
+	t.Setenv("ARUN_HOME", home)
 	s := NewServer(0)
 
 	id := "run-1234567890abcdef"

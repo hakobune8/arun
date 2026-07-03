@@ -2,7 +2,7 @@
 
 ## LiteLLM
 
-AgentOS uses LiteLLM as the LLM gateway. You can start LiteLLM with your preferred providers:
+ARUN uses LiteLLM as the LLM gateway. You can start LiteLLM with your preferred providers:
 
 ```bash
 litellm --model gpt-4 --api_key $OPENAI_API_KEY
@@ -16,12 +16,12 @@ litellm --config litellm_config.yaml
 |---|---|---|
 | `LITELLM_API_KEY` | `""` | API key for LiteLLM server |
 | `LITELLM_BASE_URL` | `http://localhost:4000` | LiteLLM server URL |
-| `AGENTOS_MODEL_CODER` | `coder` | Model alias for coding tasks |
-| `AGENTOS_MODEL_EMBEDDING` | `text-embedding-ada-002` | Model alias for embeddings |
-| `AGENTOS_LLM_DEFAULT_PRESET` | `default` | Default Web UI model preset ID |
-| `AGENTOS_LLM_PRESETS` | generated default | JSON array of server-side LLM presets |
-| `AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT` | `10m` | Maximum runtime for one orchestration subtask |
-| `AGENTOS_ORCHESTRATE_PLAN_TIMEOUT` | `90s` | Maximum runtime for orchestration planning |
+| `ARUN_MODEL_CODER` | `coder` | Model alias for coding tasks |
+| `ARUN_MODEL_EMBEDDING` | `text-embedding-ada-002` | Model alias for embeddings |
+| `ARUN_LLM_DEFAULT_PRESET` | `default` | Default Web UI model preset ID |
+| `ARUN_LLM_PRESETS` | generated default | JSON array of server-side LLM presets |
+| `ARUN_ORCHESTRATE_SUBTASK_TIMEOUT` | `10m` | Maximum runtime for one orchestration subtask |
+| `ARUN_ORCHESTRATE_PLAN_TIMEOUT` | `90s` | Maximum runtime for orchestration planning |
 
 ### Governance Limits
 
@@ -40,7 +40,7 @@ on each orchestration record and copied from schedules to scheduled runs:
 }
 ```
 
-When omitted, AgentOS uses `30m` duration, `12` subtasks, and one active run per
+When omitted, ARUN uses `30m` duration, `12` subtasks, and one active run per
 repository. The server enforces maximum duration, planned subtasks, repository
 concurrency, and organization concurrency. Token and GitHub request budgets are
 reported in run detail as governance metadata until provider/request clients
@@ -48,7 +48,7 @@ expose reliable usage accounting.
 
 ### Storage Retention
 
-Storage retention policy is persisted under `AGENTOS_HOME/storage/policy.json`
+Storage retention policy is persisted under `ARUN_HOME/storage/policy.json`
 and can be managed from the Web UI Storage page or `/api/storage/policy`.
 
 ```json
@@ -68,7 +68,7 @@ and can be managed from the Web UI Storage page or `/api/storage/policy`.
 
 Cleanup skips active orchestrations and, by default, orchestration records that
 are linked to GitHub Issues or PRs. When archive-before-delete is enabled, old
-orchestration records and run artifacts are moved under `AGENTOS_HOME/archive`.
+orchestration records and run artifacts are moved under `ARUN_HOME/archive`.
 Repository memory and guidelines are marked `archived`; audit logs are kept
 separate and are not deleted by storage cleanup.
 
@@ -78,7 +78,7 @@ The Web UI never receives API key values. It reads public preset metadata from
 `/api/settings/llm` and sends only the selected preset ID when starting an
 orchestration or scoped agent run.
 
-Example `AGENTOS_LLM_PRESETS`:
+Example `ARUN_LLM_PRESETS`:
 
 ```json
 [
@@ -107,21 +107,21 @@ capturing operational guidance in deployment docs or the preset eval matrix:
 Orchestrations use these preset IDs by default when they are configured.
 Planning uses `planning`; implementation-oriented agents use `coding`;
 `reviewer` uses `review`; `qa` uses `smoke`; `analyst` uses `planning`; and
-`reporter` uses `reporting`. If a recommended preset ID is missing, AgentOS
+`reporter` uses `reporting`. If a recommended preset ID is missing, ARUN
 falls back to the selected or default orchestration preset and records the
 fallback in the orchestration detail.
 
-AgentOS currently exposes `id`, `name`, `provider`, `baseUrl`, `model`, and
+ARUN currently exposes `id`, `name`, `provider`, `baseUrl`, `model`, and
 `apiKeyEnv` to the server preset resolver. Timeout, temperature, token budget,
 retry policy, and cost notes are evaluated through
-`AGENTOS_EVAL_LLM_PRESET_MATRIX` so production presets can be validated without
+`ARUN_EVAL_LLM_PRESET_MATRIX` so production presets can be validated without
 changing the Web UI API contract.
 
 ---
 
 ## Qdrant Vector Store
 
-By default, AgentOS uses a local JSON-based vector store. To use Qdrant for production-scale vector search:
+By default, ARUN uses a local JSON-based vector store. To use Qdrant for production-scale vector search:
 
 ### Setup
 
@@ -138,17 +138,17 @@ Set the `QDRANT_URL` environment variable:
 export QDRANT_URL=http://localhost:6333
 ```
 
-When `QDRANT_URL` is set, AgentOS will automatically use the Qdrant client instead of the local JSON store.
+When `QDRANT_URL` is set, ARUN will automatically use the Qdrant client instead of the local JSON store.
 
-Qdrant collections are created automatically by AgentOS. No manual schema setup is required.
+Qdrant collections are created automatically by ARUN. No manual schema setup is required.
 
 ---
 
 ## Docker Sandbox
 
-AgentOS has a sandbox interface, but the Docker backend is currently a stub and
+ARUN has a sandbox interface, but the Docker backend is currently a stub and
 is not available in v1.0. Use the local backend only for trusted repositories and
-run AgentOS inside a separately isolated environment when executing untrusted
+run ARUN inside a separately isolated environment when executing untrusted
 code.
 
 The intended future configuration shape is:
@@ -163,7 +163,7 @@ sandbox:
 
 ## MCP (Model Context Protocol)
 
-AgentOS supports connecting to MCP servers to extend the available tools.
+ARUN supports connecting to MCP servers to extend the available tools.
 
 ### Configuration
 
@@ -171,18 +171,18 @@ MCP servers are registered via the CLI:
 
 ```bash
 # Register an MCP server
-agentos mcp register my-server --command "python" --args "-m", "my_mcp_server"
+arun mcp register my-server --command "python" --args "-m", "my_mcp_server"
 
 # List registered servers
-agentos mcp list
+arun mcp list
 
 # Call a tool from an MCP server
-agentos mcp call my-server tool_name '{"arg": "value"}'
+arun mcp call my-server tool_name '{"arg": "value"}'
 ```
 
 ### Environment Variables
 
-MCP server commands inherit the AgentOS environment variables, including `LITELLM_API_KEY`, `OPENAI_API_KEY`, etc.
+MCP server commands inherit the ARUN environment variables, including `LITELLM_API_KEY`, `OPENAI_API_KEY`, etc.
 
 ---
 
@@ -197,16 +197,16 @@ MCP server commands inherit the AgentOS environment variables, including `LITELL
 | `GITHUB_APP_INSTALLATION_ID` | `""` | GitHub App installation ID used to create installation access tokens |
 | `GITHUB_APP_PRIVATE_KEY` | `""` | GitHub App private key PEM, usually provided from a Kubernetes Secret |
 | `GITHUB_APP_PRIVATE_KEY_FILE` | `""` | Path to a GitHub App private key PEM file |
-| `AGENTOS_PUBLIC_URL` | `""` | Public AgentOS base URL used in GitHub Issue comments |
-| `AGENTOS_AUTH_REQUIRED` | `false` | Require signed GitHub sessions for work APIs |
-| `AGENTOS_ADMIN_USERS` | `""` | Optional comma-separated GitHub logins allowed to run sensitive automation and view audit history |
+| `ARUN_PUBLIC_URL` | `""` | Public ARUN base URL used in GitHub Issue comments |
+| `ARUN_AUTH_REQUIRED` | `false` | Require signed GitHub sessions for work APIs |
+| `ARUN_ADMIN_USERS` | `""` | Optional comma-separated GitHub logins allowed to run sensitive automation and view audit history |
 | `GITHUB_OAUTH_CLIENT_ID` | `""` | GitHub OAuth App client ID |
 | `GITHUB_OAUTH_CLIENT_SECRET` | `""` | GitHub OAuth App client secret |
 | `GITHUB_OAUTH_CALLBACK_URL` | `""` | OAuth callback URL, for example `/auth/callback` on the public host |
-| `AGENTOS_SESSION_SECRET` | `""` | HMAC secret for signed Web UI session cookies |
+| `ARUN_SESSION_SECRET` | `""` | HMAC secret for signed Web UI session cookies |
 
 When `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, and either
-`GITHUB_APP_PRIVATE_KEY` or `GITHUB_APP_PRIVATE_KEY_FILE` are set, AgentOS uses
+`GITHUB_APP_PRIVATE_KEY` or `GITHUB_APP_PRIVATE_KEY_FILE` are set, ARUN uses
 a GitHub App installation token for API and HTTPS Git access. Otherwise it falls
 back to `GITHUB_TOKEN`/`GH_TOKEN`.
 
@@ -221,7 +221,7 @@ scoped repository credentials are a later auth-aware extension.
 ### Artifact Language and Templates
 
 The Web UI can set an output language per orchestration. Repositories can also
-define defaults in `.agentos/config.yaml`; explicit Web UI choices override
+define defaults in `.arun/config.yaml`; explicit Web UI choices override
 repository defaults.
 
 Supported built-in languages are:
@@ -233,14 +233,14 @@ Repository templates use Go `text/template` syntax. Available fields include
 `RunID`, `Repository`, `BaseBranch`, `TargetBranch`, `PRBase`, `Strategy`,
 `Agents`, `Task`, `Summary`, and `IssueURL`.
 
-Example `.agentos/config.yaml`:
+Example `.arun/config.yaml`:
 
 ```yaml
 outputLanguage: ja
 templates:
   issue:
     body: |
-      AgentOS Orchestrate により作成されました。
+      ARUN Orchestrate により作成されました。
 
       - Run: `{{.RunID}}`
       - Repository: `{{.Repository}}`
@@ -251,7 +251,7 @@ templates:
       {{.Task}}
   pullRequest:
     body: |
-      AgentOS Orchestrate により作成されました。
+      ARUN Orchestrate により作成されました。
 
       {{if .IssueURL}}Tracking issue: {{.IssueURL}}
 
@@ -267,7 +267,7 @@ templates:
 Multi-agent teams are defined in YAML template files:
 
 ```yaml
-schema: "agentos/v1"
+schema: "arun/v1"
 agents:
   - name: "coder"
     role: "Coding agent"

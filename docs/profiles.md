@@ -1,6 +1,6 @@
 # Profiles
 
-Profiles define the behavior of an AgentOS agent. They are YAML files that specify the LLM configuration, available tools, commands, and limits.
+Profiles define the behavior of an ARUN agent. They are YAML files that specify the LLM configuration, available tools, commands, and limits.
 
 ## Structure
 

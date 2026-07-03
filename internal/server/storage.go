@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,10 +29,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kazyamaz200/agentos/internal/apphome"
-	"github.com/kazyamaz200/agentos/internal/guideline"
-	"github.com/kazyamaz200/agentos/internal/memory"
-	"github.com/kazyamaz200/agentos/internal/safety"
+	"github.com/hakobune8/arun/internal/apphome"
+	"github.com/hakobune8/arun/internal/guideline"
+	"github.com/hakobune8/arun/internal/memory"
+	"github.com/hakobune8/arun/internal/safety"
 )
 
 const (

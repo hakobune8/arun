@@ -22,7 +22,7 @@ A clear description of what you expected to happen.
 **Environment**
 - OS: [e.g. macOS 14.0, Ubuntu 22.04]
 - Go version: [e.g. 1.22.0]
-- AgentOS version: [e.g. v0.5.0]
+- ARUN version: [e.g. v0.5.0]
 
 **Additional context**
 Add any other context about the problem here.

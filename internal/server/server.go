@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -39,22 +39,22 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/kazyamaz200/agentos/internal/agent"
-	"github.com/kazyamaz200/agentos/internal/apphome"
-	"github.com/kazyamaz200/agentos/internal/embedding"
-	"github.com/kazyamaz200/agentos/internal/factory"
-	agentosgh "github.com/kazyamaz200/agentos/internal/github"
-	"github.com/kazyamaz200/agentos/internal/guideline"
-	"github.com/kazyamaz200/agentos/internal/llm"
-	"github.com/kazyamaz200/agentos/internal/memory"
-	"github.com/kazyamaz200/agentos/internal/orchestrator"
-	"github.com/kazyamaz200/agentos/internal/profile"
-	"github.com/kazyamaz200/agentos/internal/runtime"
-	"github.com/kazyamaz200/agentos/internal/safety"
-	"github.com/kazyamaz200/agentos/internal/sandbox"
-	"github.com/kazyamaz200/agentos/internal/search"
-	"github.com/kazyamaz200/agentos/internal/task"
-	"github.com/kazyamaz200/agentos/internal/vector"
+	"github.com/hakobune8/arun/internal/agent"
+	"github.com/hakobune8/arun/internal/apphome"
+	"github.com/hakobune8/arun/internal/embedding"
+	"github.com/hakobune8/arun/internal/factory"
+	arungh "github.com/hakobune8/arun/internal/github"
+	"github.com/hakobune8/arun/internal/guideline"
+	"github.com/hakobune8/arun/internal/llm"
+	"github.com/hakobune8/arun/internal/memory"
+	"github.com/hakobune8/arun/internal/orchestrator"
+	"github.com/hakobune8/arun/internal/profile"
+	"github.com/hakobune8/arun/internal/runtime"
+	"github.com/hakobune8/arun/internal/safety"
+	"github.com/hakobune8/arun/internal/sandbox"
+	"github.com/hakobune8/arun/internal/search"
+	"github.com/hakobune8/arun/internal/task"
+	"github.com/hakobune8/arun/internal/vector"
 	"gopkg.in/yaml.v3"
 )
 
@@ -68,7 +68,7 @@ var gitObjectPattern = regexp.MustCompile(`^[0-9a-f]{40,64}$`)
 var customAgentNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{1,62}$`)
 var scenarioVariableNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,62}$`)
 
-// Server serves the AgentOS web UI and API endpoints.
+// Server serves the ARUN web UI and API endpoints.
 type Server struct {
 	port            int
 	server          *http.Server
@@ -157,7 +157,7 @@ func NewServer(port int) *Server {
 
 // Start starts the HTTP server and blocks until Shutdown is called.
 func (s *Server) Start() error {
-	slog.Info("AgentOS Web UI starting", "port", s.port)
+	slog.Info("ARUN Web UI starting", "port", s.port)
 	s.startScheduler()
 	return s.server.ListenAndServe()
 }
@@ -410,7 +410,7 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 		Type:        "issue_to_patch",
 		Repo:        repo,
 		BaseBranch:  "main",
-		Branch:      "agentos/" + id,
+		Branch:      "arun/" + id,
 		Title:       req.Task,
 		Description: req.Description + "\n\nLLM preset: " + presetID,
 	}
@@ -538,7 +538,7 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 	}
 	path := r.URL.Path[len("/api/github/"):]
 	if path == "repositories" {
-		client := agentosgh.NewClient("", "")
+		client := arungh.NewClient("", "")
 		if user != nil && user.AccessToken != "" {
 			repos, err := client.WithToken(user.AccessToken).ListUserRepositories()
 			if err != nil {
@@ -553,7 +553,7 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 			}
 			slog.Info("GitHub OAuth repositories listed", "login", user.Login, "count", len(repos), "private", privateCount)
 			if repos == nil {
-				repos = []agentosgh.RepositorySummary{}
+				repos = []arungh.RepositorySummary{}
 			}
 			_ = json.NewEncoder(w).Encode(repos) //nolint:errcheck // best-effort response
 			return
@@ -564,7 +564,7 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if repos == nil {
-			repos = []agentosgh.RepositorySummary{}
+			repos = []arungh.RepositorySummary{}
 		}
 		_ = json.NewEncoder(w).Encode(repos) //nolint:errcheck // best-effort response
 		return
@@ -580,7 +580,7 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "repo must be owner/name", http.StatusBadRequest)
 		return
 	}
-	client := agentosgh.NewClient(parts[0], parts[1])
+	client := arungh.NewClient(parts[0], parts[1])
 
 	switch path {
 	case "issues":
@@ -594,7 +594,7 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if issues == nil {
-			issues = []agentosgh.Issue{}
+			issues = []arungh.Issue{}
 		}
 		_ = json.NewEncoder(w).Encode(issues) //nolint:errcheck // best-effort response
 
@@ -606,7 +606,7 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if prs == nil {
-			prs = []agentosgh.PullRequest{}
+			prs = []arungh.PullRequest{}
 		}
 		_ = json.NewEncoder(w).Encode(prs) //nolint:errcheck // best-effort response
 
@@ -621,7 +621,7 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if runs == nil {
-			runs = []agentosgh.CheckRun{}
+			runs = []arungh.CheckRun{}
 		}
 		_ = json.NewEncoder(w).Encode(runs) //nolint:errcheck // best-effort response
 
@@ -1704,7 +1704,7 @@ func implementationHeavyScrumPlan(record *orchestrationRecord) *orchestrator.Tas
 			step("sprint-2-plan", "analyst", "Sprint 2 planning: read Sprint 1 report and repository state, then produce concise deployment packaging notes and unresolved product gaps. Do not implement code in this planning stage.", "sprint-1-report"),
 			step("sprint-2-backend", "go-backend", "Sprint 2 coding: harden app startup, configuration, and tests before packaging. Address remaining product gaps from Sprint 1 if they block deployment.", "sprint-2-plan"),
 			step("sprint-2-docker", "docker", "Sprint 2 coding: add or improve a Dockerfile and container-focused run instructions for the application produced so far.", "sprint-2-backend"),
-			step("sprint-2-helm", "helm", "Sprint 2 coding: add or improve a Helm chart suitable for deploying this application into the same Kubernetes environment as AgentOS. Ingress is not required.", "sprint-2-docker"),
+			step("sprint-2-helm", "helm", "Sprint 2 coding: add or improve a Helm chart suitable for deploying this application into the same Kubernetes environment as ARUN. Ingress is not required.", "sprint-2-docker"),
 			step("sprint-2-kubernetes", "kubernetes", "Sprint 2 coding: add Kubernetes Deployment and Service manifests or chart templates for the application. Avoid ingress unless explicitly requested.", "sprint-2-helm"),
 			step("sprint-2-qa", "qa", "Sprint 2 QA: validate Docker, Helm, Kubernetes, and app-level smoke paths where tooling is available. Record packaging or deployment gaps for this sprint adjustment pass.", "sprint-2-kubernetes"),
 			step("sprint-2-adjust-plan", "analyst", "Sprint 2 adjustment planning: read Sprint 2 QA evidence and turn deployment/package failures into concise remediation notes before the Sprint 2 checkpoint. Do not implement code in this planning stage.", "sprint-2-qa"),
@@ -1740,13 +1740,13 @@ func commitScrumSprintCheckpoint(record *orchestrationRecord, event *orchestrato
 	if err := gitAddAll(record.RepoPath, record.GitHubToken); err != nil {
 		return err
 	}
-	if err := gitConfig(record.RepoPath, record.GitHubToken, "user.email", "agentos@example.invalid"); err != nil {
+	if err := gitConfig(record.RepoPath, record.GitHubToken, "user.email", "arun@example.invalid"); err != nil {
 		return err
 	}
-	if err := gitConfig(record.RepoPath, record.GitHubToken, "user.name", "AgentOS"); err != nil {
+	if err := gitConfig(record.RepoPath, record.GitHubToken, "user.name", "ARUN"); err != nil {
 		return err
 	}
-	message := fmt.Sprintf("AgentOS %s sprint %d checkpoint", record.ID, sprint)
+	message := fmt.Sprintf("ARUN %s sprint %d checkpoint", record.ID, sprint)
 	if gitTreeClean(record.RepoPath, record.GitHubToken) {
 		if err := gitCommitAllowEmpty(record.RepoPath, record.GitHubToken, message); err != nil {
 			return err
@@ -1772,7 +1772,7 @@ func scrumSprintCheckpoint(subtaskID string) (int, bool) {
 }
 
 func orchestrateSubtaskTimeout() time.Duration {
-	raw := strings.TrimSpace(os.Getenv("AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT"))
+	raw := strings.TrimSpace(os.Getenv("ARUN_ORCHESTRATE_SUBTASK_TIMEOUT"))
 	if raw == "" {
 		return 10 * time.Minute
 	}
@@ -1784,7 +1784,7 @@ func orchestrateSubtaskTimeout() time.Duration {
 }
 
 func orchestratePlanTimeout() time.Duration {
-	raw := strings.TrimSpace(os.Getenv("AGENTOS_ORCHESTRATE_PLAN_TIMEOUT"))
+	raw := strings.TrimSpace(os.Getenv("ARUN_ORCHESTRATE_PLAN_TIMEOUT"))
 	if raw == "" {
 		return 90 * time.Second
 	}
@@ -1990,7 +1990,7 @@ func gitCloneEnvWithToken(args []string, token string) []string {
 	env := os.Environ()
 	token = strings.TrimSpace(token)
 	if token == "" {
-		envToken, err := agentosgh.TokenFromEnv(context.Background())
+		envToken, err := arungh.TokenFromEnv(context.Background())
 		if err == nil {
 			token = envToken
 		}
@@ -2067,7 +2067,7 @@ func prepareOrchestrationGitHub(id string, req *orchestrateRequest) (*orchestrat
 
 	branch := strings.TrimSpace(req.GitHub.BranchName)
 	if branch == "" {
-		branch = "agentos/" + id
+		branch = "arun/" + id
 	}
 	if err := validateGitRef(branch); err != nil {
 		return nil, err
@@ -2078,8 +2078,8 @@ func prepareOrchestrationGitHub(id string, req *orchestrateRequest) (*orchestrat
 		return nil, err
 	}
 
-	issueTitle := normalizeGitHubArtifactTitle(req.GitHub.IssueTitle, req.Task, "AgentOS orchestration "+id)
-	prTitle := normalizeGitHubArtifactTitle(req.GitHub.PRTitle, req.Task, "AgentOS orchestration "+id)
+	issueTitle := normalizeGitHubArtifactTitle(req.GitHub.IssueTitle, req.Task, "ARUN orchestration "+id)
+	prTitle := normalizeGitHubArtifactTitle(req.GitHub.PRTitle, req.Task, "ARUN orchestration "+id)
 	issueTemplate := normalizeArtifactTemplateID(req.GitHub.IssueTemplate)
 	prTemplate := normalizeArtifactTemplateID(req.GitHub.PRTemplate)
 
@@ -2104,7 +2104,7 @@ func normalizeGitHubArtifactTitle(title, taskText, fallback string) string {
 		}
 		return truncateGitHubTitle(candidate)
 	}
-	return "AgentOS orchestration"
+	return "ARUN orchestration"
 }
 
 func firstNonEmptyLine(value string) string {
@@ -2201,7 +2201,7 @@ func orchestrationRequestFromIssue(importReq *orchestrateFromIssueRequest, reg *
 		OutputLanguage: strings.TrimSpace(importReq.OutputLanguage),
 		GitHub: &orchestrateGitHubRequest{
 			CreatePullRequest: createPullRequest,
-			BranchName:        fmt.Sprintf("agentos/issue-%d", importReq.IssueNumber),
+			BranchName:        fmt.Sprintf("arun/issue-%d", importReq.IssueNumber),
 			PRBase:            defaultBaseBranch(importReq.BaseBranch),
 			PRTitle:           title,
 		},
@@ -2229,28 +2229,28 @@ func issueTriggerControls(labels []string, text string) issueTriggerOptions {
 	var opts issueTriggerOptions
 	for _, label := range labels {
 		switch strings.ToLower(strings.TrimSpace(label)) {
-		case "agentos:create-pr":
+		case "arun:create-pr":
 			value := true
 			opts.CreatePullRequest = &value
-		case "agentos:report-only":
+		case "arun:report-only":
 			value := false
 			opts.CreatePullRequest = &value
-		case "agentos:parallel":
+		case "arun:parallel":
 			opts.Strategy = "parallel"
-		case "agentos:sequential":
+		case "arun:sequential":
 			opts.Strategy = "sequential"
-		case "agentos:close-never":
+		case "arun:close-never":
 			opts.ClosePolicy = "never"
-		case "agentos:close-on-quality-gate-pass":
+		case "arun:close-on-quality-gate-pass":
 			opts.ClosePolicy = "on_quality_gate_pass"
-		case "agentos:close-on-pr-merge":
+		case "arun:close-on-pr-merge":
 			opts.ClosePolicy = "on_pr_merge"
-		case "agentos:approval-required":
+		case "arun:approval-required":
 			value := true
 			opts.RequireApproval = &value
 		}
 	}
-	if command, ok := parseAgentOSRunCommand(text); ok {
+	if command, ok := parseARUNRunCommand(text); ok {
 		if command.Strategy != "" {
 			opts.Strategy = command.Strategy
 		}
@@ -2270,14 +2270,14 @@ func issueTriggerControls(labels []string, text string) issueTriggerOptions {
 	return opts
 }
 
-func parseAgentOSRunCommand(text string) (issueTriggerOptions, bool) {
+func parseARUNRunCommand(text string) (issueTriggerOptions, bool) {
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "/agentos run") {
+		if !strings.HasPrefix(line, "/arun run") {
 			continue
 		}
 		var opts issueTriggerOptions
-		for _, field := range strings.Fields(strings.TrimSpace(strings.TrimPrefix(line, "/agentos run"))) {
+		for _, field := range strings.Fields(strings.TrimSpace(strings.TrimPrefix(line, "/arun run"))) {
 			key, value, ok := strings.Cut(field, "=")
 			if !ok {
 				continue
@@ -2446,8 +2446,8 @@ func userGitHubToken(user *authUser) string {
 	return strings.TrimSpace(user.AccessToken)
 }
 
-func githubClientForRecord(record *orchestrationRecord, owner, name string) *agentosgh.Client {
-	client := agentosgh.NewClient(owner, name)
+func githubClientForRecord(record *orchestrationRecord, owner, name string) *arungh.Client {
+	client := arungh.NewClient(owner, name)
 	if record != nil && strings.TrimSpace(record.GitHubToken) != "" {
 		client.WithToken(record.GitHubToken)
 	}
@@ -2482,11 +2482,11 @@ func (s *Server) createTrackingIssue(record *orchestrationRecord) {
 		return
 	}
 	client := githubClientForRecord(record, owner, name)
-	issue, err := client.CreateIssue(agentosgh.CreateIssueRequest{
+	issue, err := client.CreateIssue(arungh.CreateIssueRequest{
 		Title: record.GitHub.IssueTitle,
 		Body:  orchestrationIssueBody(record),
 		Labels: []string{
-			"agentos",
+			"arun",
 		},
 	})
 	if err != nil {
@@ -2524,7 +2524,7 @@ func (s *Server) createPullRequestForOrchestration(record *orchestrationRecord) 
 		return
 	}
 	client := githubClientForRecord(record, owner, name)
-	pr, err := client.CreatePR(agentosgh.CreatePRRequest{
+	pr, err := client.CreatePR(arungh.CreatePRRequest{
 		Title: record.GitHub.PRTitle,
 		Body:  orchestrationPRBody(record),
 		Head:  record.GitHub.BranchName,
@@ -2561,12 +2561,12 @@ func publishOrchestrationBranch(record *orchestrationRecord) error {
 	if err := gitAddAll(record.RepoPath, record.GitHubToken); err != nil {
 		return err
 	}
-	message := fmt.Sprintf("AgentOS orchestration %s", record.ID)
+	message := fmt.Sprintf("ARUN orchestration %s", record.ID)
 	if !gitTreeClean(record.RepoPath, record.GitHubToken) {
-		if err := gitConfig(record.RepoPath, record.GitHubToken, "user.email", "agentos@example.invalid"); err != nil {
+		if err := gitConfig(record.RepoPath, record.GitHubToken, "user.email", "arun@example.invalid"); err != nil {
 			return err
 		}
-		if err := gitConfig(record.RepoPath, record.GitHubToken, "user.name", "AgentOS"); err != nil {
+		if err := gitConfig(record.RepoPath, record.GitHubToken, "user.name", "ARUN"); err != nil {
 			return err
 		}
 		if err := gitCommit(record.RepoPath, record.GitHubToken, message); err != nil {
@@ -2594,7 +2594,7 @@ func ensurePullRequestBaseBranch(dir, token, baseBranch, message string) error {
 	if exists {
 		return nil
 	}
-	baseCommit, err := gitCreateEmptyCommit(dir, token, "Initialize "+baseBranch+" for AgentOS orchestration PRs")
+	baseCommit, err := gitCreateEmptyCommit(dir, token, "Initialize "+baseBranch+" for ARUN orchestration PRs")
 	if err != nil {
 		return err
 	}
@@ -2786,7 +2786,7 @@ func (s *Server) postSourceIssueFinalComment(record *orchestrationRecord) {
 	s.auditGitHubArtifact(record, "github.issue.comment", auditOutcomeSuccess, comment.HTMLURL)
 }
 
-func (s *Server) createSourceIssueComment(record *orchestrationRecord, body string) (*agentosgh.IssueComment, error) {
+func (s *Server) createSourceIssueComment(record *orchestrationRecord, body string) (*arungh.IssueComment, error) {
 	if record == nil || record.GitHub == nil {
 		return nil, fmt.Errorf("missing GitHub source issue")
 	}
@@ -2798,7 +2798,7 @@ func (s *Server) createSourceIssueComment(record *orchestrationRecord, body stri
 		return nil, fmt.Errorf("missing source issue number")
 	}
 	client := githubClientForRecord(record, owner, name)
-	return client.CreateIssueComment(record.GitHub.SourceIssueNumber, agentosgh.CreateIssueCommentRequest{Body: body})
+	return client.CreateIssueComment(record.GitHub.SourceIssueNumber, arungh.CreateIssueCommentRequest{Body: body})
 }
 
 func (s *Server) closeSourceIssueIfPolicyAllows(record *orchestrationRecord) {
@@ -2868,7 +2868,7 @@ func approvalRejectionMessage(reason string) string {
 
 func sourceIssueStartCommentBody(record *orchestrationRecord) string {
 	runRef := orchestrationRunReference(record)
-	return strings.TrimSpace(fmt.Sprintf(`AgentOS orchestration started.
+	return strings.TrimSpace(fmt.Sprintf(`ARUN orchestration started.
 
 - Run: %s
 - Status: %s
@@ -2883,7 +2883,7 @@ Task:
 
 func sourceIssueFinalCommentBody(record *orchestrationRecord) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "AgentOS orchestration finished.\n\n")
+	fmt.Fprintf(&b, "ARUN orchestration finished.\n\n")
 	fmt.Fprintf(&b, "- Run: %s\n", orchestrationRunReference(record))
 	fmt.Fprintf(&b, "- Status: %s\n", strings.TrimSpace(record.Status))
 	if record.GitHub != nil && record.GitHub.PullRequestURL != "" {
@@ -2902,7 +2902,7 @@ func orchestrationRunReference(record *orchestrationRecord) string {
 	if record == nil {
 		return ""
 	}
-	base := strings.TrimRight(strings.TrimSpace(os.Getenv("AGENTOS_PUBLIC_URL")), "/")
+	base := strings.TrimRight(strings.TrimSpace(os.Getenv("ARUN_PUBLIC_URL")), "/")
 	if base == "" {
 		base = publicURLFromOAuthCallback()
 	}
@@ -2969,12 +2969,12 @@ func loadArtifactConfig(repoPath string) artifactConfig {
 	if repoPath == "" {
 		return cfg
 	}
-	raw, err := os.ReadFile(filepath.Join(repoPath, ".agentos", "config.yaml"))
+	raw, err := os.ReadFile(filepath.Join(repoPath, ".arun", "config.yaml"))
 	if err != nil {
 		return cfg
 	}
 	if err := yaml.Unmarshal(raw, &cfg); err != nil {
-		slog.Warn("parse .agentos/config.yaml failed", "repoPath", repoPath, "error", err)
+		slog.Warn("parse .arun/config.yaml failed", "repoPath", repoPath, "error", err)
 	}
 	cfg.OutputLanguage = normalizeOutputLanguage(cfg.OutputLanguage)
 	return cfg
@@ -3226,7 +3226,7 @@ Target baseline for a new repository:
 - A minimal Go HTTP server with a health endpoint and a small product API or static asset handler.
 - A minimal Web UI or static frontend slice when it fits the repository goal.
 - Dockerfile and local validation commands.
-- Helm chart and Kubernetes manifests suitable for deploying into the same Kubernetes environment as AgentOS. Include Service and Deployment. Ingress is not required.
+- Helm chart and Kubernetes manifests suitable for deploying into the same Kubernetes environment as ARUN. Include Service and Deployment. Ingress is not required.
 - GitHub Actions CI that runs tests, lint or smoke checks, and build validation so future PRs can improve the product continuously.
 - README documentation with setup, local run, Kubernetes deploy notes, validation commands, and operational follow-up backlog.
 
@@ -3336,13 +3336,13 @@ func availableAgentNames(registry *agent.Registry, names ...string) []string {
 }
 
 func loadRepositoryScenarioTemplates(repoPath string, registry *agent.Registry) ([]scenarioTemplate, error) {
-	dir := filepath.Join(repoPath, ".agentos", "scenarios")
+	dir := filepath.Join(repoPath, ".arun", "scenarios")
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {
 		return []scenarioTemplate{}, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read .agentos/scenarios: %w", err)
+		return nil, fmt.Errorf("read .arun/scenarios: %w", err)
 	}
 
 	var templates []scenarioTemplate
@@ -3353,15 +3353,15 @@ func loadRepositoryScenarioTemplates(repoPath string, registry *agent.Registry) 
 		path := filepath.Join(dir, entry.Name())
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			return nil, fmt.Errorf("%s: read: %w", filepath.ToSlash(filepath.Join(".agentos", "scenarios", entry.Name())), err)
+			return nil, fmt.Errorf("%s: read: %w", filepath.ToSlash(filepath.Join(".arun", "scenarios", entry.Name())), err)
 		}
 		var tmpl scenarioTemplate
 		if err := yaml.Unmarshal(raw, &tmpl); err != nil {
-			return nil, fmt.Errorf("%s: parse: %w", filepath.ToSlash(filepath.Join(".agentos", "scenarios", entry.Name())), err)
+			return nil, fmt.Errorf("%s: parse: %w", filepath.ToSlash(filepath.Join(".arun", "scenarios", entry.Name())), err)
 		}
 		tmpl.Source = "repository"
 		if err := validateScenarioTemplate(&tmpl, registry); err != nil {
-			return nil, fmt.Errorf("%s: %w", filepath.ToSlash(filepath.Join(".agentos", "scenarios", entry.Name())), err)
+			return nil, fmt.Errorf("%s: %w", filepath.ToSlash(filepath.Join(".arun", "scenarios", entry.Name())), err)
 		}
 		templates = append(templates, tmpl)
 	}
@@ -3446,13 +3446,13 @@ func resolveScenarioTemplateSelection(selection *scenarioTemplateSelection, repo
 }
 
 func loadRepositoryAgentDefinitions(repoPath string, registry *agent.Registry) ([]agent.Definition, error) {
-	dir := filepath.Join(repoPath, ".agentos", "agents")
+	dir := filepath.Join(repoPath, ".arun", "agents")
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {
 		return []agent.Definition{}, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read .agentos/agents: %w", err)
+		return nil, fmt.Errorf("read .arun/agents: %w", err)
 	}
 
 	var defs []agent.Definition
@@ -3463,7 +3463,7 @@ func loadRepositoryAgentDefinitions(repoPath string, registry *agent.Registry) (
 		path := filepath.Join(dir, entry.Name())
 		def, err := agent.LoadDefinition(path)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", filepath.ToSlash(filepath.Join(".agentos", "agents", entry.Name())), err)
+			return nil, fmt.Errorf("%s: %w", filepath.ToSlash(filepath.Join(".arun", "agents", entry.Name())), err)
 		}
 		defs = append(defs, *def)
 	}
@@ -3889,7 +3889,7 @@ func artifactTemplate(record *orchestrationRecord, artifact string) string {
 func defaultArtifactTemplate(artifact, language string) string {
 	if artifact == "issue" {
 		if language == "ja" {
-			return "AgentOS Orchestrate により作成されました。\n\n" +
+			return "ARUN Orchestrate により作成されました。\n\n" +
 				"- Run: `{{.RunID}}`\n" +
 				"- Repository: `{{.Repository}}`\n" +
 				"- Base branch: `{{.BaseBranch}}`\n" +
@@ -3898,7 +3898,7 @@ func defaultArtifactTemplate(artifact, language string) string {
 				"- Agents: `{{.Agents}}`\n\n" +
 				"## タスク\n\n{{.Task}}\n"
 		}
-		return "Created by AgentOS Orchestrate.\n\n" +
+		return "Created by ARUN Orchestrate.\n\n" +
 			"- Run: `{{.RunID}}`\n" +
 			"- Repository: `{{.Repository}}`\n" +
 			"- Base branch: `{{.BaseBranch}}`\n" +
@@ -3908,14 +3908,14 @@ func defaultArtifactTemplate(artifact, language string) string {
 			"## Task\n\n{{.Task}}\n"
 	}
 	if language == "ja" {
-		return "AgentOS Orchestrate により作成されました。\n\n" +
+		return "ARUN Orchestrate により作成されました。\n\n" +
 			"{{if .IssueURL}}Tracking issue: {{.IssueURL}}\n\n{{end}}" +
 			"- Run: `{{.RunID}}`\n" +
 			"- Base branch: `{{.PRBase}}`\n" +
 			"- Agents: `{{.Agents}}`\n\n" +
 			"{{if .Summary}}## 概要\n\n{{.Summary}}\n{{end}}"
 	}
-	return "Created by AgentOS Orchestrate.\n\n" +
+	return "Created by ARUN Orchestrate.\n\n" +
 		"{{if .IssueURL}}Tracking issue: {{.IssueURL}}\n\n{{end}}" +
 		"- Run: `{{.RunID}}`\n" +
 		"- Base branch: `{{.PRBase}}`\n" +

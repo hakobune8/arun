@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -161,10 +161,10 @@ func TestLiteLLMClient_AuthHeader(t *testing.T) {
 func TestDefaultConfig_Defaults(t *testing.T) {
 	os.Unsetenv("LITELLM_BASE_URL")
 	os.Unsetenv("LITELLM_API_KEY")
-	os.Unsetenv("AGENTOS_MODEL_CODER")
+	os.Unsetenv("ARUN_MODEL_CODER")
 	defer os.Setenv("LITELLM_BASE_URL", "")
 	defer os.Setenv("LITELLM_API_KEY", "")
-	defer os.Setenv("AGENTOS_MODEL_CODER", "")
+	defer os.Setenv("ARUN_MODEL_CODER", "")
 
 	cfg := DefaultConfig()
 	if cfg.BaseURL != "http://localhost:4000" {

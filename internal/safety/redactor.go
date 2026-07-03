@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ var (
 	privateKeyBlockPattern = regexp.MustCompile(`(?is)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`)
 	authHeaderPattern      = regexp.MustCompile(`(?i)(authorization\s*[:=]\s*)(bearer|token|basic)\s+[A-Za-z0-9._~+/=-]+`)
 	cookieHeaderPattern    = regexp.MustCompile(`(?i)(cookie\s*[:=]\s*)[^\r\n]+`)
-	agentOSSessionPattern  = regexp.MustCompile(`(?i)(agentos_session=)[^;\s]+`)
+	agentOSSessionPattern  = regexp.MustCompile(`(?i)(arun_session=)[^;\s]+`)
 	githubTokenPattern     = regexp.MustCompile(`\b(?:github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9_]{20,}|ghs_[A-Za-z0-9_]{20,})\b`)
 	openAITokenPattern     = regexp.MustCompile(`\bsk-[A-Za-z0-9_-]{20,}\b`)
 	jwtPattern             = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b`)

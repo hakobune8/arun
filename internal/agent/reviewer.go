@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kazyamaz200/agentos/internal/llm"
-	"github.com/kazyamaz200/agentos/internal/runtime"
+	"github.com/hakobune8/arun/internal/llm"
+	"github.com/hakobune8/arun/internal/runtime"
 )
 
 // Reviewer uses an LLM to review code changes and execution results.

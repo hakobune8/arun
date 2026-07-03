@@ -162,7 +162,7 @@ type OrchPanel = 'new' | 'list' | 'detail'
 type DetailTab = 'overview' | 'runs' | 'memory' | 'guidelines' | 'search' | 'github'
 
 const detailTabs: DetailTab[] = ['overview', 'runs', 'memory', 'guidelines', 'search', 'github']
-const languageStorageKey = 'agentos.uiLanguage'
+const languageStorageKey = 'arun.uiLanguage'
 
 const translations: Record<UILanguage, Record<string, string>> = {
   en: {},
@@ -753,7 +753,7 @@ function App() {
                 <ShieldCheck className="size-5 text-cyan-os" />
               </div>
               <div>
-                <h1 className="text-lg font-semibold">AgentOS</h1>
+                <h1 className="text-lg font-semibold">ARUN</h1>
                 <p className="text-sm text-soft">{t('GitHub sign in required.')}</p>
               </div>
             </div>
@@ -784,8 +784,8 @@ function App() {
               <Boxes className="size-5 text-cyan-os" />
             </div>
             <div className="hidden min-w-0 text-left sm:block">
-              <div className="text-sm font-semibold tracking-wide text-ink">AgentOS</div>
-              <div className="text-[11px] text-soft">v1.4.1 workspace</div>
+              <div className="text-sm font-semibold tracking-wide text-ink">ARUN</div>
+              <div className="text-[11px] text-soft">v1.5.0 workspace</div>
             </div>
           </button>
           <nav className="hidden gap-1 md:flex">
@@ -1280,7 +1280,7 @@ function SchedulesPage(props: {
               <input className={inputClass} value={form.notifyDestinations} onChange={(e) => update({ notifyDestinations: e.target.value })} placeholder="inbox, webhook, github_issue" />
             </Field>
             <Field label="Webhook URL">
-              <input className={inputClass} value={form.webhookUrl} onChange={(e) => update({ webhookUrl: e.target.value })} placeholder="https://example.com/agentos-hook" />
+              <input className={inputClass} value={form.webhookUrl} onChange={(e) => update({ webhookUrl: e.target.value })} placeholder="https://example.com/arun-hook" />
             </Field>
           </div>
           <div className="grid gap-2">
@@ -1597,7 +1597,7 @@ function NewOrchestration(props: Parameters<typeof OrchestratesPage>[0]) {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Branch name (optional)">
-                <input className={inputClass} value={form.branchName} onChange={(e) => update({ branchName: e.target.value })} placeholder="agentos/<run-id>" />
+                <input className={inputClass} value={form.branchName} onChange={(e) => update({ branchName: e.target.value })} placeholder="arun/<run-id>" />
               </Field>
               <Field label="PR base branch">
                 <input className={inputClass} value={form.prBase} onChange={(e) => update({ prBase: e.target.value })} placeholder="main" />

@@ -15,7 +15,7 @@ func TestRepositoryStore_LoadDirectoryAndRank(t *testing.T) {
 		t.Fatal(err)
 	}
 	repo := filepath.Join(dir, "repo")
-	guidelineDir := filepath.Join(repo, ".agentos", "guidelines")
+	guidelineDir := filepath.Join(repo, ".arun", "guidelines")
 	if err := os.MkdirAll(guidelineDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ guidelines:
 	if len(all) != 3 {
 		t.Fatalf("all = %d, want 3 after reload", len(all))
 	}
-	if !strings.Contains(results[0].Path, ".agentos/guidelines/architecture.yaml") {
+	if !strings.Contains(results[0].Path, ".arun/guidelines/architecture.yaml") {
 		t.Fatalf("Path = %q, want repository guideline path", results[0].Path)
 	}
 }

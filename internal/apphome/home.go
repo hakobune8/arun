@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package apphome resolves AgentOS state directories.
+// Package apphome resolves ARUN state directories.
 package apphome
 
 import (
@@ -20,18 +20,18 @@ import (
 	"path/filepath"
 )
 
-// Dir returns the root directory used for AgentOS state. AGENTOS_HOME takes
+// Dir returns the root directory used for ARUN state. ARUN_HOME takes
 // precedence so container deployments can mount state independently from the
 // process user's home directory.
 func Dir() string {
-	if dir := os.Getenv("AGENTOS_HOME"); dir != "" {
+	if dir := os.Getenv("ARUN_HOME"); dir != "" {
 		return dir
 	}
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return ".agentos"
+		return ".arun"
 	}
-	return filepath.Join(homeDir, ".agentos")
+	return filepath.Join(homeDir, ".arun")
 }
 
 // RunsDir returns the directory used for run artifacts.

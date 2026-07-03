@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package cli implements the command-line interface commands for AgentOS.
+// Package cli implements the command-line interface commands for ARUN.
 package cli
 
 import (
@@ -20,9 +20,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/kazyamaz200/agentos/internal/agent"
-	"github.com/kazyamaz200/agentos/internal/github"
-	"github.com/kazyamaz200/agentos/internal/llm"
+	"github.com/hakobune8/arun/internal/agent"
+	"github.com/hakobune8/arun/internal/github"
+	"github.com/hakobune8/arun/internal/llm"
 	"github.com/spf13/cobra"
 )
 
@@ -38,7 +38,7 @@ var cifixCmd = &cobra.Command{
 and suggest fixes.
 
 Example:
-  agentos ci-fix --repo owner/repo --ref main`,
+  arun ci-fix --repo owner/repo --ref main`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runCIFix(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)

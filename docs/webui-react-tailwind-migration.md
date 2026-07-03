@@ -4,7 +4,7 @@ Issue: #218
 
 ## Product Direction
 
-The AgentOS Web UI should feel like a mobile-first operations OS: restrained,
+The ARUN Web UI should feel like a mobile-first operations OS: restrained,
 fast to scan, and focused on repeated repository work. The interface is not a
 landing page. It should open directly into the operational workspace.
 

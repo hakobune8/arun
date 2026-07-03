@@ -1,6 +1,6 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-LDFLAGS := -ldflags "-X github.com/kazyamaz200/agentos/internal/cli.Version=$(VERSION)"
-BINARY := agentos
+LDFLAGS := -ldflags "-X github.com/hakobune8/arun/internal/cli.Version=$(VERSION)"
+BINARY := arun
 
 .PHONY: build test lint clean cover install run vet all web-build web-lint web-smoke
 
@@ -8,7 +8,7 @@ all: lint build test
 
 build:
 	$(MAKE) web-build
-	go build $(LDFLAGS) -o $(BINARY) ./cmd/agentos
+	go build $(LDFLAGS) -o $(BINARY) ./cmd/arun
 
 test:
 	go test ./... -v -count=1
@@ -36,21 +36,21 @@ clean:
 	rm -rf web/dist web/node_modules
 
 install:
-	go install $(LDFLAGS) ./cmd/agentos
+	go install $(LDFLAGS) ./cmd/arun
 
 cover:
 	go test ./... -coverprofile=coverage.out -count=1
 	go tool cover -html=coverage.out -o coverage.html
 
 run:
-	go run $(LDFLAGS) ./cmd/agentos
+	go run $(LDFLAGS) ./cmd/arun
 
 docker-build:
-	docker build -t agentos:latest -f Dockerfile .
+	docker build -t arun:latest -f Dockerfile .
 
 docker-run:
 	docker run --rm -it \
 		-v $$(pwd):/workspace \
 		-p 8080:8080 \
 		--env-file .env \
-		agentos:latest
+		arun:latest

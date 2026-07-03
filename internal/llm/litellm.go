@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ func DefaultConfig() Config {
 		baseURL = "http://localhost:4000"
 	}
 	apiKey := os.Getenv("LITELLM_API_KEY")
-	modelCoder := os.Getenv("AGENTOS_MODEL_CODER")
+	modelCoder := os.Getenv("ARUN_MODEL_CODER")
 	if modelCoder == "" {
 		modelCoder = "coder"
 	}

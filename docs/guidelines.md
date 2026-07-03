@@ -36,8 +36,8 @@ results, _ := store.Search(ctx, "error handling patterns", 5)
 
 ## Repository-Scoped Guidelines
 
-Repository-specific guidelines can be stored in `.agentos/guidelines/` inside a
-target repository. AgentOS loads `*.md`, `*.yaml`, and `*.yml` files from this
+Repository-specific guidelines can be stored in `.arun/guidelines/` inside a
+target repository. ARUN loads `*.md`, `*.yaml`, and `*.yml` files from this
 directory when an orchestration starts, scopes them by repository and base
 branch, and reuses them during planning.
 
@@ -62,7 +62,7 @@ guidelines:
 ```
 
 `required: true` marks a guideline as mandatory. Required guidelines are ranked
-ahead of advisory guidelines and AgentOS records any required guideline that was
+ahead of advisory guidelines and ARUN records any required guideline that was
 not attached to a planned subtask.
 
 ## Repository Guideline API

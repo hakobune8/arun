@@ -1,6 +1,6 @@
 # Event Bus
 
-AgentOS provides a structured event bus for runtime observability. Every runtime
+ARUN provides a structured event bus for runtime observability. Every runtime
 operation produces typed events that can be persisted, streamed, or replayed.
 
 ## Architecture

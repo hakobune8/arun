@@ -1,7 +1,7 @@
 # Upgrade To v1.0
 
 This guide summarizes the changes users should account for when moving from
-AgentOS v0.x to v1.0.
+ARUN v0.x to v1.0.
 
 ## Stable Runtime Surface
 
@@ -15,7 +15,7 @@ helpers.
 New projects should prefer versioned agent definitions:
 
 ```yaml
-apiVersion: agentos.io/v1
+apiVersion: arun.io/v1
 kind: AgentDefinition
 metadata:
   name: go-backend
@@ -34,23 +34,23 @@ spec:
 Run definitions with:
 
 ```bash
-agentos run --task task.yaml --definition definitions/go-backend.yaml
+arun run --task task.yaml --definition definitions/go-backend.yaml
 ```
 
 Profile YAML remains supported for existing users:
 
 ```bash
-agentos run --task task.yaml --profile profiles/go_backend.yaml
+arun run --task task.yaml --profile profiles/go_backend.yaml
 ```
 
 ## State Directory
 
-Run artifacts continue to use `AGENTOS_HOME`, defaulting to `~/.agentos`.
+Run artifacts continue to use `ARUN_HOME`, defaulting to `~/.arun`.
 v1.0 also stores Web UI orchestration records under:
 
 ```text
-${AGENTOS_HOME}/orchestrates
-${AGENTOS_HOME}/workspaces/orchestrate
+${ARUN_HOME}/orchestrates
+${ARUN_HOME}/workspaces/orchestrate
 ```
 
 For Kubernetes deployments, keep persistence enabled before upgrading so run
@@ -63,7 +63,7 @@ The default LiteLLM environment variables remain:
 ```bash
 export LITELLM_BASE_URL=http://localhost:4000
 export LITELLM_API_KEY=sk-local
-export AGENTOS_MODEL_CODER=coder
+export ARUN_MODEL_CODER=coder
 ```
 
 For the Web UI, administrators can expose selectable presets through Helm
@@ -76,12 +76,12 @@ The v1.0 Web UI supports GitHub OAuth sessions. Authentication is disabled by
 default for local development and can be required in Kubernetes with:
 
 ```bash
-helm upgrade --install agentos agentos/agentos \
-  --namespace agentos \
+helm upgrade --install arun arun/arun \
+  --namespace arun \
   --set auth.required=true \
   --set auth.github.clientId=<oauth-client-id> \
-  --set auth.github.callbackUrl=https://agentos.example.com/auth/callback \
-  --set secrets.existingSecret=agentos-secrets
+  --set auth.github.callbackUrl=https://arun.example.com/auth/callback \
+  --set secrets.existingSecret=arun-secrets
 ```
 
 Session cookies are always marked `Secure`, so authenticated deployments should
@@ -93,7 +93,7 @@ v1.0 includes sequential and parallel orchestration over built-in or
 definition-backed agents:
 
 ```bash
-agentos orchestrate \
+arun orchestrate \
   --agents "go-backend,reviewer,docs" \
   --strategy parallel \
   --repo . \
@@ -109,24 +109,24 @@ The deployed Web UI is designed around remote GitHub repositories. Use
 The chart repository is published at:
 
 ```bash
-helm repo add agentos https://kazyamaz200.github.io/agentos
+helm repo add arun https://hakobune8.github.io/arun
 helm repo update
-helm upgrade --install agentos agentos/agentos \
-  --namespace agentos --create-namespace \
+helm upgrade --install arun arun/arun \
+  --namespace arun --create-namespace \
   --set env.LITELLM_BASE_URL=http://litellm:4000 \
   --set secrets.litellmApiKey=<litellm-api-key>
 ```
 
 When changing chart files for a new release, update both `version` and
-`appVersion` in `charts/agentos/Chart.yaml`.
+`appVersion` in `charts/arun/Chart.yaml`.
 
 ## CLI Completion
 
 v1.0 adds shell completion generation:
 
 ```bash
-agentos completion bash
-agentos completion zsh
-agentos completion fish
-agentos completion powershell
+arun completion bash
+arun completion zsh
+arun completion fish
+arun completion powershell
 ```

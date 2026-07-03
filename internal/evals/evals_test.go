@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kazyamaz200/agentos/internal/llm"
+	"github.com/hakobune8/arun/internal/llm"
 )
 
 func TestRun_DefaultSuite(t *testing.T) {
@@ -91,10 +91,10 @@ func TestRun_ThreeSprintScrumScenarioReportsContinuity(t *testing.T) {
 }
 
 func TestRun_ThreeSprintScrumLiveModeRequiresExplicitConfig(t *testing.T) {
-	t.Setenv("AGENTOS_EVAL_SCRUM_LIVE", "true")
-	t.Setenv("AGENTOS_EVAL_GITHUB_REPO", "")
-	t.Setenv("AGENTOS_EVAL_LLM_PRESET_MATRIX", "")
-	t.Setenv("AGENTOS_LLM_PRESETS", "")
+	t.Setenv("ARUN_EVAL_SCRUM_LIVE", "true")
+	t.Setenv("ARUN_EVAL_GITHUB_REPO", "")
+	t.Setenv("ARUN_EVAL_LLM_PRESET_MATRIX", "")
+	t.Setenv("ARUN_LLM_PRESETS", "")
 	report, err := Run(context.Background(), Options{
 		WorkDir:     t.TempDir(),
 		ScenarioIDs: []string{"three-sprint-agile-scrum"},
@@ -106,7 +106,7 @@ func TestRun_ThreeSprintScrumLiveModeRequiresExplicitConfig(t *testing.T) {
 		t.Fatalf("report = %+v, want failing live scrum readiness", report)
 	}
 	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
-	for _, want := range []string{"AGENTOS_EVAL_GITHUB_REPO", "AGENTOS_EVAL_LLM_PRESET_MATRIX"} {
+	for _, want := range []string{"ARUN_EVAL_GITHUB_REPO", "ARUN_EVAL_LLM_PRESET_MATRIX"} {
 		if !strings.Contains(reasons, want) {
 			t.Fatalf("failure reasons = %q, want %s", reasons, want)
 		}
@@ -129,13 +129,13 @@ func TestRun_LiveSuiteDoesNotIncludeAuthenticatedE2EByDefault(t *testing.T) {
 }
 
 func TestRun_AuthenticatedE2ERequiresSessionMaterial(t *testing.T) {
-	t.Setenv("AGENTOS_EVAL_AUTH_COOKIE", "")
-	t.Setenv("AGENTOS_EVAL_AUTH_STORAGE_STATE", "")
+	t.Setenv("ARUN_EVAL_AUTH_COOKIE", "")
+	t.Setenv("ARUN_EVAL_AUTH_STORAGE_STATE", "")
 	report, err := Run(context.Background(), Options{
 		WorkDir:        t.TempDir(),
 		ScenarioIDs:    []string{"authenticated-webui-e2e"},
 		IncludeAuthE2E: true,
-		LiveURL:        "https://agentos.example.invalid",
+		LiveURL:        "https://arun.example.invalid",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -150,12 +150,12 @@ func TestRun_AuthenticatedE2ERequiresSessionMaterial(t *testing.T) {
 }
 
 func TestRun_StorageCleanupE2ERequiresCookie(t *testing.T) {
-	t.Setenv("AGENTOS_EVAL_AUTH_COOKIE", "")
+	t.Setenv("ARUN_EVAL_AUTH_COOKIE", "")
 	report, err := Run(context.Background(), Options{
 		WorkDir:                  t.TempDir(),
 		ScenarioIDs:              []string{"storage-cleanup-e2e"},
 		IncludeStorageCleanupE2E: true,
-		LiveURL:                  "https://agentos.example.invalid",
+		LiveURL:                  "https://arun.example.invalid",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -164,18 +164,18 @@ func TestRun_StorageCleanupE2ERequiresCookie(t *testing.T) {
 		t.Fatalf("report = %+v, want one failing storage cleanup E2E scenario", report)
 	}
 	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
-	if !strings.Contains(reasons, "AGENTOS_EVAL_AUTH_COOKIE") {
+	if !strings.Contains(reasons, "ARUN_EVAL_AUTH_COOKIE") {
 		t.Fatalf("failure reasons = %q, want missing cookie", reasons)
 	}
 }
 
 func TestRun_ScheduleNotificationE2ERequiresCookie(t *testing.T) {
-	t.Setenv("AGENTOS_EVAL_AUTH_COOKIE", "")
+	t.Setenv("ARUN_EVAL_AUTH_COOKIE", "")
 	report, err := Run(context.Background(), Options{
 		WorkDir:                  t.TempDir(),
 		ScenarioIDs:              []string{"schedule-notification-e2e"},
 		IncludeScheduleNotifyE2E: true,
-		LiveURL:                  "https://agentos.example.invalid",
+		LiveURL:                  "https://arun.example.invalid",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -184,13 +184,13 @@ func TestRun_ScheduleNotificationE2ERequiresCookie(t *testing.T) {
 		t.Fatalf("report = %+v, want one failing schedule notification E2E scenario", report)
 	}
 	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
-	if !strings.Contains(reasons, "AGENTOS_EVAL_AUTH_COOKIE") {
+	if !strings.Contains(reasons, "ARUN_EVAL_AUTH_COOKIE") {
 		t.Fatalf("failure reasons = %q, want missing cookie", reasons)
 	}
 }
 
 func TestRun_GitHubWorkflowE2ERequiresRepo(t *testing.T) {
-	t.Setenv("AGENTOS_EVAL_GITHUB_REPO", "")
+	t.Setenv("ARUN_EVAL_GITHUB_REPO", "")
 	report, err := Run(context.Background(), Options{
 		WorkDir:                  t.TempDir(),
 		ScenarioIDs:              []string{"github-workflow-e2e"},
@@ -203,14 +203,14 @@ func TestRun_GitHubWorkflowE2ERequiresRepo(t *testing.T) {
 		t.Fatalf("report = %+v, want one failing GitHub workflow E2E scenario", report)
 	}
 	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
-	if !strings.Contains(reasons, "AGENTOS_EVAL_GITHUB_REPO") {
+	if !strings.Contains(reasons, "ARUN_EVAL_GITHUB_REPO") {
 		t.Fatalf("failure reasons = %q, want missing repo", reasons)
 	}
 }
 
 func TestRun_ScrumGitHubE2ERequiresAllowlist(t *testing.T) {
-	t.Setenv("AGENTOS_EVAL_GITHUB_REPO", "owner/repo")
-	t.Setenv("AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST", "owner/other")
+	t.Setenv("ARUN_EVAL_GITHUB_REPO", "owner/repo")
+	t.Setenv("ARUN_EVAL_GITHUB_REPO_ALLOWLIST", "owner/other")
 	report, err := Run(context.Background(), Options{
 		WorkDir:               t.TempDir(),
 		ScenarioIDs:           []string{"three-sprint-scrum-github-e2e"},
@@ -223,15 +223,15 @@ func TestRun_ScrumGitHubE2ERequiresAllowlist(t *testing.T) {
 		t.Fatalf("report = %+v, want one failing scrum GitHub E2E scenario", report)
 	}
 	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
-	if !strings.Contains(reasons, "AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST") {
+	if !strings.Contains(reasons, "ARUN_EVAL_GITHUB_REPO_ALLOWLIST") {
 		t.Fatalf("failure reasons = %q, want missing allowlist", reasons)
 	}
 }
 
 func TestRun_ScrumGitHubE2ERejectsInvalidCleanupMode(t *testing.T) {
-	t.Setenv("AGENTOS_EVAL_GITHUB_REPO", "owner/repo")
-	t.Setenv("AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST", "owner/repo")
-	t.Setenv("AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP", "delete")
+	t.Setenv("ARUN_EVAL_GITHUB_REPO", "owner/repo")
+	t.Setenv("ARUN_EVAL_GITHUB_REPO_ALLOWLIST", "owner/repo")
+	t.Setenv("ARUN_EVAL_SCRUM_GITHUB_CLEANUP", "delete")
 	report, err := Run(context.Background(), Options{
 		WorkDir:               t.TempDir(),
 		ScenarioIDs:           []string{"three-sprint-scrum-github-e2e"},
@@ -244,17 +244,17 @@ func TestRun_ScrumGitHubE2ERejectsInvalidCleanupMode(t *testing.T) {
 		t.Fatalf("report = %+v, want one failing scrum GitHub E2E scenario", report)
 	}
 	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
-	if !strings.Contains(reasons, "AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP") {
+	if !strings.Contains(reasons, "ARUN_EVAL_SCRUM_GITHUB_CLEANUP") {
 		t.Fatalf("failure reasons = %q, want invalid cleanup mode", reasons)
 	}
 }
 
 func TestRun_ScrumGitHubE2ELLMPresetsRequireMatrixBeforeToken(t *testing.T) {
-	t.Setenv("AGENTOS_EVAL_GITHUB_REPO", "owner/repo")
-	t.Setenv("AGENTOS_EVAL_GITHUB_REPO_ALLOWLIST", "owner/repo")
-	t.Setenv("AGENTOS_EVAL_SCRUM_LLM_PRESETS", "true")
-	t.Setenv("AGENTOS_EVAL_LLM_PRESET_MATRIX", "")
-	t.Setenv("AGENTOS_LLM_PRESETS", "")
+	t.Setenv("ARUN_EVAL_GITHUB_REPO", "owner/repo")
+	t.Setenv("ARUN_EVAL_GITHUB_REPO_ALLOWLIST", "owner/repo")
+	t.Setenv("ARUN_EVAL_SCRUM_LLM_PRESETS", "true")
+	t.Setenv("ARUN_EVAL_LLM_PRESET_MATRIX", "")
+	t.Setenv("ARUN_LLM_PRESETS", "")
 	t.Setenv("GITHUB_TOKEN", "")
 	t.Setenv("GH_TOKEN", "")
 	report, err := Run(context.Background(), Options{
@@ -269,13 +269,13 @@ func TestRun_ScrumGitHubE2ELLMPresetsRequireMatrixBeforeToken(t *testing.T) {
 		t.Fatalf("report = %+v, want one failing scrum GitHub E2E scenario", report)
 	}
 	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
-	if !strings.Contains(reasons, "AGENTOS_EVAL_LLM_PRESET_MATRIX") || strings.Contains(reasons, "GitHub token") {
+	if !strings.Contains(reasons, "ARUN_EVAL_LLM_PRESET_MATRIX") || strings.Contains(reasons, "GitHub token") {
 		t.Fatalf("failure reasons = %q, want preset matrix failure before GitHub token lookup", reasons)
 	}
 }
 
 func TestScrumLiteLLMPresetMapFromEnvRequiresFivePresets(t *testing.T) {
-	t.Setenv("AGENTOS_EVAL_LLM_PRESET_MATRIX", `[{"id":"smoke","model":"test-model","baseUrl":"http://litellm:4000"}]`)
+	t.Setenv("ARUN_EVAL_LLM_PRESET_MATRIX", `[{"id":"smoke","model":"test-model","baseUrl":"http://litellm:4000"}]`)
 	_, err := scrumLiteLLMPresetMapFromEnv()
 	if err == nil {
 		t.Fatal("scrumLiteLLMPresetMapFromEnv() error = nil, want missing presets")
@@ -320,9 +320,9 @@ func TestScrumLLMStageCheckReportsUsage(t *testing.T) {
 }
 
 func TestRun_KubernetesRolloutE2ERequiresExplicitConfig(t *testing.T) {
-	t.Setenv("AGENTOS_EVAL_KUBECONFIG", "")
-	t.Setenv("AGENTOS_EVAL_KUBE_CONTEXT", "")
-	t.Setenv("AGENTOS_EVAL_KUBE_NAMESPACE", "")
+	t.Setenv("ARUN_EVAL_KUBECONFIG", "")
+	t.Setenv("ARUN_EVAL_KUBE_CONTEXT", "")
+	t.Setenv("ARUN_EVAL_KUBE_NAMESPACE", "")
 	report, err := Run(context.Background(), Options{
 		WorkDir:                     t.TempDir(),
 		ScenarioIDs:                 []string{"kubernetes-rollout-e2e"},
@@ -335,7 +335,7 @@ func TestRun_KubernetesRolloutE2ERequiresExplicitConfig(t *testing.T) {
 		t.Fatalf("report = %+v, want one failing Kubernetes rollout scenario", report)
 	}
 	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
-	for _, want := range []string{"AGENTOS_EVAL_KUBECONFIG", "AGENTOS_EVAL_KUBE_CONTEXT", "AGENTOS_EVAL_KUBE_NAMESPACE"} {
+	for _, want := range []string{"ARUN_EVAL_KUBECONFIG", "ARUN_EVAL_KUBE_CONTEXT", "ARUN_EVAL_KUBE_NAMESPACE"} {
 		if !strings.Contains(reasons, want) {
 			t.Fatalf("failure reasons = %q, want %s", reasons, want)
 		}
@@ -343,7 +343,7 @@ func TestRun_KubernetesRolloutE2ERequiresExplicitConfig(t *testing.T) {
 }
 
 func TestRun_RealLLMSmokeRequiresOptIn(t *testing.T) {
-	t.Setenv("AGENTOS_EVAL_LIVE_LLM", "")
+	t.Setenv("ARUN_EVAL_LIVE_LLM", "")
 	report, err := Run(context.Background(), Options{
 		WorkDir:                t.TempDir(),
 		ScenarioIDs:            []string{"real-llm-orchestration-smoke"},
@@ -356,13 +356,13 @@ func TestRun_RealLLMSmokeRequiresOptIn(t *testing.T) {
 		t.Fatalf("report = %+v, want one failing real LLM smoke scenario", report)
 	}
 	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
-	if !strings.Contains(reasons, "AGENTOS_EVAL_LIVE_LLM=true") {
+	if !strings.Contains(reasons, "ARUN_EVAL_LIVE_LLM=true") {
 		t.Fatalf("failure reasons = %q, want missing live LLM opt-in", reasons)
 	}
 }
 
 func TestRun_LiteLLMPresetEvalsRequiresOptIn(t *testing.T) {
-	t.Setenv("AGENTOS_EVAL_LLM_PRESETS", "")
+	t.Setenv("ARUN_EVAL_LLM_PRESETS", "")
 	report, err := Run(context.Background(), Options{
 		WorkDir:                   t.TempDir(),
 		ScenarioIDs:               []string{"litellm-preset-matrix"},
@@ -375,7 +375,7 @@ func TestRun_LiteLLMPresetEvalsRequiresOptIn(t *testing.T) {
 		t.Fatalf("report = %+v, want one failing LiteLLM preset scenario", report)
 	}
 	reasons := strings.Join(report.ScenarioRuns[0].FailureReasons, "\n")
-	if !strings.Contains(reasons, "AGENTOS_EVAL_LLM_PRESETS=true") {
+	if !strings.Contains(reasons, "ARUN_EVAL_LLM_PRESETS=true") {
 		t.Fatalf("failure reasons = %q, want missing LiteLLM preset opt-in", reasons)
 	}
 }
@@ -386,11 +386,11 @@ func TestRun_LiteLLMPresetEvalsReportsMatrix(t *testing.T) {
 			t.Fatalf("path = %s, want /chat/completions", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"choices":[{"index":0,"message":{"role":"assistant","content":"ready agentos-preset-ok"}}],"usage":{"prompt_tokens":4,"completion_tokens":3,"total_tokens":7}}`))
+		_, _ = w.Write([]byte(`{"choices":[{"index":0,"message":{"role":"assistant","content":"ready arun-preset-ok"}}],"usage":{"prompt_tokens":4,"completion_tokens":3,"total_tokens":7}}`))
 	}))
 	defer server.Close()
-	t.Setenv("AGENTOS_EVAL_LLM_PRESETS", "true")
-	t.Setenv("AGENTOS_EVAL_LLM_PRESET_MATRIX", `[{"id":"smoke","name":"Low-cost smoke","useCase":"smoke","provider":"litellm","baseUrl":"`+server.URL+`","model":"test-model","apiKeyEnv":"","timeout":"5s","temperature":0,"maxTokens":64,"retryAttempts":1,"tokenBudget":500,"costBudget":"low"}]`)
+	t.Setenv("ARUN_EVAL_LLM_PRESETS", "true")
+	t.Setenv("ARUN_EVAL_LLM_PRESET_MATRIX", `[{"id":"smoke","name":"Low-cost smoke","useCase":"smoke","provider":"litellm","baseUrl":"`+server.URL+`","model":"test-model","apiKeyEnv":"","timeout":"5s","temperature":0,"maxTokens":64,"retryAttempts":1,"tokenBudget":500,"costBudget":"low"}]`)
 	report, err := Run(context.Background(), Options{
 		WorkDir:                   t.TempDir(),
 		ScenarioIDs:               []string{"litellm-preset-matrix"},
@@ -429,8 +429,8 @@ func TestCountingLLMClientCapsMaxTokens(t *testing.T) {
 }
 
 func TestSanitizeAuthE2EOutput(t *testing.T) {
-	t.Setenv("AGENTOS_EVAL_AUTH_COOKIE", "agentos_session=secret")
-	got := sanitizeAuthE2EOutput("failed with agentos_session=secret")
+	t.Setenv("ARUN_EVAL_AUTH_COOKIE", "arun_session=secret")
+	got := sanitizeAuthE2EOutput("failed with arun_session=secret")
 	if strings.Contains(got, "secret") || !strings.Contains(got, "[redacted]") {
 		t.Fatalf("sanitizeAuthE2EOutput() = %q", got)
 	}
@@ -485,26 +485,26 @@ func TestGitHubRepoAllowed(t *testing.T) {
 }
 
 func TestScrumGitHubCleanupMode(t *testing.T) {
-	t.Setenv("AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP", "")
+	t.Setenv("ARUN_EVAL_SCRUM_GITHUB_CLEANUP", "")
 	if got := scrumGitHubCleanupMode(); got != "close" {
 		t.Fatalf("scrumGitHubCleanupMode() = %q, want close", got)
 	}
-	t.Setenv("AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP", "keep")
+	t.Setenv("ARUN_EVAL_SCRUM_GITHUB_CLEANUP", "keep")
 	if got := scrumGitHubCleanupMode(); got != "keep" {
 		t.Fatalf("scrumGitHubCleanupMode() = %q, want keep", got)
 	}
-	t.Setenv("AGENTOS_EVAL_SCRUM_GITHUB_CLEANUP", "delete")
+	t.Setenv("ARUN_EVAL_SCRUM_GITHUB_CLEANUP", "delete")
 	if got := scrumGitHubCleanupMode(); got != "" {
 		t.Fatalf("scrumGitHubCleanupMode() = %q, want empty invalid mode", got)
 	}
 }
 
 func TestScrumIssueIDFromTitle(t *testing.T) {
-	got := scrumIssueIDFromTitle("[AgentOS Eval][20260702T060704] AOS-106 Investigate flaky live LLM smoke")
+	got := scrumIssueIDFromTitle("[ARUN Eval][20260702T060704] AOS-106 Investigate flaky live LLM smoke")
 	if got != "AOS-106" {
 		t.Fatalf("scrumIssueIDFromTitle() = %q, want AOS-106", got)
 	}
-	if got := scrumIssueIDFromTitle("[AgentOS Eval] missing id"); got != "" {
+	if got := scrumIssueIDFromTitle("[ARUN Eval] missing id"); got != "" {
 		t.Fatalf("scrumIssueIDFromTitle() = %q, want empty", got)
 	}
 }
@@ -545,7 +545,7 @@ func TestFindAuthE2EScriptOverride(t *testing.T) {
 	if err := os.WriteFile(script, []byte(""), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("AGENTOS_EVAL_AUTH_E2E_SCRIPT", script)
+	t.Setenv("ARUN_EVAL_AUTH_E2E_SCRIPT", script)
 	got, err := findAuthE2EScript()
 	if err != nil {
 		t.Fatalf("findAuthE2EScript() error = %v", err)

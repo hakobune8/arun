@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/kazyamaz200/agentos/internal/llm"
+	"github.com/hakobune8/arun/internal/llm"
 )
 
 type llmPreset struct {
@@ -43,7 +43,7 @@ type llmSettings struct {
 }
 
 func loadLLMSettings() llmSettings {
-	presets := parseLLMPresets(os.Getenv("AGENTOS_LLM_PRESETS"))
+	presets := parseLLMPresets(os.Getenv("ARUN_LLM_PRESETS"))
 	if len(presets) == 0 {
 		cfg := llm.DefaultConfig()
 		presets = []llmPreset{{
@@ -56,7 +56,7 @@ func loadLLMSettings() llmSettings {
 		}}
 	}
 
-	defaultID := strings.TrimSpace(os.Getenv("AGENTOS_LLM_DEFAULT_PRESET"))
+	defaultID := strings.TrimSpace(os.Getenv("ARUN_LLM_DEFAULT_PRESET"))
 	if defaultID == "" || !hasLLMPreset(presets, defaultID) {
 		defaultID = presets[0].ID
 	}

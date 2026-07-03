@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -147,7 +147,7 @@ func TestLogger_RedactsSecrets(t *testing.T) {
 	err := logger.LogTool(
 		"shell",
 		map[string]string{"command": "curl -H 'Authorization: Bearer ghp_123456789012345678901234567890123456'"},
-		"Cookie: agentos_session=signed-session-value",
+		"Cookie: arun_session=signed-session-value",
 		time.Millisecond,
 	)
 	if err != nil {

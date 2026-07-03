@@ -1,4 +1,4 @@
-module github.com/kazyamaz200/agentos
+module github.com/hakobune8/arun
 
 go 1.22
 

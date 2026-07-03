@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,14 +21,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/kazyamaz200/agentos/internal/llm"
-	"github.com/kazyamaz200/agentos/internal/profile"
-	"github.com/kazyamaz200/agentos/internal/runtime"
-	"github.com/kazyamaz200/agentos/internal/safety"
-	"github.com/kazyamaz200/agentos/internal/sandbox"
-	"github.com/kazyamaz200/agentos/internal/state"
-	"github.com/kazyamaz200/agentos/internal/task"
-	"github.com/kazyamaz200/agentos/internal/tools"
+	"github.com/hakobune8/arun/internal/llm"
+	"github.com/hakobune8/arun/internal/profile"
+	"github.com/hakobune8/arun/internal/runtime"
+	"github.com/hakobune8/arun/internal/safety"
+	"github.com/hakobune8/arun/internal/sandbox"
+	"github.com/hakobune8/arun/internal/state"
+	"github.com/hakobune8/arun/internal/task"
+	"github.com/hakobune8/arun/internal/tools"
 )
 
 func TestBaseAgent_New(t *testing.T) {
@@ -196,7 +196,7 @@ func newExecuteTestContext(t *testing.T, testCmd, lintCmd string) *runtime.RunCo
 		t.Fatal(err)
 	}
 	runGit(t, repo, "add", "README.md")
-	runGit(t, repo, "-c", "user.name=AgentOS", "-c", "user.email=agentos@example.com", "commit", "-m", "init")
+	runGit(t, repo, "-c", "user.name=ARUN", "-c", "user.email=arun@example.com", "commit", "-m", "init")
 
 	registry := tools.NewRegistry()
 	policy := safety.NewCommandPolicy(nil)

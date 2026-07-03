@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package cli implements the command-line interface commands for AgentOS.
+// Package cli implements the command-line interface commands for ARUN.
 package cli
 
 import (
@@ -21,13 +21,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Version is the current AgentOS version, set at build time via ldflags.
+// Version is the current ARUN version, set at build time via ldflags.
 var Version = "dev"
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Print the version number of AgentOS",
+	Short: "Print the version number of ARUN",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("AgentOS %s\n", Version)
+		fmt.Printf("ARUN %s\n", Version)
 	},
 }

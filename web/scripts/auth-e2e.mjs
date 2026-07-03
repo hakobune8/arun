@@ -1,16 +1,16 @@
 import { chromium } from 'playwright'
 
-const baseURL = trimRightSlash(process.env.AGENTOS_EVAL_LIVE_URL || '')
-const storageState = process.env.AGENTOS_EVAL_AUTH_STORAGE_STATE || ''
-const cookieHeader = process.env.AGENTOS_EVAL_AUTH_COOKIE || ''
-const outputDir = process.env.AGENTOS_EVAL_AUTH_E2E_OUT || ''
-const headless = process.env.AGENTOS_EVAL_AUTH_E2E_HEADLESS !== 'false'
+const baseURL = trimRightSlash(process.env.ARUN_EVAL_LIVE_URL || '')
+const storageState = process.env.ARUN_EVAL_AUTH_STORAGE_STATE || ''
+const cookieHeader = process.env.ARUN_EVAL_AUTH_COOKIE || ''
+const outputDir = process.env.ARUN_EVAL_AUTH_E2E_OUT || ''
+const headless = process.env.ARUN_EVAL_AUTH_E2E_HEADLESS !== 'false'
 
 if (!baseURL) {
-  throw new Error('AGENTOS_EVAL_LIVE_URL is required')
+  throw new Error('ARUN_EVAL_LIVE_URL is required')
 }
 if (!storageState && !cookieHeader) {
-  throw new Error('AGENTOS_EVAL_AUTH_STORAGE_STATE or AGENTOS_EVAL_AUTH_COOKIE is required')
+  throw new Error('ARUN_EVAL_AUTH_STORAGE_STATE or ARUN_EVAL_AUTH_COOKIE is required')
 }
 
 const checks = []

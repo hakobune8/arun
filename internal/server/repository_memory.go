@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kazyamaz200/agentos/internal/apphome"
-	"github.com/kazyamaz200/agentos/internal/memory"
-	"github.com/kazyamaz200/agentos/internal/orchestrator"
+	"github.com/hakobune8/arun/internal/apphome"
+	"github.com/hakobune8/arun/internal/memory"
+	"github.com/hakobune8/arun/internal/orchestrator"
 )
 
 type repositoryMemoryRequest struct {

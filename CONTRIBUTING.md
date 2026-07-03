@@ -1,6 +1,6 @@
-# Contributing to AgentOS
+# Contributing to ARUN
 
-Thank you for considering contributing to AgentOS! We welcome contributions of all kinds.
+Thank you for considering contributing to ARUN! We welcome contributions of all kinds.
 
 ## Code of Conduct
 
@@ -10,7 +10,7 @@ This project and everyone participating in it is governed by our [Code of Conduc
 
 ### Reporting Bugs
 
-1. Check existing [issues](https://github.com/kazyamaz200/agentos/issues) to avoid duplicates.
+1. Check existing [issues](https://github.com/hakobune8/arun/issues) to avoid duplicates.
 2. Open a new issue with a clear title and description.
 3. Include steps to reproduce, expected behavior, and actual behavior.
 4. Include Go version, OS, and any relevant configuration.
@@ -37,11 +37,11 @@ This project and everyone participating in it is governed by our [Code of Conduc
 # Prerequisites: Go 1.22+, LiteLLM (optional), Docker (optional for sandbox)
 
 # Clone the repo
-git clone https://github.com/kazyamaz200/agentos.git
-cd agentos
+git clone https://github.com/hakobune8/arun.git
+cd arun
 
 # Build
-go build ./cmd/agentos
+go build ./cmd/arun
 
 # Run tests
 go test ./...
@@ -61,7 +61,7 @@ go vet ./...
 
 ## Project Structure
 
-- `cmd/agentos/` — CLI entry point
+- `cmd/arun/` — CLI entry point
 - `internal/` — All internal packages
 - `profiles/` — Agent profile and template definitions
 - `examples/` — Example task files and sample repos

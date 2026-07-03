@@ -2,9 +2,9 @@
 .gitignore
 .gitattributes
 .gitkeep
-.agentos/
-agentos
-agentos.exe
+.arun/
+arun
+arun.exe
 *.test
 *.out
 coverage.out

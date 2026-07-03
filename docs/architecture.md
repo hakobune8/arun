@@ -2,7 +2,7 @@
 
 ## Overview
 
-AgentOS is a Go runtime for autonomous coding agents. It provides a stable
+ARUN is a Go runtime for autonomous coding agents. It provides a stable
 agent interface, lifecycle orchestration, tool execution, memory, eventing,
 GitHub integration, and a Kubernetes-ready Web UI.
 
@@ -30,7 +30,7 @@ LiteLLM / GitHub / Qdrant / MCP
 
 ## Entry Points
 
-- `cmd/agentos/main.go` starts the CLI.
+- `cmd/arun/main.go` starts the CLI.
 - `internal/cli/` defines commands for run, review, issue, PR, checks, CI fix,
   search, memory, MCP, serve, agents, orchestration, guidelines, completion,
   and version output.
@@ -62,11 +62,11 @@ Key packages:
 
 ## Agent Registry And Factory
 
-AgentOS v1.0 supports two ways to create agents:
+ARUN v1.0 supports two ways to create agents:
 
 - Built-in registry entries: `go-backend`, `reviewer`, `ci-fixer`, `docs`,
   `security`, `release-manager`, `dependency-updater`, and `qa`.
-- Versioned definitions using `apiVersion: agentos.io/v1`.
+- Versioned definitions using `apiVersion: arun.io/v1`.
 
 `internal/factory/` converts definition YAML into runnable agents by wiring the
 LLM client, tool registry, command policy, and sandbox. This keeps external
@@ -92,7 +92,7 @@ files. Shell execution applies profile-defined deny commands before running.
 ## State, Events, And Memory
 
 - `internal/state/` persists run state, tool logs, LLM logs, diffs, summaries,
-  and PR body drafts under `AGENTOS_HOME`.
+  and PR body drafts under `ARUN_HOME`.
 - `internal/event/` provides a typed event bus and JSONL file store for
   observability and replay.
 - `internal/memory/` and `internal/vector/` provide local JSON and Qdrant-backed
@@ -105,7 +105,7 @@ files. Shell execution applies profile-defined deny commands before running.
 against one task. The planner decomposes the task into subtasks, assigns each
 subtask to a named agent, and executes them sequentially or in parallel.
 
-The Web UI stores orchestration records under `AGENTOS_HOME/orchestrates` and
+The Web UI stores orchestration records under `ARUN_HOME/orchestrates` and
 tracks per-subtask status so long-running runs can be observed before the whole
 orchestration completes.
 
@@ -115,12 +115,12 @@ orchestration completes.
 - `internal/github/` supports issues, pull requests, check runs, and CI-fixer
   workflows.
 - `internal/mcp/` connects JSON-RPC stdio MCP servers and adapts their tools
-  into the AgentOS tool system.
+  into the ARUN tool system.
 - `internal/embedding/` provides embedding requests for memory and search.
 
 ## Deployment
 
-The Helm chart in `charts/agentos/` deploys the Web UI server with persistent
+The Helm chart in `charts/arun/` deploys the Web UI server with persistent
 storage, optional ingress, optional network policy, GitHub OAuth settings, and
 administrator-defined LLM presets. Docker images are published to
-`ghcr.io/kazyamaz200/agentos`.
+`ghcr.io/hakobune8/arun`.

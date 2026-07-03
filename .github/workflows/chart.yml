@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - "charts/agentos/**"
+      - "charts/arun/**"
 
 permissions:
   contents: write
@@ -28,7 +28,7 @@ jobs:
         uses: helm/chart-releaser-action@v1
         with:
           charts_dir: charts
-          config: charts/agentos/cr.yaml
+          config: charts/arun/cr.yaml
           skip_existing: true
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"

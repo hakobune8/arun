@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,9 +29,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kazyamaz200/agentos/internal/agent"
-	"github.com/kazyamaz200/agentos/internal/apphome"
-	"github.com/kazyamaz200/agentos/internal/safety"
+	"github.com/hakobune8/arun/internal/agent"
+	"github.com/hakobune8/arun/internal/apphome"
+	"github.com/hakobune8/arun/internal/safety"
 )
 
 var scheduleIDPattern = regexp.MustCompile(`^schedule-[0-9a-f]{16}$`)
@@ -459,7 +459,7 @@ func builtInScheduledWorkflowTemplates(registry *agent.Registry) []scheduledWork
 			ConcurrencyPolicy: schedulePolicyForbid,
 			GitHub: orchestrateGitHubRequest{
 				CreateIssue:   true,
-				IssueTitle:    "Daily AgentOS failed-run report",
+				IssueTitle:    "Daily ARUN failed-run report",
 				IssueTemplate: "default",
 			},
 			ExpectedOutputs: []string{

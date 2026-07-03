@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,10 +19,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kazyamaz200/agentos/internal/embedding"
-	"github.com/kazyamaz200/agentos/internal/guideline"
-	"github.com/kazyamaz200/agentos/internal/memory"
-	"github.com/kazyamaz200/agentos/internal/vector"
+	"github.com/hakobune8/arun/internal/embedding"
+	"github.com/hakobune8/arun/internal/guideline"
+	"github.com/hakobune8/arun/internal/memory"
+	"github.com/hakobune8/arun/internal/vector"
 )
 
 // Type represents a search source type.

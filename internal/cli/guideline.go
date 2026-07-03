@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package cli implements the command-line interface commands for AgentOS.
+// Package cli implements the command-line interface commands for ARUN.
 package cli
 
 import (
@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/kazyamaz200/agentos/internal/embedding"
-	"github.com/kazyamaz200/agentos/internal/guideline"
+	"github.com/hakobune8/arun/internal/embedding"
+	"github.com/hakobune8/arun/internal/guideline"
 	"github.com/spf13/cobra"
 )
 

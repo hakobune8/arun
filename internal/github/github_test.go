@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -423,12 +423,12 @@ func TestClient_BranchRefs(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatalf("decode create ref: %v", err)
 			}
-			if req.Ref != "refs/heads/agentos-eval/test" || req.SHA != "abc123" {
+			if req.Ref != "refs/heads/arun-eval/test" || req.SHA != "abc123" {
 				t.Fatalf("create ref request = %+v", req)
 			}
 			created = true
 			w.WriteHeader(http.StatusCreated)
-		case r.Method == http.MethodDelete && r.URL.Path == "/repos/owner/repo/git/refs/heads/agentos-eval/test":
+		case r.Method == http.MethodDelete && r.URL.Path == "/repos/owner/repo/git/refs/heads/arun-eval/test":
 			deleted = true
 			w.WriteHeader(http.StatusNoContent)
 		default:
@@ -445,10 +445,10 @@ func TestClient_BranchRefs(t *testing.T) {
 	if sha != "abc123" {
 		t.Fatalf("sha = %q, want abc123", sha)
 	}
-	if err := c.CreateBranch("agentos-eval/test", sha); err != nil {
+	if err := c.CreateBranch("arun-eval/test", sha); err != nil {
 		t.Fatalf("CreateBranch() error = %v", err)
 	}
-	if err := c.DeleteBranch("agentos-eval/test"); err != nil {
+	if err := c.DeleteBranch("arun-eval/test"); err != nil {
 		t.Fatalf("DeleteBranch() error = %v", err)
 	}
 	if !created || !deleted {
@@ -462,7 +462,7 @@ func TestClient_PutFile(t *testing.T) {
 		if r.Method != http.MethodPut {
 			t.Errorf("method = %s, want PUT", r.Method)
 		}
-		if r.URL.Path != "/repos/owner/repo/contents/.agentos-evals/live-github.md" {
+		if r.URL.Path != "/repos/owner/repo/contents/.arun-evals/live-github.md" {
 			t.Errorf("path = %s, want content path", r.URL.Path)
 		}
 		var req PutFileRequest
@@ -473,7 +473,7 @@ func TestClient_PutFile(t *testing.T) {
 		if err != nil {
 			t.Fatalf("decode content: %v", err)
 		}
-		if string(content) != "hello\n" || req.Branch != "agentos-eval/test" || req.Message == "" {
+		if string(content) != "hello\n" || req.Branch != "arun-eval/test" || req.Message == "" {
 			t.Fatalf("request = %+v content=%q", req, string(content))
 		}
 		w.WriteHeader(http.StatusCreated)
@@ -481,10 +481,10 @@ func TestClient_PutFile(t *testing.T) {
 	defer ts.Close()
 
 	c := &Client{BaseURL: ts.URL, Token: "test-token", RepoOwner: "owner", RepoName: "repo", http: ts.Client()}
-	if err := c.PutFile(".agentos-evals/live-github.md", PutFileRequest{
+	if err := c.PutFile(".arun-evals/live-github.md", PutFileRequest{
 		Message: "add eval file",
 		Content: "hello\n",
-		Branch:  "agentos-eval/test",
+		Branch:  "arun-eval/test",
 	}); err != nil {
 		t.Fatalf("PutFile() error = %v", err)
 	}
@@ -503,7 +503,7 @@ func TestClient_CreateIssue(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		if req.Title != "Track orchestration" || req.Body != "body" || len(req.Labels) != 1 || req.Labels[0] != "agentos" {
+		if req.Title != "Track orchestration" || req.Body != "body" || len(req.Labels) != 1 || req.Labels[0] != "arun" {
 			t.Fatalf("request = %+v", req)
 		}
 		w.WriteHeader(http.StatusCreated)
@@ -527,7 +527,7 @@ func TestClient_CreateIssue(t *testing.T) {
 	issue, err := c.CreateIssue(CreateIssueRequest{
 		Title:  "Track orchestration",
 		Body:   "body",
-		Labels: []string{"agentos"},
+		Labels: []string{"arun"},
 	})
 	if err != nil {
 		t.Fatalf("CreateIssue() error = %v", err)
@@ -592,7 +592,7 @@ func TestClient_CreateIssueComment(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		if req.Body != "AgentOS update" {
+		if req.Body != "ARUN update" {
 			t.Fatalf("request = %+v", req)
 		}
 		w.WriteHeader(http.StatusCreated)
@@ -611,7 +611,7 @@ func TestClient_CreateIssueComment(t *testing.T) {
 		RepoName:  "repo",
 		http:      ts.Client(),
 	}
-	comment, err := c.CreateIssueComment(7, CreateIssueCommentRequest{Body: "AgentOS update"})
+	comment, err := c.CreateIssueComment(7, CreateIssueCommentRequest{Body: "ARUN update"})
 	if err != nil {
 		t.Fatalf("CreateIssueComment() error = %v", err)
 	}

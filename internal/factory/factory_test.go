@@ -1,4 +1,4 @@
-// Copyright 2026 AgentOS Authors
+// Copyright 2026 ARUN Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ package factory
 import (
 	"testing"
 
-	"github.com/kazyamaz200/agentos/internal/agent"
+	"github.com/hakobune8/arun/internal/agent"
 )
 
 func TestAgentDef_Defaults(t *testing.T) {
@@ -104,8 +104,8 @@ func TestDefaultTemplate(t *testing.T) {
 		t.Fatal("DefaultTemplate returned nil")
 		return
 	}
-	if tmpl.Schema != "agentos/v1" {
-		t.Errorf("Schema = %q, want %q", tmpl.Schema, "agentos/v1")
+	if tmpl.Schema != "arun/v1" {
+		t.Errorf("Schema = %q, want %q", tmpl.Schema, "arun/v1")
 	}
 	if len(tmpl.Agents) != 2 {
 		t.Fatalf("got %d agents, want 2", len(tmpl.Agents))

@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	agentpkg "github.com/kazyamaz200/agentos/internal/agent"
-	"github.com/kazyamaz200/agentos/internal/llm"
-	"github.com/kazyamaz200/agentos/internal/runtime"
-	"github.com/kazyamaz200/agentos/internal/sandbox"
+	agentpkg "github.com/hakobune8/arun/internal/agent"
+	"github.com/hakobune8/arun/internal/llm"
+	"github.com/hakobune8/arun/internal/runtime"
+	"github.com/hakobune8/arun/internal/sandbox"
 )
 
 func TestNewOrchestrator(t *testing.T) {
@@ -78,7 +78,7 @@ func TestMergeResults_RedactsSecrets(t *testing.T) {
 		{
 			SubtaskID: "step-1",
 			Output:    "created token ghp_123456789012345678901234567890123456",
-			Error:     "Cookie: agentos_session=signed-session-value",
+			Error:     "Cookie: arun_session=signed-session-value",
 		},
 	})
 	for _, leaked := range []string{
@@ -429,7 +429,7 @@ func TestPlan_EnrichesGeneratedSubtasksWithParentRequirements(t *testing.T) {
 
 func TestExecuteWithObserver_EmitsSubtaskEvents(t *testing.T) {
 	repo := t.TempDir()
-	t.Setenv("AGENTOS_HOME", filepath.Join(t.TempDir(), "agentos-home"))
+	t.Setenv("ARUN_HOME", filepath.Join(t.TempDir(), "arun-home"))
 
 	o := NewOrchestrator(
 		llm.NewMockLLMClient(nil),
@@ -468,7 +468,7 @@ func TestExecuteWithObserver_EmitsSubtaskEvents(t *testing.T) {
 
 func TestExecuteParallel_RespectsDependencies(t *testing.T) {
 	repo := t.TempDir()
-	t.Setenv("AGENTOS_HOME", filepath.Join(t.TempDir(), "agentos-home"))
+	t.Setenv("ARUN_HOME", filepath.Join(t.TempDir(), "arun-home"))
 
 	agent := &recordingAgent{delay: 10 * time.Millisecond}
 	o := NewOrchestrator(
@@ -512,7 +512,7 @@ func TestExecuteParallel_RespectsDependencies(t *testing.T) {
 
 func TestExecuteParallel_SkipsSubtaskWhenDependencyFails(t *testing.T) {
 	repo := t.TempDir()
-	t.Setenv("AGENTOS_HOME", filepath.Join(t.TempDir(), "agentos-home"))
+	t.Setenv("ARUN_HOME", filepath.Join(t.TempDir(), "arun-home"))
 
 	agent := &recordingAgent{failTasks: map[string]bool{"step-1": true}}
 	o := NewOrchestrator(
@@ -558,7 +558,7 @@ func TestExecuteParallel_SkipsSubtaskWhenDependencyFails(t *testing.T) {
 
 func TestExecuteSequential_SkipsSubtaskWhenDependencyFails(t *testing.T) {
 	repo := t.TempDir()
-	t.Setenv("AGENTOS_HOME", filepath.Join(t.TempDir(), "agentos-home"))
+	t.Setenv("ARUN_HOME", filepath.Join(t.TempDir(), "arun-home"))
 
 	agent := &recordingAgent{failTasks: map[string]bool{"step-1": true}}
 	o := NewOrchestrator(
@@ -595,7 +595,7 @@ func TestExecuteSequential_SkipsSubtaskWhenDependencyFails(t *testing.T) {
 
 func TestExecuteSubtask_UsesDefaultProfileAndRepo(t *testing.T) {
 	repo := t.TempDir()
-	t.Setenv("AGENTOS_HOME", filepath.Join(t.TempDir(), "agentos-home"))
+	t.Setenv("ARUN_HOME", filepath.Join(t.TempDir(), "arun-home"))
 
 	agent := &recordingAgent{}
 	o := NewOrchestrator(
@@ -630,7 +630,7 @@ func TestExecuteSubtask_UsesDefaultProfileAndRepo(t *testing.T) {
 
 func TestExecuteSubtask_ScopesRuntimeTaskIDWithRunID(t *testing.T) {
 	repo := t.TempDir()
-	t.Setenv("AGENTOS_HOME", filepath.Join(t.TempDir(), "agentos-home"))
+	t.Setenv("ARUN_HOME", filepath.Join(t.TempDir(), "arun-home"))
 
 	agent := &recordingAgent{}
 	o := NewOrchestrator(
@@ -656,7 +656,7 @@ func TestExecuteSubtask_ScopesRuntimeTaskIDWithRunID(t *testing.T) {
 
 func TestExecuteSubtask_FailsMissingRequiredFile(t *testing.T) {
 	repo := t.TempDir()
-	t.Setenv("AGENTOS_HOME", filepath.Join(t.TempDir(), "agentos-home"))
+	t.Setenv("ARUN_HOME", filepath.Join(t.TempDir(), "arun-home"))
 
 	o := NewOrchestrator(
 		llm.NewMockLLMClient(nil),
@@ -684,7 +684,7 @@ func TestExecuteSubtask_FailsMissingRequiredFile(t *testing.T) {
 
 func TestExecuteSubtask_FrontendFailsNoOp(t *testing.T) {
 	repo := t.TempDir()
-	t.Setenv("AGENTOS_HOME", filepath.Join(t.TempDir(), "agentos-home"))
+	t.Setenv("ARUN_HOME", filepath.Join(t.TempDir(), "arun-home"))
 	if err := os.WriteFile(filepath.Join(repo, "package.json"), []byte(`{"scripts":{}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -714,7 +714,7 @@ func TestExecuteSubtask_FrontendFailsNoOp(t *testing.T) {
 
 func TestExecuteSubtask_FrontendRecoversEmptyRepositoryNoOp(t *testing.T) {
 	repo := t.TempDir()
-	t.Setenv("AGENTOS_HOME", filepath.Join(t.TempDir(), "agentos-home"))
+	t.Setenv("ARUN_HOME", filepath.Join(t.TempDir(), "arun-home"))
 	if err := runCmd(context.Background(), repo, "git", "init"); err != nil {
 		t.Fatalf("git init: %v", err)
 	}
@@ -728,7 +728,7 @@ func TestExecuteSubtask_FrontendRecoversEmptyRepositoryNoOp(t *testing.T) {
 
 	subtask := &Subtask{
 		ID:          "step-1",
-		Description: "Run an implementation-heavy agile scrum workflow for kazyamaz200/invaders on main.",
+		Description: "Run an implementation-heavy agile scrum workflow for hakobune8/invaders on main.",
 		AgentName:   "frontend",
 	}
 	applyDefaultQualityGate(subtask)
@@ -827,7 +827,7 @@ func TestRecoverGoBackendResetsBrokenGeneratedGoInEmptyRepo(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(repo, "cmd", "server"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(repo, "go.mod"), []byte("module agentos-local-repo\n\ngo 1.22\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, "go.mod"), []byte("module arun-local-repo\n\ngo 1.22\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	broken := `package main
@@ -1036,7 +1036,7 @@ func TestRecoverGoBackend_CreatesValidService(t *testing.T) {
 	t.Parallel()
 
 	repo := t.TempDir()
-	out, err := recoverGoBackend(context.Background(), repo, "https://github.com/kazyamaz200/agentos-test.git create /healthz with net/http")
+	out, err := recoverGoBackend(context.Background(), repo, "https://github.com/hakobune8/arun-test.git create /healthz with net/http")
 	if err != nil {
 		t.Fatalf("recoverGoBackend() error = %v", err)
 	}
@@ -1112,7 +1112,7 @@ func TestRecoverGoCI_CreatesWorkflowAndTests(t *testing.T) {
 
 func TestRecoverNoOpDocs_CreatesRequiredREADME(t *testing.T) {
 	repo := t.TempDir()
-	t.Setenv("AGENTOS_HOME", filepath.Join(t.TempDir(), "agentos-home"))
+	t.Setenv("ARUN_HOME", filepath.Join(t.TempDir(), "arun-home"))
 	runSandbox := sandbox.NewLocalSandbox(repo)
 	if err := runSandbox.PrepareRun("run-step-2"); err != nil {
 		t.Fatalf("PrepareRun() error = %v", err)
@@ -1172,7 +1172,7 @@ func TestRecoverBuiltInSubtask_StaticFrontendQAAndRelease(t *testing.T) {
 	t.Parallel()
 
 	repo := t.TempDir()
-	if _, err := recoverFrontendStaticApp(repo, "Run an implementation-heavy agile scrum workflow for kazyamaz200/invaders on main."); err != nil {
+	if _, err := recoverFrontendStaticApp(repo, "Run an implementation-heavy agile scrum workflow for hakobune8/invaders on main."); err != nil {
 		t.Fatalf("recoverFrontendStaticApp() error = %v", err)
 	}
 	runSandbox := sandbox.NewLocalSandbox(repo)
@@ -1281,7 +1281,7 @@ func TestRecoverBuiltInSubtask_UsesFreshContextAfterTimeout(t *testing.T) {
 	result, ok := o.recoverBuiltInSubtask(canceledCtx, &Subtask{
 		ID:          "step-1",
 		AgentName:   "go-backend",
-		Description: "Create /healthz with net/http in https://github.com/kazyamaz200/agentos-test.git",
+		Description: "Create /healthz with net/http in https://github.com/hakobune8/arun-test.git",
 	}, runSandbox, context.DeadlineExceeded)
 	if !ok || !result.Success {
 		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success despite canceled subtask context", result, ok)
@@ -1294,8 +1294,8 @@ func TestRecoverBuiltInSubtask_UsesFreshContextAfterTimeout(t *testing.T) {
 func TestInferModulePath_ExtractsGitHubURLWithoutRegex(t *testing.T) {
 	t.Parallel()
 
-	got := inferModulePath("target repo is https://github.com/kazyamaz200/agentos-test.git and should expose /healthz", t.TempDir())
-	if got != "github.com/kazyamaz200/agentos-test" {
+	got := inferModulePath("target repo is https://github.com/hakobune8/arun-test.git and should expose /healthz", t.TempDir())
+	if got != "github.com/hakobune8/arun-test" {
 		t.Fatalf("inferModulePath() = %q", got)
 	}
 }

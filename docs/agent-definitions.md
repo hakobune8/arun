@@ -1,17 +1,17 @@
 # Agent Definitions
 
-AgentOS supports a versioned, declarative YAML format for defining agents.
+ARUN supports a versioned, declarative YAML format for defining agents.
 The runtime can instantiate agents directly from definition files — no Go
 code required.
 
 Target repositories can also provide custom orchestration agents under
-`.agentos/agents/*.yaml`. See [Repository Agents](repository-agents.md) for
+`.arun/agents/*.yaml`. See [Repository Agents](repository-agents.md) for
 Web UI loading, validation rules, and examples.
 
 ## Schema
 
 ```yaml
-apiVersion: agentos.io/v1
+apiVersion: arun.io/v1
 kind: Agent
 metadata:
   name: my-agent
@@ -52,7 +52,7 @@ spec:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `apiVersion` | Yes | Must be `"agentos.io/v1"` |
+| `apiVersion` | Yes | Must be `"arun.io/v1"` |
 | `kind` | Yes | Must be `"Agent"` |
 | `metadata.name` | Yes | Agent name |
 | `spec.llm.model` | Yes | LLM model name |

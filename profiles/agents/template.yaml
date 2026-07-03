@@ -1,4 +1,4 @@
-schema: "agentos/v1"
+schema: "arun/v1"
 agents:
   - name: "coder"
     profile: ""

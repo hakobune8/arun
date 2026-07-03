@@ -1,6 +1,6 @@
 # Upgrade To v1.1
 
-This guide summarizes the operational changes introduced in AgentOS v1.1 for
+This guide summarizes the operational changes introduced in ARUN v1.1 for
 GitHub automation, orchestration visibility, and approval-controlled issue
 closure.
 
@@ -9,7 +9,7 @@ closure.
 v1.1 makes GitHub issue and pull request workflows first-class orchestration
 outputs. Orchestration records can now include the source issue, generated
 branch, pull request URL, close policy, approval status, and whether the source
-issue was closed by AgentOS.
+issue was closed by ARUN.
 
 For repository write operations, configure a GitHub token with the required
 repository permissions. GitHub App installation tokens are supported for
@@ -21,22 +21,22 @@ Issue-triggered runs can be started from imported GitHub issues and controlled
 with labels or slash-style command parameters. Common controls include:
 
 ```text
-agentos:run
-agentos:create-pr
-agentos:close-never
-agentos:close-on-quality-gate-pass
-agentos:close-on-pr-merge
-agentos:approval-required
+arun:run
+arun:create-pr
+arun:close-never
+arun:close-on-quality-gate-pass
+arun:close-on-pr-merge
+arun:approval-required
 ```
 
 Slash-style parameters are also supported in issue comments or imported issue
 text:
 
 ```text
-/agentos run agents=go-backend,reviewer strategy=parallel create_pr=true close_policy=after_human_approval approval=true
+/arun run agents=go-backend,reviewer strategy=parallel create_pr=true close_policy=after_human_approval approval=true
 ```
 
-GitHub-to-AgentOS webhook delivery is not required for v1.1 because many
+GitHub-to-ARUN webhook delivery is not required for v1.1 because many
 deployments are not reachable from GitHub. Webhook-based automatic PR merge
 detection is deferred; the `on_pr_merge` policy is recorded for conservative
 manual follow-up.
@@ -50,7 +50,7 @@ publishing or closing source issues.
 
 ## Human Approval Gates
 
-For higher-risk tasks, AgentOS can leave a completed run in `pending_approval`
+For higher-risk tasks, ARUN can leave a completed run in `pending_approval`
 instead of closing the source issue immediately. Authorized users can approve
 or reject the run from the Web UI or through:
 
@@ -82,12 +82,12 @@ enabled so existing run and orchestration records survive pod restarts:
 
 ```bash
 helm repo update
-helm upgrade --install agentos agentos/agentos \
-  --namespace agentos \
+helm upgrade --install arun arun/arun \
+  --namespace arun \
   --set image.tag=v1.1 \
   --set env.LITELLM_BASE_URL=http://litellm:4000
 ```
 
 If GitHub OAuth is required for work-triggering APIs, keep
-`auth.required=true` and configure `AGENTOS_ADMIN_USERS` for approval and other
+`auth.required=true` and configure `ARUN_ADMIN_USERS` for approval and other
 administrative actions.

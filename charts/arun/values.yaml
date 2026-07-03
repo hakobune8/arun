@@ -1,4 +1,4 @@
-# Default values for agentos Helm chart.
+# Default values for arun Helm chart.
 # This is a YAML-formatted file.
 
 # Number of replicas
@@ -6,8 +6,8 @@ replicaCount: 1
 
 # Container image
 image:
-  repository: ghcr.io/kazyamaz200/agentos
-  tag: "v1.4.1"
+  repository: ghcr.io/hakobune8/arun
+  tag: "v1.5.0"
   pullPolicy: IfNotPresent
 
 podSecurityContext:
@@ -34,7 +34,7 @@ ingress:
   className: ""
   annotations: {}
   hosts:
-    - host: agentos.local
+    - host: arun.local
       paths:
         - path: /
           pathType: Prefix
@@ -62,22 +62,22 @@ env:
   LITELLM_BASE_URL: "http://litellm:4000"
   # Prefer secrets.existingSecret or secrets.litellmApiKey for production.
   LITELLM_API_KEY: ""
-  AGENTOS_MODEL_CODER: "coder"
+  ARUN_MODEL_CODER: "coder"
   # Qdrant vector database (optional — falls back to local)
   QDRANT_URL: ""
   QDRANT_API_KEY: ""
   # Server port
-  AGENTOS_PORT: "8080"
+  ARUN_PORT: "8080"
   # State directory for run artifacts and local vector indexes
-  AGENTOS_HOME: "/home/agentos/.agentos"
-  # Public AgentOS URL used in GitHub comments (optional)
-  AGENTOS_PUBLIC_URL: ""
+  ARUN_HOME: "/home/arun/.arun"
+  # Public ARUN URL used in GitHub comments (optional)
+  ARUN_PUBLIC_URL: ""
   # Comma-separated GitHub logins allowed to run sensitive automation when set
-  AGENTOS_ADMIN_USERS: ""
+  ARUN_ADMIN_USERS: ""
   # Maximum runtime for a single orchestration subtask
-  AGENTOS_ORCHESTRATE_SUBTASK_TIMEOUT: "10m"
+  ARUN_ORCHESTRATE_SUBTASK_TIMEOUT: "10m"
   # Maximum runtime for orchestration planning
-  AGENTOS_ORCHESTRATE_PLAN_TIMEOUT: "90s"
+  ARUN_ORCHESTRATE_PLAN_TIMEOUT: "90s"
   # GitHub token (optional, for PR operations)
   GITHUB_TOKEN: ""
   # GitHub App installation authentication (optional, preferred for write operations)
@@ -115,7 +115,7 @@ secrets:
   githubToken: ""
   githubAppPrivateKey: ""
   githubOAuthClientSecret: ""
-  agentosSessionSecret: ""
+  arunSessionSecret: ""
 
 networkPolicy:
   enabled: false
