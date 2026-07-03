@@ -13,7 +13,7 @@
 
 *Write Agents by defining them, not by implementing them.*
 
-ARUN, formerly ARUN, is not another coding agent — it is the operating system layer for autonomous coding agents. It provides a runtime, lifecycle, execution model, tool system, memory abstraction, and safety model. It uses [LiteLLM](https://github.com/BerriAI/litellm) as the LLM gateway, providing a unified interface to various LLM backends.
+ARUN is not another coding agent — it is the operating system layer for autonomous coding agents. It provides a runtime, lifecycle, execution model, tool system, memory abstraction, and safety model. It uses [LiteLLM](https://github.com/BerriAI/litellm) as the LLM gateway, providing a unified interface to various LLM backends.
 
 Designed for Kubernetes deployment. Manage runs, review diffs, and
 search across agents through the [Web UI](docs/api.md).
@@ -258,6 +258,8 @@ release that changes `charts/arun/**`, update both `version` and
 `appVersion` in `charts/arun/Chart.yaml` intentionally so chart-releaser can
 publish a new immutable chart release.
 
+- [v1.5.1 release notes](docs/release-v1.5.1.md) — Japanese Web UI task
+  template and agent description localization
 - [v1.5.0 release notes](docs/release-v1.5.0.md) — repository transfer to
   `hakobune8/arun`, Japanese Web UI language support, and staged rename
   compatibility

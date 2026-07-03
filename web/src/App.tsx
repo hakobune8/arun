@@ -632,8 +632,13 @@ function App() {
 
   useEffect(() => {
     if (!canUseApp) return
-    void Promise.all([loadAgents(), loadRepositories(), loadLLM(), loadRecords(), loadSchedules(), loadScheduleTemplates(), loadNotifications(), loadStorage()])
+    void Promise.all([loadRepositories(), loadLLM(), loadRecords(), loadSchedules(), loadScheduleTemplates(), loadNotifications(), loadStorage()])
   }, [canUseApp])
+
+  useEffect(() => {
+    if (!canUseApp) return
+    void api<AgentInfo[]>(`/api/agents?uiLanguage=${encodeURIComponent(language)}`).then(setAgents)
+  }, [canUseApp, language])
 
   useEffect(() => {
     if (!canUseApp || page !== 'orchestrates' || orchPanel !== 'new') return
@@ -655,7 +660,7 @@ function App() {
   }, [selectedID])
 
   async function loadAgents() {
-    const data = await api<AgentInfo[]>('/api/agents')
+    const data = await api<AgentInfo[]>(`/api/agents?uiLanguage=${encodeURIComponent(language)}`)
     setAgents(data)
   }
 
@@ -785,7 +790,7 @@ function App() {
             </div>
             <div className="hidden min-w-0 text-left sm:block">
               <div className="text-sm font-semibold tracking-wide text-ink">ARUN</div>
-              <div className="text-[11px] text-soft">v1.5.0 workspace</div>
+              <div className="text-[11px] text-soft">v1.5.1 workspace</div>
             </div>
           </button>
           <nav className="hidden gap-1 md:flex">

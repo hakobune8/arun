@@ -187,6 +187,31 @@ func TestServer_AgentsEndpoint_GoBackendExists(t *testing.T) {
 	}
 }
 
+func TestServer_AgentsEndpoint_LocalizesBuiltInsForJapaneseUI(t *testing.T) {
+	t.Parallel()
+	s := NewServer(0)
+	w := serveRequest(s, "GET", "/api/agents?uiLanguage=ja", nil)
+	assertStatus(t, w.Code, http.StatusOK)
+	var agents []map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &agents); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	found := false
+	for _, a := range agents {
+		if a["Name"] == "go-backend" {
+			found = true
+			description, _ := a["Description"].(string)
+			if !strings.Contains(description, "既存構成") || !strings.Contains(description, "テスト") {
+				t.Fatalf("localized go-backend description = %q", description)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatal("go-backend agent not found in list")
+	}
+}
+
 // --- Search ---
 
 func TestServer_SearchEndpoint_NoQuery(t *testing.T) {
@@ -1294,8 +1319,11 @@ func TestServer_OrchestrateTemplates_LocalizesBuiltInsForJapaneseUI(t *testing.T
 	if !strings.Contains(heavy.Description, "sandbox リポジトリ") {
 		t.Fatalf("localized heavy description = %q", heavy.Description)
 	}
-	if !strings.Contains(heavy.TaskTemplate, "Output language: Japanese.") {
+	if !strings.Contains(heavy.TaskTemplate, "{{repo}} の {{baseBranch}} 上で") || !strings.Contains(heavy.TaskTemplate, "出力言語: 日本語。") {
 		t.Fatalf("localized heavy task missing language instruction: %q", heavy.TaskTemplate)
+	}
+	if strings.Contains(heavy.TaskTemplate, "Run an implementation-heavy agile scrum workflow") {
+		t.Fatalf("localized heavy task should not keep English leading sentence: %q", heavy.TaskTemplate)
 	}
 }
 
