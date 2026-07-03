@@ -207,6 +207,7 @@ pr_body.md        # Pull request body draft
 
 - [Quick Start](docs/quickstart.md) — Get up and running in 5 minutes
 - [Deployment](docs/deployment.md) — Kubernetes deployment via Helm
+- [Product Rename and Repository Transfer Plan](docs/product-rename-migration-plan.md) — v1.5.0 transfer scope, rename risks, compatibility, and staged migration
 - [Pre-merge Verification](docs/pre-merge-verification.md) — PR image checks with registry and BuildKit
 - [Architecture](docs/architecture.md) — System architecture overview
 - [Configuration](docs/configuration.md) — LiteLLM, Qdrant, Docker, MCP, templates
@@ -265,6 +266,8 @@ publish a new immutable chart release.
 ## Roadmap
 
 ### v1.5+ — Scale, Integrations, and Productization
+- [ ] Release v1.5.0 from the transferred repository while preserving v1.4.x-compatible package, image, chart, CLI, and runtime identifiers
+- [ ] Decide whether the product rename proceeds after the repository transfer, using the staged migration plan in [#271](docs/product-rename-migration-plan.md)
 - [ ] Broaden operational evaluation matrices across repositories, clusters, and model presets
 - [ ] Promote proven LiteLLM presets and scenario suites into release gates
 - [ ] Continue hardening release automation, deployment safety, and rollback evidence capture
