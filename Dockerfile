@@ -27,6 +27,8 @@ RUN apk add --no-cache ca-certificates tzdata bash git curl docker-cli && \
     tar -xzf /tmp/helm.tar.gz -C /tmp && \
     mv "/tmp/linux-${helm_arch}/helm" /usr/local/bin/helm && \
     chmod +x /usr/local/bin/helm && \
+    ln -sf /usr/local/go/bin/go /usr/local/bin/go && \
+    ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt && \
     rm -rf /tmp/helm.tar.gz "/tmp/linux-${helm_arch}"
 RUN addgroup -S agentos && adduser -S agentos -G agentos
 RUN mkdir -p /workspace /home/agentos/.agentos && chown -R agentos:agentos /workspace /home/agentos
