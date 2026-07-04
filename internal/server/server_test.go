@@ -1175,6 +1175,62 @@ func TestServer_Orchestrates_EmptyList(t *testing.T) {
 	}
 }
 
+func TestServer_Orchestrates_ReturnsLightweightSummaries(t *testing.T) {
+	t.Setenv("ARUN_HOME", shortTestDir(t))
+	now := time.Now().UTC().Truncate(time.Second)
+	record := &orchestrationRecord{
+		ID:         "run-0123456789abcdef",
+		Repo:       "owner/repo",
+		BaseBranch: "main",
+		Task:       "large task",
+		Agents:     []string{"go-backend"},
+		Status:     "running",
+		Plan: &orchestrator.TaskPlan{Subtasks: []orchestrator.Subtask{{
+			ID:          "step-1",
+			Description: strings.Repeat("plan payload", 100),
+		}}},
+		Subtasks: []orchestrationSubtaskState{{
+			ID:     "step-1",
+			Status: "running",
+		}},
+		Results: []orchestrator.SubtaskResult{{
+			SubtaskID: "step-1",
+			Output:    strings.Repeat("result payload", 100),
+		}},
+		Events: []orchestrationEvent{{
+			Timestamp: now,
+			Type:      "subtask.completed",
+			Message:   strings.Repeat("event payload", 100),
+		}},
+		Summary:   strings.Repeat("summary payload", 100),
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := saveOrchestrationRecord(record); err != nil {
+		t.Fatalf("saveOrchestrationRecord() error = %v", err)
+	}
+
+	s := NewServer(0)
+	w := serveRequest(s, "GET", "/api/orchestrates", nil)
+	assertStatus(t, w.Code, http.StatusOK)
+	var records []map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &records); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("records = %d, want 1", len(records))
+	}
+	got := records[0]
+	for _, key := range []string{"plan", "subtasks", "results", "events", "summary"} {
+		if _, ok := got[key]; ok {
+			t.Fatalf("list response includes heavyweight key %q: %s", key, w.Body.String())
+		}
+	}
+	if got["id"] != record.ID || got["status"] != record.Status || got["task"] != record.Task {
+		t.Fatalf("summary = %+v, want id/status/task", got)
+	}
+}
+
 func TestOrchestrationRecordStore_RoundTrip(t *testing.T) {
 	t.Setenv("ARUN_HOME", shortTestDir(t))
 	now := time.Now().UTC().Truncate(time.Second)
@@ -1439,6 +1495,36 @@ func TestCommitScrumSprintCheckpoint_CreatesThreeCheckpointCommits(t *testing.T)
 	}
 	if len(record.Events) != 3 {
 		t.Fatalf("events = %d, want 3", len(record.Events))
+	}
+}
+
+func TestShouldPublishScrumSprintCheckpoint_OnlyAfterSuccessfulCompletion(t *testing.T) {
+	record := &orchestrationRecord{
+		ID:       "run-test",
+		Scenario: &scenarioTemplateSelection{ID: "implementation-heavy-scrum"},
+	}
+	started := &orchestrator.SubtaskEvent{
+		Type:    orchestrator.SubtaskStarted,
+		Subtask: orchestrator.Subtask{ID: "sprint-1-report"},
+	}
+	if sprint, ok := shouldPublishScrumSprintCheckpoint(record, started); ok || sprint != 0 {
+		t.Fatalf("started checkpoint publish = %d/%v, want 0/false", sprint, ok)
+	}
+	failed := &orchestrator.SubtaskEvent{
+		Type:    orchestrator.SubtaskCompleted,
+		Subtask: orchestrator.Subtask{ID: "sprint-1-report"},
+		Result:  &orchestrator.SubtaskResult{Success: false},
+	}
+	if sprint, ok := shouldPublishScrumSprintCheckpoint(record, failed); ok || sprint != 0 {
+		t.Fatalf("failed checkpoint publish = %d/%v, want 0/false", sprint, ok)
+	}
+	completed := &orchestrator.SubtaskEvent{
+		Type:    orchestrator.SubtaskCompleted,
+		Subtask: orchestrator.Subtask{ID: "sprint-2-report"},
+		Result:  &orchestrator.SubtaskResult{Success: true},
+	}
+	if sprint, ok := shouldPublishScrumSprintCheckpoint(record, completed); !ok || sprint != 2 {
+		t.Fatalf("completed checkpoint publish = %d/%v, want 2/true", sprint, ok)
 	}
 }
 
