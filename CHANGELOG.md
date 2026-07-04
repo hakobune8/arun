@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [v1.5.16] - 2026-07-04
+
+### Fixed
+- Refreshed remote tracking refs before publishing run branches with
+  `--force-with-lease` and updated the tracking ref after successful pushes.
+  This prevents later implementation-heavy scrum Sprint 2 and Sprint 3
+  checkpoint publishes from being rejected as stale after the Sprint 1 PR branch
+  is created.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.16.
+
 ## [v1.5.15] - 2026-07-04
 
 ### Fixed
