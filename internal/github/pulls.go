@@ -27,6 +27,8 @@ type CreatePRRequest struct {
 
 // UpdatePRRequest contains the parameters for updating a pull request.
 type UpdatePRRequest struct {
+	Title string `json:"title,omitempty"`
+	Body  string `json:"body,omitempty"`
 	State string `json:"state,omitempty"`
 }
 
@@ -53,6 +55,23 @@ func (c *Client) CreatePR(req CreatePRRequest) (*PullRequest, error) {
 		State:   resp.State,
 		Head:    req.Head,
 		Base:    req.Base,
+	}, nil
+}
+
+// UpdatePR updates an existing pull request on GitHub.
+func (c *Client) UpdatePR(number int, req UpdatePRRequest) (*PullRequest, error) {
+	path := fmt.Sprintf("/%s/pulls/%d", c.RepoPath(), number)
+
+	var resp createPRResponse
+	if err := c.doJSON("PATCH", path, req, &resp); err != nil {
+		return nil, fmt.Errorf("update PR: %w", err)
+	}
+
+	return &PullRequest{
+		Number:  resp.Number,
+		Title:   resp.Title,
+		HTMLURL: resp.HTMLURL,
+		State:   resp.State,
 	}, nil
 }
 

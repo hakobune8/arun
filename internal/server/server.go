@@ -1351,6 +1351,11 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 		if err := commitScrumSprintCheckpoint(record, &event); err != nil {
 			appendOrchestrationEvent(record, "sprint.commit_failed", event.Subtask.ID, err.Error())
 			slog.Warn("commit scrum sprint checkpoint failed", "id", record.ID, "subtask", event.Subtask.ID, "error", err)
+		} else if sprint, ok := scrumSprintCheckpoint(event.Subtask.ID); ok {
+			if err := s.publishScrumSprintCheckpoint(record, sprint); err != nil {
+				appendOrchestrationEvent(record, "sprint.publish_failed", event.Subtask.ID, err.Error())
+				slog.Warn("publish scrum sprint checkpoint failed", "id", record.ID, "subtask", event.Subtask.ID, "error", err)
+			}
 		}
 		record.UpdatedAt = time.Now().UTC()
 		updateGovernanceUsage(record)
@@ -2546,25 +2551,48 @@ func (s *Server) createTrackingIssue(record *orchestrationRecord) {
 }
 
 func (s *Server) createPullRequestForOrchestration(record *orchestrationRecord) {
-	if record == nil || record.GitHub == nil || !record.GitHub.CreatePullRequest || record.GitHub.PullRequestURL != "" {
+	if record == nil || record.GitHub == nil || !record.GitHub.CreatePullRequest {
 		return
 	}
 	owner, name, _, ok := githubRepoForAPI(record.GitHub.Repo)
 	if !ok {
 		record.GitHub.Error = "create pull request: invalid GitHub repository"
-		record.UpdatedAt = time.Now().UTC()
-		_ = saveOrchestrationRecord(record)
-		s.auditGitHubArtifact(record, "github.pull_request.create", auditOutcomeFailure, record.GitHub.Error)
-		return
-	}
-	if err := publishOrchestrationBranch(record); err != nil {
-		record.GitHub.Error = "create pull request: " + err.Error()
+		record.Status = "completed_with_publish_error"
 		record.UpdatedAt = time.Now().UTC()
 		_ = saveOrchestrationRecord(record)
 		s.auditGitHubArtifact(record, "github.pull_request.create", auditOutcomeFailure, record.GitHub.Error)
 		return
 	}
 	client := githubClientForRecord(record, owner, name)
+	if err := publishOrchestrationBranch(record); err != nil {
+		record.GitHub.Error = "create pull request: " + err.Error()
+		record.Status = "completed_with_publish_error"
+		record.UpdatedAt = time.Now().UTC()
+		_ = saveOrchestrationRecord(record)
+		s.auditGitHubArtifact(record, "github.pull_request.create", auditOutcomeFailure, record.GitHub.Error)
+		return
+	}
+	if record.GitHub.PullRequestURL != "" && record.GitHub.PullRequestNumber > 0 {
+		pr, err := client.UpdatePR(record.GitHub.PullRequestNumber, arungh.UpdatePRRequest{
+			Title: record.GitHub.PRTitle,
+			Body:  orchestrationPRBody(record),
+		})
+		if err != nil {
+			record.GitHub.Error = "update pull request: " + err.Error()
+			record.Status = "completed_with_publish_error"
+			record.UpdatedAt = time.Now().UTC()
+			_ = saveOrchestrationRecord(record)
+			s.auditGitHubArtifact(record, "github.pull_request.update", auditOutcomeFailure, record.GitHub.Error)
+			return
+		}
+		record.GitHub.PullRequestURL = pr.HTMLURL
+		record.GitHub.Error = ""
+		record.UpdatedAt = time.Now().UTC()
+		_ = saveOrchestrationRecord(record)
+		appendOrchestrationEvent(record, "github.pull_request.updated", "", pr.HTMLURL)
+		s.auditGitHubArtifact(record, "github.pull_request.update", auditOutcomeSuccess, pr.HTMLURL)
+		return
+	}
 	pr, err := client.CreatePR(arungh.CreatePRRequest{
 		Title: record.GitHub.PRTitle,
 		Body:  orchestrationPRBody(record),
@@ -2573,6 +2601,7 @@ func (s *Server) createPullRequestForOrchestration(record *orchestrationRecord) 
 	})
 	if err != nil {
 		record.GitHub.Error = "create pull request: " + err.Error()
+		record.Status = "completed_with_publish_error"
 		record.UpdatedAt = time.Now().UTC()
 		_ = saveOrchestrationRecord(record)
 		s.auditGitHubArtifact(record, "github.pull_request.create", auditOutcomeFailure, record.GitHub.Error)
@@ -2584,6 +2613,42 @@ func (s *Server) createPullRequestForOrchestration(record *orchestrationRecord) 
 	record.UpdatedAt = time.Now().UTC()
 	_ = saveOrchestrationRecord(record)
 	s.auditGitHubArtifact(record, "github.pull_request.create", auditOutcomeSuccess, pr.HTMLURL)
+}
+
+func (s *Server) publishScrumSprintCheckpoint(record *orchestrationRecord, sprint int) error {
+	if record == nil || record.GitHub == nil || !record.GitHub.CreatePullRequest || record.GitHub.BranchName == "" {
+		return nil
+	}
+	if err := publishOrchestrationBranch(record); err != nil {
+		record.GitHub.Error = "publish sprint checkpoint: " + err.Error()
+		return err
+	}
+	record.GitHub.Error = ""
+	appendOrchestrationEvent(record, "sprint.publish", "", fmt.Sprintf("Published Sprint %d checkpoint to %s", sprint, record.GitHub.BranchName))
+	if sprint != 1 || record.GitHub.PullRequestURL != "" {
+		return nil
+	}
+	owner, name, _, ok := githubRepoForAPI(record.GitHub.Repo)
+	if !ok {
+		return fmt.Errorf("create pull request: invalid GitHub repository")
+	}
+	client := githubClientForRecord(record, owner, name)
+	pr, err := client.CreatePR(arungh.CreatePRRequest{
+		Title: record.GitHub.PRTitle,
+		Body:  orchestrationPRBody(record),
+		Head:  record.GitHub.BranchName,
+		Base:  record.GitHub.PRBase,
+	})
+	if err != nil {
+		record.GitHub.Error = "create early pull request: " + err.Error()
+		return err
+	}
+	record.GitHub.PullRequestNumber = pr.Number
+	record.GitHub.PullRequestURL = pr.HTMLURL
+	record.GitHub.Error = ""
+	appendOrchestrationEvent(record, "github.pull_request.early", "", pr.HTMLURL)
+	s.auditGitHubArtifact(record, "github.pull_request.create", auditOutcomeSuccess, pr.HTMLURL)
+	return nil
 }
 
 func publishOrchestrationBranch(record *orchestrationRecord) error {
@@ -2621,9 +2686,113 @@ func publishOrchestrationBranch(record *orchestrationRecord) error {
 		return err
 	}
 	if err := gitPushHead(record.RepoPath, record.GitHubToken, record.GitHub.BranchName); err != nil {
-		return err
+		if recoverErr := recoverWorkflowScopePushFailure(record, err); recoverErr != nil {
+			return recoverErr
+		}
+		if err := gitPushHead(record.RepoPath, record.GitHubToken, record.GitHub.BranchName); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func recoverWorkflowScopePushFailure(record *orchestrationRecord, pushErr error) error {
+	if record == nil || pushErr == nil {
+		return pushErr
+	}
+	if !isWorkflowScopePushError(pushErr) {
+		return pushErr
+	}
+	moved, err := moveWorkflowFilesToFollowUp(record.RepoPath)
+	if err != nil {
+		return fmt.Errorf("%w; workflow-scope recovery failed: %v", pushErr, err)
+	}
+	if moved == 0 {
+		return pushErr
+	}
+	if err := gitAddAll(record.RepoPath, record.GitHubToken); err != nil {
+		return fmt.Errorf("%w; stage workflow-scope recovery: %v", pushErr, err)
+	}
+	if err := gitConfig(record.RepoPath, record.GitHubToken, "user.email", "arun@example.invalid"); err != nil {
+		return err
+	}
+	if err := gitConfig(record.RepoPath, record.GitHubToken, "user.name", "ARUN"); err != nil {
+		return err
+	}
+	if gitTreeClean(record.RepoPath, record.GitHubToken) {
+		return nil
+	}
+	if err := gitCommitAmendNoEdit(record.RepoPath, record.GitHubToken); err != nil {
+		return fmt.Errorf("%w; amend workflow-scope recovery: %v", pushErr, err)
+	}
+	appendOrchestrationEvent(record, "workflow_scope.recovery", "", fmt.Sprintf("Moved %d generated workflow file(s) into docs/arun-generated-workflows.md before publishing because the GitHub token cannot update .github/workflows", moved))
+	return nil
+}
+
+func isWorkflowScopePushError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "without `workflow` scope") ||
+		strings.Contains(msg, "without workflow scope") ||
+		(strings.Contains(msg, ".github/workflows") && strings.Contains(msg, "workflow"))
+}
+
+func moveWorkflowFilesToFollowUp(repoPath string) (int, error) {
+	workflowRoot := filepath.Join(repoPath, ".github", "workflows")
+	entries, err := os.ReadDir(workflowRoot)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	type workflowFile struct {
+		Rel     string
+		Content string
+	}
+	var files []workflowFile
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		path := filepath.Join(workflowRoot, entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return 0, err
+		}
+		files = append(files, workflowFile{
+			Rel:     filepath.ToSlash(filepath.Join(".github", "workflows", entry.Name())),
+			Content: string(data),
+		})
+	}
+	if len(files) == 0 {
+		return 0, nil
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Rel < files[j].Rel })
+	docsDir := filepath.Join(repoPath, "docs")
+	if err := os.MkdirAll(docsDir, 0o755); err != nil {
+		return 0, err
+	}
+	var b strings.Builder
+	b.WriteString("# Generated CI Workflow Follow-up\n\n")
+	b.WriteString("ARUN generated the workflow definitions below, but the current GitHub token cannot publish files under `.github/workflows/` without the `workflow` scope. Add these workflow files manually or rerun ARUN with a token that includes `workflow` scope.\n\n")
+	for _, file := range files {
+		b.WriteString("## `")
+		b.WriteString(file.Rel)
+		b.WriteString("`\n\n```yaml\n")
+		b.WriteString(strings.TrimRight(file.Content, "\n"))
+		b.WriteString("\n```\n\n")
+	}
+	if err := os.WriteFile(filepath.Join(docsDir, "arun-generated-workflows.md"), []byte(b.String()), 0o600); err != nil {
+		return 0, err
+	}
+	if err := os.RemoveAll(workflowRoot); err != nil {
+		return 0, err
+	}
+	_ = os.Remove(filepath.Join(repoPath, ".github"))
+	return len(files), nil
 }
 
 func repositoryHygieneMessage(result repositoryHygieneResult) string {
@@ -2713,6 +2882,12 @@ func gitCommit(dir, token, message string) error {
 func gitCommitAllowEmpty(dir, token, message string) error {
 	// codeql[go/command-injection]
 	cmd := exec.Command("git", "commit", "--allow-empty", "-m", message)
+	return runPreparedGitCommand(cmd, dir, token)
+}
+
+func gitCommitAmendNoEdit(dir, token string) error {
+	// codeql[go/command-injection]
+	cmd := exec.Command("git", "commit", "--amend", "--no-edit")
 	return runPreparedGitCommand(cmd, dir, token)
 }
 
@@ -3022,7 +3197,8 @@ type artifactTemplateData struct {
 	IssueURL     string
 }
 
-const githubPullRequestBodyMaxBytes = 60000
+const githubPullRequestBodyReadableBytes = 6000
+const githubPullRequestSummaryMaxBytes = 2200
 
 func loadArtifactConfig(repoPath string) artifactConfig {
 	var cfg artifactConfig
@@ -4047,14 +4223,14 @@ func orchestrationIssueBody(record *orchestrationRecord) string {
 }
 
 func orchestrationPRBody(record *orchestrationRecord) string {
-	return truncateMarkdownBytes(renderArtifactBody(record, "pull_request"), githubPullRequestBodyMaxBytes, prBodyTruncationNotice(artifactLanguage(record)))
+	return truncateMarkdownBytes(renderArtifactBody(record, "pull_request"), githubPullRequestBodyReadableBytes, prBodyReadabilityNotice(artifactLanguage(record)))
 }
 
-func prBodyTruncationNotice(language string) string {
+func prBodyReadabilityNotice(language string) string {
 	if language == "ja" {
-		return "\n\n---\n\nこの PR 本文は GitHub の本文サイズ上限に収めるため ARUN により短縮されました。詳細は run summary、生成された repository docs、各 sprint checkpoint を確認してください。\n"
+		return "\n\n---\n\nこの PR 本文は読みやすさを保つため ARUN により短縮されました。詳細は run summary、生成された repository docs、各 sprint checkpoint を確認してください。\n"
 	}
-	return "\n\n---\n\nThis PR body was shortened by ARUN to stay within GitHub's body size limit. See the run summary, generated repository docs, and sprint checkpoint commits for full details.\n"
+	return "\n\n---\n\nThis PR body was shortened by ARUN for readability. See the run summary, generated repository docs, and sprint checkpoint commits for full details.\n"
 }
 
 func truncateMarkdownBytes(body string, maxBytes int, notice string) string {
@@ -4107,12 +4283,30 @@ func renderArtifactBody(record *orchestrationRecord, artifact string) string {
 		data.PRBase = record.GitHub.PRBase
 		data.IssueURL = record.GitHub.IssueURL
 	}
+	if artifact == "pull_request" {
+		data.Summary = concisePullRequestSummary(data.Summary, artifactLanguage(record))
+	}
 	rendered, err := renderTextTemplate(body, &data)
 	if err != nil {
 		slog.Warn("render artifact template failed", "artifact", artifact, "run", record.ID, "error", err)
 		rendered, _ = renderTextTemplate(defaultArtifactTemplate(artifact, artifactLanguage(record)), &data)
 	}
 	return safety.NewRedactor().RedactString(rendered)
+}
+
+func concisePullRequestSummary(summary, language string) string {
+	summary = strings.TrimSpace(summary)
+	if summary == "" {
+		return ""
+	}
+	notice := "\n\nSummary shortened. See run artifacts and generated repository docs for full details."
+	if language == "ja" {
+		notice = "\n\n概要は短縮されています。詳細は run artifacts と生成された repository docs を確認してください。"
+	}
+	if len([]byte(summary)) <= githubPullRequestSummaryMaxBytes {
+		return summary
+	}
+	return truncateMarkdownBytes(summary, githubPullRequestSummaryMaxBytes, notice)
 }
 
 func artifactTemplate(record *orchestrationRecord, artifact string) string {
