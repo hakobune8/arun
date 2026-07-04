@@ -1489,6 +1489,72 @@ func TestCommitScrumSprintCheckpoint_ScrubsGeneratedArtifacts(t *testing.T) {
 	}
 }
 
+func TestRecoverWorkflowScopePushFailure_MovesWorkflowToFollowUp(t *testing.T) {
+	repo := t.TempDir()
+	runGitTestCommand(t, repo, "init")
+	workflowDir := filepath.Join(repo, ".github", "workflows")
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	workflow := "name: CI\n\non:\n  pull_request:\n\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: go test ./...\n"
+	if err := os.WriteFile(filepath.Join(workflowDir, "ci.yml"), []byte(workflow), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGitTestCommand(t, repo, "config", "user.email", "arun@example.invalid")
+	runGitTestCommand(t, repo, "config", "user.name", "ARUN")
+	runGitTestCommand(t, repo, "add", ".")
+	runGitTestCommand(t, repo, "commit", "-m", "ARUN run-test sprint 3 checkpoint")
+	record := &orchestrationRecord{ID: "run-test", RepoPath: repo}
+	pushErr := fmt.Errorf("git push: remote rejected .github/workflows/ci.yml without `workflow` scope")
+
+	if err := recoverWorkflowScopePushFailure(record, pushErr); err != nil {
+		t.Fatalf("recover workflow scope push failure: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workflowDir, "ci.yml")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("workflow file stat err = %v, want not exist", err)
+	}
+	doc, err := os.ReadFile(filepath.Join(repo, "docs", "arun-generated-workflows.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(doc), ".github/workflows/ci.yml") || !strings.Contains(string(doc), "go test ./...") {
+		t.Fatalf("follow-up doc missing workflow content:\n%s", doc)
+	}
+	show := runGitTestCommand(t, repo, "show", "--name-only", "--format=", "HEAD")
+	if strings.Contains(show, ".github/workflows/ci.yml") {
+		t.Fatalf("recovery commit includes workflow file:\n%s", show)
+	}
+	if !strings.Contains(show, "docs/arun-generated-workflows.md") {
+		t.Fatalf("recovery commit missing follow-up doc:\n%s", show)
+	}
+	count := strings.TrimSpace(runGitTestCommand(t, repo, "rev-list", "--count", "HEAD"))
+	if count != "1" {
+		t.Fatalf("commit count = %s, want recovery to amend checkpoint commit", count)
+	}
+	if len(record.Events) != 1 || record.Events[0].Type != "workflow_scope.recovery" {
+		t.Fatalf("events = %+v, want workflow scope recovery event", record.Events)
+	}
+}
+
+func TestCreatePullRequestForOrchestration_MarksPublishErrorStatus(t *testing.T) {
+	record := &orchestrationRecord{
+		ID:       "run-test",
+		RepoPath: t.TempDir(),
+		Status:   "completed",
+		GitHub: &orchestrationGitHubState{
+			Repo:              "not a repo",
+			CreatePullRequest: true,
+		},
+	}
+	(&Server{}).createPullRequestForOrchestration(record)
+	if record.Status != "completed_with_publish_error" {
+		t.Fatalf("status = %q, want completed_with_publish_error", record.Status)
+	}
+	if !strings.Contains(record.GitHub.Error, "invalid GitHub repository") {
+		t.Fatalf("github error = %q, want invalid repository", record.GitHub.Error)
+	}
+}
+
 func runGitTestCommand(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
@@ -2090,7 +2156,7 @@ func TestArtifactTemplates_DefaultEnglishAndJapanese(t *testing.T) {
 	}
 }
 
-func TestArtifactTemplates_PRBodyIsTruncatedForGitHubLimit(t *testing.T) {
+func TestArtifactTemplates_PRBodyIsShortenedForReadability(t *testing.T) {
 	record := &orchestrationRecord{
 		ID:             "run-0123456789abcdef",
 		BaseBranch:     "main",
@@ -2108,15 +2174,15 @@ func TestArtifactTemplates_PRBodyIsTruncatedForGitHubLimit(t *testing.T) {
 	}
 
 	body := orchestrationPRBody(record)
-	if len([]byte(body)) > githubPullRequestBodyMaxBytes {
-		t.Fatalf("PR body bytes = %d, want <= %d", len([]byte(body)), githubPullRequestBodyMaxBytes)
+	if len([]byte(body)) > githubPullRequestBodyReadableBytes {
+		t.Fatalf("PR body bytes = %d, want <= %d", len([]byte(body)), githubPullRequestBodyReadableBytes)
 	}
-	if !strings.Contains(body, "GitHub の本文サイズ上限") {
+	if !strings.Contains(body, "読みやすさを保つため") && !strings.Contains(body, "概要は短縮されています") {
 		start := len(body) - 400
 		if start < 0 {
 			start = 0
 		}
-		t.Fatalf("PR body missing truncation notice: %q", body[start:])
+		t.Fatalf("PR body missing readability notice: %q", body[start:])
 	}
 	if !strings.Contains(body, "run-0123456789abcdef") {
 		t.Fatalf("PR body missing run metadata")
