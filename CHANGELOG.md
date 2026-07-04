@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [v1.5.13] - 2026-07-04
+
+### Fixed
+- Published implementation-heavy scrum sprint checkpoint commits to the remote
+  branch after each sprint so partial work is recoverable before the final PR
+  publish step.
+- Forced GitHub Issue and PR artifacts for `implementation-heavy-scrum` runs so
+  the remote branch and PR become the source of truth for generated work.
+- Created the pull request after the Sprint 1 checkpoint and updated the same
+  PR with a concise final body at orchestration completion.
+- Added workflow-scope publish recovery: when GitHub rejects generated
+  `.github/workflows/**` files because the OAuth token lacks `workflow` scope,
+  ARUN moves the workflow definitions into `docs/arun-generated-workflows.md`,
+  amends the unpublished checkpoint commit, and retries the push.
+- Marked final GitHub publish failures as `completed_with_publish_error`
+  instead of a clean `completed` state.
+- Shortened generated PR bodies for readability and linked readers to run
+  artifacts, generated repository docs, and sprint checkpoint commits.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.13.
+
 ## [v1.5.12] - 2026-07-04
 
 ### Changed

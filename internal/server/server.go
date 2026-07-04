@@ -2103,7 +2103,20 @@ func safeRepoSlug(repo string) string {
 }
 
 func prepareOrchestrationGitHub(id string, req *orchestrateRequest) (*orchestrationGitHubState, error) {
-	if req == nil || req.GitHub == nil || (!req.GitHub.CreateIssue && !req.GitHub.CreatePullRequest) {
+	if req == nil {
+		return nil, nil
+	}
+	forceArtifacts := req.Scenario != nil && req.Scenario.ID == "implementation-heavy-scrum"
+	ghReq := req.GitHub
+	if ghReq == nil {
+		if !forceArtifacts {
+			return nil, nil
+		}
+		ghReq = &orchestrateGitHubRequest{}
+	}
+	createIssue := ghReq.CreateIssue || forceArtifacts
+	createPullRequest := ghReq.CreatePullRequest || forceArtifacts
+	if !createIssue && !createPullRequest {
 		return nil, nil
 	}
 	_, _, full, ok := githubRepoForAPI(req.Repo)
@@ -2111,7 +2124,7 @@ func prepareOrchestrationGitHub(id string, req *orchestrateRequest) (*orchestrat
 		return nil, fmt.Errorf("repository must be a GitHub HTTPS URL or owner/repo when GitHub artifacts are enabled")
 	}
 
-	branch := strings.TrimSpace(req.GitHub.BranchName)
+	branch := strings.TrimSpace(ghReq.BranchName)
 	if branch == "" {
 		branch = "arun/" + id
 	}
@@ -2119,15 +2132,15 @@ func prepareOrchestrationGitHub(id string, req *orchestrateRequest) (*orchestrat
 		return nil, err
 	}
 
-	prBase := defaultBaseBranch(req.GitHub.PRBase)
+	prBase := defaultBaseBranch(ghReq.PRBase)
 	if err := validateGitRef(prBase); err != nil {
 		return nil, err
 	}
 
-	issueTitle := normalizeGitHubArtifactTitle(req.GitHub.IssueTitle, req.Task, "ARUN orchestration "+id)
-	prTitle := normalizeGitHubArtifactTitle(req.GitHub.PRTitle, req.Task, "ARUN orchestration "+id)
-	issueTemplate := normalizeArtifactTemplateID(req.GitHub.IssueTemplate)
-	prTemplate := normalizeArtifactTemplateID(req.GitHub.PRTemplate)
+	issueTitle := normalizeGitHubArtifactTitle(ghReq.IssueTitle, req.Task, "ARUN orchestration "+id)
+	prTitle := normalizeGitHubArtifactTitle(ghReq.PRTitle, req.Task, "ARUN orchestration "+id)
+	issueTemplate := normalizeArtifactTemplateID(ghReq.IssueTemplate)
+	prTemplate := normalizeArtifactTemplateID(ghReq.PRTemplate)
 
 	return &orchestrationGitHubState{
 		Repo:              full,
@@ -2137,8 +2150,8 @@ func prepareOrchestrationGitHub(id string, req *orchestrateRequest) (*orchestrat
 		PRTitle:           prTitle,
 		PRTemplate:        prTemplate,
 		PRBase:            prBase,
-		CreateIssue:       req.GitHub.CreateIssue,
-		CreatePullRequest: req.GitHub.CreatePullRequest,
+		CreateIssue:       createIssue,
+		CreatePullRequest: createPullRequest,
 	}, nil
 }
 

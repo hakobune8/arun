@@ -1555,6 +1555,41 @@ func TestCreatePullRequestForOrchestration_MarksPublishErrorStatus(t *testing.T)
 	}
 }
 
+func TestPrepareOrchestrationGitHub_ForcesImplementationHeavyArtifacts(t *testing.T) {
+	got, err := prepareOrchestrationGitHub("run-test", &orchestrateRequest{
+		Repo:     "owner/repo",
+		Task:     "Build product",
+		Scenario: &scenarioTemplateSelection{ID: "implementation-heavy-scrum"},
+		GitHub: &orchestrateGitHubRequest{
+			CreateIssue:       false,
+			CreatePullRequest: false,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || !got.CreateIssue || !got.CreatePullRequest {
+		t.Fatalf("github state = %+v, want forced issue and PR", got)
+	}
+	if got.BranchName != "arun/run-test" || got.PRBase != "main" {
+		t.Fatalf("github state = %+v, want default branch and PR base", got)
+	}
+}
+
+func TestPrepareOrchestrationGitHub_ForcesImplementationHeavyArtifactsWithoutGitHubRequest(t *testing.T) {
+	got, err := prepareOrchestrationGitHub("run-test", &orchestrateRequest{
+		Repo:     "owner/repo",
+		Task:     "Build product",
+		Scenario: &scenarioTemplateSelection{ID: "implementation-heavy-scrum"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || !got.CreateIssue || !got.CreatePullRequest {
+		t.Fatalf("github state = %+v, want forced issue and PR", got)
+	}
+}
+
 func runGitTestCommand(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
