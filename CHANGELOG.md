@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [v1.5.20] - 2026-07-05
+
+### Fixed
+- Hardened generated frontend gates to fail unserved alternate UI entrypoints
+  such as `web/index.html`, preventing stale browser apps from being committed
+  beside the primary served UI.
+- Hardened Helm quality gates to validate every generated chart and require
+  each chart to include values, templates, and rendered Deployment and Service
+  resources.
+- Scrubbed prompt/task contamination from generated pull request summaries so
+  PR bodies stay reviewable and do not include internal `Parent task:` blocks.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.20.
+
 ## [v1.5.19] - 2026-07-04
 
 ### Fixed
