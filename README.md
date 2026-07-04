@@ -258,6 +258,8 @@ release that changes `charts/arun/**`, update both `version` and
 `appVersion` in `charts/arun/Chart.yaml` intentionally so chart-releaser can
 publish a new immutable chart release.
 
+- [v1.5.12 release notes](docs/release-v1.5.12.md) — Product coherence
+  guidance
 - [v1.5.11 release notes](docs/release-v1.5.11.md) — Generated artifact hygiene
 - [v1.5.10 release notes](docs/release-v1.5.10.md) — PR body cap and planning
 
