@@ -4428,6 +4428,10 @@ func concisePullRequestSummary(summary, language string) string {
 	if summary == "" {
 		return ""
 	}
+	summary = scrubPromptContaminationFromText(summary)
+	if summary == "" {
+		return ""
+	}
 	notice := "\n\nSummary shortened. See run artifacts and generated repository docs for full details."
 	if language == "ja" {
 		notice = "\n\n概要は短縮されています。詳細は run artifacts と生成された repository docs を確認してください。"
@@ -4436,6 +4440,18 @@ func concisePullRequestSummary(summary, language string) string {
 		return summary
 	}
 	return truncateMarkdownBytes(summary, githubPullRequestSummaryMaxBytes, notice)
+}
+
+func scrubPromptContaminationFromText(content string) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return ""
+	}
+	cut := promptBlockCutIndex(content)
+	if cut < 0 {
+		return content
+	}
+	return strings.TrimSpace(content[:cut])
 }
 
 func artifactTemplate(record *orchestrationRecord, artifact string) string {

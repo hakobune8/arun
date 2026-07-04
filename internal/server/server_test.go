@@ -2477,6 +2477,33 @@ func TestArtifactTemplates_PRBodyIsShortenedForReadability(t *testing.T) {
 	}
 }
 
+func TestArtifactTemplates_PRBodyScrubsPromptContamination(t *testing.T) {
+	record := &orchestrationRecord{
+		ID:             "run-0123456789abcdef",
+		BaseBranch:     "main",
+		OutputLanguage: "ja",
+		Agents:         []string{"analyst", "frontend"},
+		Strategy:       "sequential",
+		GitHub: &orchestrationGitHubState{
+			Repo:       "owner/repo",
+			BranchName: "arun/run-0123456789abcdef",
+			PRTemplate: "default",
+			PRBase:     "main",
+		},
+		Summary: "# Multi-Agent Execution Results\n\n## [PASS] sprint-1-plan\nDelivered product brief.\n\nParent task:\n新規性のあるインベーダーゲーム\n\nOperating mode: build-first\n\nQuality bar:\n- observable\n\nExpected output:\n- repository artifacts\n",
+	}
+
+	body := orchestrationPRBody(record)
+	for _, blocked := range []string{"Parent task:", "Operating mode:", "Quality bar:", "Expected output:"} {
+		if strings.Contains(body, blocked) {
+			t.Fatalf("PR body still contains %q:\n%s", blocked, body)
+		}
+	}
+	if !strings.Contains(body, "Delivered product brief.") {
+		t.Fatalf("PR body lost useful summary:\n%s", body)
+	}
+}
+
 func TestArtifactTemplates_RepositoryConfigFallback(t *testing.T) {
 	repo := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(repo, ".arun"), 0o755); err != nil {
