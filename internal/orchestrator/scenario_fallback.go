@@ -488,11 +488,13 @@ func recoverFrontendStaticApp(root, description string) (string, error) {
       <section class="hero" aria-labelledby="app-title">
         <p class="eyebrow">Static browser game</p>
         <h1 id="app-title">%s</h1>
-        <p class="summary">Move the defender, dodge invaders, and restart the round without any backend services.</p>
+        <p class="summary">Shift gravity lanes, line up with the invader, and survive a compact arcade loop without backend services.</p>
       </section>
       <section class="hud" aria-label="Game status">
         <span>Score: <strong id="score">0</strong></span>
         <span>Lives: <strong id="lives">3</strong></span>
+        <span>Gravity: <strong id="gravity">Floor</strong></span>
+        <span>Target: <strong id="target-lane">Floor</strong></span>
         <span id="status" aria-live="polite">Ready</span>
       </section>
       <section class="arena" aria-label="Game arena">
@@ -500,7 +502,7 @@ func recoverFrontendStaticApp(root, description string) (string, error) {
         <div id="invader" class="invader" aria-label="Falling invader"></div>
       </section>
       <section class="controls" aria-label="Controls">
-        <p>Use ArrowLeft and ArrowRight to move. Press Space to score when aligned with the invader.</p>
+        <p>Use ArrowLeft and ArrowRight to move. Press Space to flip gravity between floor and ceiling; score only when aligned on the same lane as the invader.</p>
         <button id="restart" type="button">Restart</button>
       </section>
     </main>
@@ -600,11 +602,23 @@ h1 {
   box-shadow: 0 0 24px rgba(91, 216, 255, 0.45);
 }
 
+.player.ceiling {
+  bottom: auto;
+  top: 18px;
+  background: #b7ff5b;
+  box-shadow: 0 0 24px rgba(183, 255, 91, 0.4);
+}
+
 .invader {
   top: 24px;
   left: 50%;
   background: #ffca3a;
   box-shadow: 0 0 24px rgba(255, 202, 58, 0.35);
+}
+
+.invader.ceiling {
+  background: #ff6f91;
+  box-shadow: 0 0 24px rgba(255, 111, 145, 0.35);
 }
 
 .controls {
@@ -641,6 +655,8 @@ const player = document.getElementById("player");
 const invader = document.getElementById("invader");
 const scoreEl = document.getElementById("score");
 const livesEl = document.getElementById("lives");
+const gravityEl = document.getElementById("gravity");
+const targetLaneEl = document.getElementById("target-lane");
 const statusEl = document.getElementById("status");
 const restartButton = document.getElementById("restart");
 
@@ -649,41 +665,55 @@ const state = {
   lives: 3,
   playerX: 50,
   invaderX: 50,
-  invaderY: 8
+  invaderY: 8,
+  gravity: "floor",
+  invaderLane: "floor"
 };
 
 function render() {
   player.style.transform = ` + "`" + `translateX(calc(${state.playerX}% - 22px))` + "`" + `;
   invader.style.transform = ` + "`" + `translate(calc(${state.invaderX}% - 22px), ${state.invaderY}px)` + "`" + `;
+  player.classList.toggle("ceiling", state.gravity === "ceiling");
+  invader.classList.toggle("ceiling", state.invaderLane === "ceiling");
+  invader.style.top = state.invaderLane === "ceiling" ? "auto" : "24px";
+  invader.style.bottom = state.invaderLane === "ceiling" ? "24px" : "auto";
   scoreEl.textContent = String(state.score);
   livesEl.textContent = String(state.lives);
+  gravityEl.textContent = state.gravity === "ceiling" ? "Ceiling" : "Floor";
+  targetLaneEl.textContent = state.invaderLane === "ceiling" ? "Ceiling" : "Floor";
 }
 
 function resetInvader() {
   state.invaderX = 15 + ((state.score * 29) % 70);
   state.invaderY = 8;
+  state.invaderLane = state.score % 20 === 0 ? "ceiling" : "floor";
 }
 
 function restart() {
   state.score = 0;
   state.lives = 3;
   state.playerX = 50;
+  state.gravity = "floor";
   resetInvader();
-  statusEl.textContent = "Ready";
+  statusEl.textContent = "Ready. Flip gravity to match the target lane.";
   render();
 }
 
-function fire() {
+function flipGravity() {
   if (state.lives <= 0) {
     return;
   }
+  state.gravity = state.gravity === "floor" ? "ceiling" : "floor";
   const aligned = Math.abs(state.playerX - state.invaderX) <= 12;
-  if (aligned) {
-    state.score += 10;
-    statusEl.textContent = "Hit. Score increased.";
+  const laneMatched = state.gravity === state.invaderLane;
+  if (aligned && laneMatched) {
+    state.score += state.gravity === "ceiling" ? 15 : 10;
+    statusEl.textContent = "Gravity match. Score increased.";
     resetInvader();
+  } else if (!laneMatched) {
+    statusEl.textContent = "Wrong lane. Flip gravity to match the target.";
   } else {
-    statusEl.textContent = "Miss. Align with the invader first.";
+    statusEl.textContent = "Lane matched. Align horizontally before the next flip.";
   }
   render();
 }
@@ -708,7 +738,7 @@ document.addEventListener("keydown", (event) => {
     state.playerX = Math.min(92, state.playerX + 8);
   } else if (event.code === "Space") {
     event.preventDefault();
-    fire();
+    flipGravity();
   } else {
     return;
   }
@@ -721,14 +751,15 @@ restart();
 tick();
 `
 	files := map[string]string{
-		"package.json":                         packageJSON,
-		"index.html":                           indexHTML,
-		"styles.css":                           stylesCSS,
-		filepath.Join("src", "main.js"):        mainJS,
-		"README.md":                            frontendReadme(title, description),
-		filepath.Join("docs", "smoke-test.md"): frontendSmokeTest(description),
-		filepath.Join("docs", "testing.md"):    frontendTestingDoc(description),
-		"CHANGELOG.md":                         frontendChangelog(description),
+		"package.json":                  packageJSON,
+		"index.html":                    indexHTML,
+		"styles.css":                    stylesCSS,
+		filepath.Join("src", "main.js"): mainJS,
+		"README.md":                     frontendReadme(title, description),
+		filepath.Join("docs", "product-brief.md"): frontendProductBrief(title, description),
+		filepath.Join("docs", "smoke-test.md"):    frontendSmokeTest(description),
+		filepath.Join("docs", "testing.md"):       frontendTestingDoc(description),
+		"CHANGELOG.md":                            frontendChangelog(description),
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o600); err != nil {
@@ -748,10 +779,11 @@ func recoverFrontendDocs(root, description string) (string, error) {
 		title = "Empty Invaders"
 	}
 	files := map[string]string{
-		"README.md":                            frontendReadme(title, description),
-		filepath.Join("docs", "smoke-test.md"): frontendSmokeTest(description),
-		filepath.Join("docs", "testing.md"):    frontendTestingDoc(description),
-		"CHANGELOG.md":                         frontendChangelog(description),
+		"README.md": frontendReadme(title, description),
+		filepath.Join("docs", "product-brief.md"): frontendProductBrief(title, description),
+		filepath.Join("docs", "smoke-test.md"):    frontendSmokeTest(description),
+		filepath.Join("docs", "testing.md"):       frontendTestingDoc(description),
+		"CHANGELOG.md":                            frontendChangelog(description),
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o600); err != nil {
@@ -894,12 +926,13 @@ func frontendReadme(title, description string) string {
 	return strings.Join([]string{
 		"# " + title,
 		"",
-		"This repository started empty. ARUN generated a minimal static browser game so an implementation-heavy scrum workflow can produce reviewable code, documentation, and validation artifacts without GitHub API calls.",
+		"This repository started empty. ARUN generated a minimal static browser game with a gravity-lane mechanic so an implementation-heavy scrum workflow can produce reviewable code, documentation, and validation artifacts without GitHub API calls.",
 		"",
 		"## Features",
 		"",
 		"- Keyboard controls with ArrowLeft, ArrowRight, and Space.",
-		"- Score display that increments when the defender hits an aligned invader.",
+		"- Space flips the defender between floor and ceiling gravity lanes.",
+		"- Score display that increments only when the defender is horizontally aligned and on the same gravity lane as the invader.",
 		"- Lives tracking that decrements when an invader reaches the bottom of the arena.",
 		"- Restart behavior that resets score, lives, player position, and invader position.",
 		"",
@@ -923,17 +956,52 @@ func frontendReadme(title, description string) string {
 	}, "\n")
 }
 
+func frontendProductBrief(title, description string) string {
+	return strings.Join([]string{
+		"# Product Brief: " + title,
+		"",
+		"## Concept",
+		"",
+		title + " is a compact browser invader game built around a gravity-lane flip mechanic. The player moves left and right, then uses Space to shift between the floor and ceiling lanes. Scoring requires both horizontal alignment and matching the invader lane, so the differentiating mechanic is present in the implemented UI and source code rather than only in documentation.",
+		"",
+		"## Target User",
+		"",
+		"- Players who want a short arcade loop with one clear twist.",
+		"- Reviewers who need a fresh-checkout slice that runs without external services.",
+		"",
+		"## Acceptance Criteria",
+		"",
+		"- The visible title, README H1, and this product brief use the same product name.",
+		"- The primary route `/` serves the browser game when run through the Go server.",
+		"- Space changes the gravity lane between Floor and Ceiling.",
+		"- A score is awarded only when the defender is aligned with the invader and on the same lane.",
+		"- The Docker runtime image includes the static assets required for `/` to serve the same UI as local `go run .`.",
+		"",
+		"## Non-Goals",
+		"",
+		"- Multiplayer.",
+		"- External score services.",
+		"- Complex level progression.",
+		"",
+		"## Source Request",
+		"",
+		strings.TrimSpace(description),
+		"",
+	}, "\n")
+}
+
 func frontendSmokeTest(description string) string {
 	return strings.Join([]string{
 		"# Smoke Test",
 		"",
 		"1. Open `index.html` in a browser.",
-		"2. Confirm the Empty Invaders arena, score display, lives display, and restart button render without layout overlap.",
+		"2. Confirm the arena, score display, lives display, gravity display, target lane display, and restart button render without layout overlap.",
 		"3. Press ArrowLeft and ArrowRight and confirm the defender moves horizontally.",
-		"4. Press Space while aligned with the invader and confirm the score increases.",
-		"5. Let an invader reach the bottom and confirm lives decrement.",
-		"6. Click `Restart` and confirm score returns to 0 and lives returns to 3.",
-		"7. Run `npm test` and `npm run build`.",
+		"4. Press Space and confirm the gravity display flips between Floor and Ceiling.",
+		"5. Press Space while aligned on the same lane as the invader and confirm the score increases.",
+		"6. Let an invader reach the bottom and confirm lives decrement.",
+		"7. Click `Restart` and confirm score returns to 0, lives returns to 3, and gravity returns to Floor.",
+		"8. Run `npm test` and `npm run build`.",
 		"",
 		"## Scenario",
 		"",
@@ -960,7 +1028,8 @@ func frontendTestingDoc(description string) string {
 		"## Manual smoke check",
 		"",
 		"- Confirm keyboard controls move the defender with ArrowLeft and ArrowRight.",
-		"- Confirm Space can score when the defender is aligned with the invader.",
+		"- Confirm Space flips the gravity lane between Floor and Ceiling.",
+		"- Confirm Space can score only when the defender is aligned with the invader and on the same lane.",
 		"- Confirm the score display updates after a hit.",
 		"- Confirm lives decrement when an invader reaches the bottom of the arena.",
 		"- Confirm Restart restores score to 0 and lives to 3.",
@@ -979,8 +1048,8 @@ func frontendChangelog(description string) string {
 		"",
 		"## v0.1.0 - Unreleased",
 		"",
-		"- Added the initial Empty Invaders static frontend scaffold for the implementation-heavy scrum workflow.",
-		"- Added keyboard controls, score display, lives tracking, and restart behavior.",
+		"- Added the initial static frontend scaffold for the implementation-heavy scrum workflow.",
+		"- Added keyboard controls, gravity-lane flipping, score display, lives tracking, and restart behavior.",
 		"- Added README run and validation instructions.",
 		"- Added smoke-test and QA documentation for browser verification.",
 		"",
@@ -1089,7 +1158,14 @@ func recoverDockerfile(ctx context.Context, root, description string) (string, e
 			return "", err
 		}
 	}
-	dockerfile := `FROM golang:1.22-alpine AS build
+	staticAssetCopies := ""
+	if staticFrontendProjectExists(root) {
+		staticAssetCopies = `COPY --from=build /src/index.html /app/index.html
+COPY --from=build /src/styles.css /app/styles.css
+COPY --from=build /src/src /app/src
+`
+	}
+	dockerfile := fmt.Sprintf(`FROM golang:1.22-alpine AS build
 WORKDIR /src
 COPY go.mod ./
 RUN go mod download
@@ -1100,11 +1176,12 @@ FROM alpine:3.20
 RUN addgroup -S app && adduser -S app -G app
 WORKDIR /app
 COPY --from=build /out/app /app/app
+%s
 USER app
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
 ENTRYPOINT ["/app/app"]
-`
+`, staticAssetCopies)
 	dockerignore := `.git
 run.log
 run_state.json
@@ -1137,7 +1214,10 @@ node_modules
 		"```sh",
 		"docker run --rm -p 8080:8080 invaders:local",
 		"curl http://127.0.0.1:8080/healthz",
+		"curl http://127.0.0.1:8080/ | grep '<title>'",
 		"```",
+		"",
+		"The runtime image copies the static browser assets into `/app`, so the container serves the same primary UI from `/` that local `go run .` serves.",
 		"",
 	}, "\n")
 	if err := os.WriteFile(filepath.Join(docsDir, "container-run.md"), []byte(containerDocs), 0o600); err != nil {

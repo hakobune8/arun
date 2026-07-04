@@ -1455,9 +1455,23 @@ func TestImplementationHeavyScrumPlan_UsesSprintStageWorkflow(t *testing.T) {
 	if !strings.Contains(byID["sprint-1-plan"].Description, "product concept") || !strings.Contains(byID["sprint-1-plan"].Description, "differentiating mechanic") || !strings.Contains(byID["sprint-1-plan"].Description, "docs/product-brief.md as the single source-of-truth product brief") {
 		t.Fatalf("sprint-1-plan description = %q, want product/design gate", byID["sprint-1-plan"].Description)
 	}
+	if !strings.Contains(byID["sprint-1-plan"].Description, "do not create product/design.md") ||
+		!strings.Contains(byID["sprint-1-plan"].Description, "not only in documentation") {
+		t.Fatalf("sprint-1-plan description = %q, want duplicate brief and implemented mechanic guard", byID["sprint-1-plan"].Description)
+	}
 	if !strings.Contains(byID["sprint-1-qa"].Description, "Compare docs/product-brief.md against README") ||
 		!strings.Contains(byID["sprint-1-qa"].Description, "duplicate product brief files") {
 		t.Fatalf("sprint-1-qa description = %q, want product coherence QA", byID["sprint-1-qa"].Description)
+	}
+	if !strings.Contains(byID["sprint-2-docker"].Description, "container root path returns the same primary UI") {
+		t.Fatalf("sprint-2-docker description = %q, want container UI parity guidance", byID["sprint-2-docker"].Description)
+	}
+	if !strings.Contains(byID["sprint-2-qa"].Description, "verify `/healthz` and `/` from the container") ||
+		!strings.Contains(byID["sprint-2-qa"].Description, "runtime image copies all files needed for the primary UI") {
+		t.Fatalf("sprint-2-qa description = %q, want container smoke gate", byID["sprint-2-qa"].Description)
+	}
+	if !strings.Contains(byID["sprint-3-docs"].Description, "README H1 must be the product name") {
+		t.Fatalf("sprint-3-docs description = %q, want README H1 product gate", byID["sprint-3-docs"].Description)
 	}
 	if !strings.Contains(byID["sprint-3-review"].Description, "accidental binary/workspace artifacts") {
 		t.Fatalf("sprint-3-review description = %q, want artifact hygiene check", byID["sprint-3-review"].Description)

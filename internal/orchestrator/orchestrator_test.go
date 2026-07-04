@@ -814,6 +814,23 @@ func TestRecoverFrontendStaticAppUsesInvaderProductConceptTitle(t *testing.T) {
 	if !strings.Contains(string(pkg), `"name": "one-button-invaders"`) {
 		t.Fatalf("package.json does not use invader product package name:\n%s", pkg)
 	}
+	mainJS, err := os.ReadFile(filepath.Join(repo, "src", "main.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(mainJS), `gravity: "floor"`) ||
+		!strings.Contains(string(mainJS), "flipGravity") ||
+		!strings.Contains(string(mainJS), "laneMatched") {
+		t.Fatalf("main.js does not implement gravity-lane mechanic:\n%s", mainJS)
+	}
+	brief, err := os.ReadFile(filepath.Join(repo, "docs", "product-brief.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(brief), "# Product Brief: One-Button Invaders") ||
+		!strings.Contains(string(brief), "gravity-lane flip mechanic") {
+		t.Fatalf("product brief does not describe generated product concept:\n%s", brief)
+	}
 }
 
 func TestRecoverBuiltInSubtask_StaticFrontendFallbackGatePasses(t *testing.T) {
@@ -1084,6 +1101,60 @@ func TestRecoverDockerfileCreatesValidDockerArtifacts(t *testing.T) {
 	}))
 	if !status.Passed {
 		t.Fatalf("quality gate failed: %+v", status)
+	}
+}
+
+func TestRecoverDockerfileCopiesStaticFrontendAssetsWhenPresent(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if _, err := recoverFrontendStaticApp(repo, "新規性のあるインベーダーゲームを作成する"); err != nil {
+		t.Fatalf("recoverFrontendStaticApp() error = %v", err)
+	}
+	if _, err := recoverGoBackend(context.Background(), repo, "create /healthz with net/http and serve the static frontend"); err != nil {
+		t.Fatalf("recoverGoBackend() error = %v", err)
+	}
+	if _, err := recoverDockerfile(context.Background(), repo, "Add Dockerfile for a Go server that serves the static frontend from /"); err != nil {
+		t.Fatalf("recoverDockerfile() error = %v", err)
+	}
+	dockerfile, err := os.ReadFile(filepath.Join(repo, "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"COPY --from=build /src/index.html /app/index.html",
+		"COPY --from=build /src/styles.css /app/styles.css",
+		"COPY --from=build /src/src /app/src",
+	} {
+		if !strings.Contains(string(dockerfile), want) {
+			t.Fatalf("Dockerfile missing %q:\n%s", want, dockerfile)
+		}
+	}
+	docs, err := os.ReadFile(filepath.Join(repo, "docs", "container-run.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(docs), "serves the same primary UI from `/`") {
+		t.Fatalf("container docs do not describe static UI parity:\n%s", docs)
+	}
+}
+
+func TestRecoverDockerfileSkipsStaticAssetCopiesWithoutFrontend(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if _, err := recoverGoBackend(context.Background(), repo, "create /healthz with net/http"); err != nil {
+		t.Fatalf("recoverGoBackend() error = %v", err)
+	}
+	if _, err := recoverDockerfile(context.Background(), repo, "Add Dockerfile for Go service only"); err != nil {
+		t.Fatalf("recoverDockerfile() error = %v", err)
+	}
+	dockerfile, err := os.ReadFile(filepath.Join(repo, "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(dockerfile), "/src/index.html") || strings.Contains(string(dockerfile), "/src/styles.css") {
+		t.Fatalf("Dockerfile copies static assets without frontend:\n%s", dockerfile)
 	}
 }
 
