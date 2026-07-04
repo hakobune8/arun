@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [v1.5.18] - 2026-07-04
+
+### Fixed
+- Force-refreshed remote tracking refs before scrum checkpoint pushes so later
+  Sprint 2 and Sprint 3 publishes do not fail with stale `--force-with-lease`
+  state after earlier branch updates.
+- Kept frontend documentation fallback aligned to the existing app title and
+  stopped copying task prompt text into generated product briefs.
+- Tightened Docker and Helm quality gates so static UI assets must be present
+  in runtime images and Helm charts must render Deployment and Service
+  resources instead of passing as empty charts.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.18.
+
 ## [v1.5.17] - 2026-07-04
 
 ### Fixed
