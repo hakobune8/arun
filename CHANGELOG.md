@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [v1.5.19] - 2026-07-04
+
+### Fixed
+- Switched scrum checkpoint branch publishing to an explicit remote SHA lease
+  from `git ls-remote` so Sprint 2 and Sprint 3 pushes do not depend on
+  implicit local tracking ref state.
+- Tightened generated frontend gates to fail unserved alternate UI trees such
+  as `frontend/index.html` when the Go entrypoint does not serve them.
+- Tightened generated documentation gates to fail remediation notes that defer
+  release-blocking fixes to a future human-led sprint.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.19.
+
 ## [v1.5.18] - 2026-07-04
 
 ### Fixed
