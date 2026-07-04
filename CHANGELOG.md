@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [v1.5.9] - 2026-07-04
+
 ### Changed
 - Increased the built-in `implementation-heavy-scrum` template default
   `maxDuration` from `120m` to `180m` to allow roughly one hour per sprint for
@@ -16,6 +18,8 @@
 - Clarified that generated outcome documentation should be product-centered,
   emphasizing delivered behavior, user journeys, implementation decisions, and
   product gaps before command lists.
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.9.
 
 ## [v1.5.8] - 2026-07-04
 

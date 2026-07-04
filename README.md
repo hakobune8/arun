@@ -258,6 +258,8 @@ release that changes `charts/arun/**`, update both `version` and
 `appVersion` in `charts/arun/Chart.yaml` intentionally so chart-releaser can
 publish a new immutable chart release.
 
+- [v1.5.9 release notes](docs/release-v1.5.9.md) — Heavy scrum duration
+  and output quality
 - [v1.5.8 release notes](docs/release-v1.5.8.md) — Task/run readability
   and dependency timeline
 - [v1.5.7 release notes](docs/release-v1.5.7.md) — Heavy scrum duration
