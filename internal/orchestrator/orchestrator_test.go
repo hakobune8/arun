@@ -1087,6 +1087,60 @@ func TestRecoverDockerfileCreatesValidDockerArtifacts(t *testing.T) {
 	}
 }
 
+func TestRecoverDockerfileCopiesStaticFrontendAssetsWhenPresent(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if _, err := recoverFrontendStaticApp(repo, "新規性のあるインベーダーゲームを作成する"); err != nil {
+		t.Fatalf("recoverFrontendStaticApp() error = %v", err)
+	}
+	if _, err := recoverGoBackend(context.Background(), repo, "create /healthz with net/http and serve the static frontend"); err != nil {
+		t.Fatalf("recoverGoBackend() error = %v", err)
+	}
+	if _, err := recoverDockerfile(context.Background(), repo, "Add Dockerfile for a Go server that serves the static frontend from /"); err != nil {
+		t.Fatalf("recoverDockerfile() error = %v", err)
+	}
+	dockerfile, err := os.ReadFile(filepath.Join(repo, "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"COPY --from=build /src/index.html /app/index.html",
+		"COPY --from=build /src/styles.css /app/styles.css",
+		"COPY --from=build /src/src /app/src",
+	} {
+		if !strings.Contains(string(dockerfile), want) {
+			t.Fatalf("Dockerfile missing %q:\n%s", want, dockerfile)
+		}
+	}
+	docs, err := os.ReadFile(filepath.Join(repo, "docs", "container-run.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(docs), "serves the same primary UI from `/`") {
+		t.Fatalf("container docs do not describe static UI parity:\n%s", docs)
+	}
+}
+
+func TestRecoverDockerfileSkipsStaticAssetCopiesWithoutFrontend(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if _, err := recoverGoBackend(context.Background(), repo, "create /healthz with net/http"); err != nil {
+		t.Fatalf("recoverGoBackend() error = %v", err)
+	}
+	if _, err := recoverDockerfile(context.Background(), repo, "Add Dockerfile for Go service only"); err != nil {
+		t.Fatalf("recoverDockerfile() error = %v", err)
+	}
+	dockerfile, err := os.ReadFile(filepath.Join(repo, "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(dockerfile), "/src/index.html") || strings.Contains(string(dockerfile), "/src/styles.css") {
+		t.Fatalf("Dockerfile copies static assets without frontend:\n%s", dockerfile)
+	}
+}
+
 func TestRecoverBuiltInSubtask_DockerRuntimeErrorRecovers(t *testing.T) {
 	t.Parallel()
 

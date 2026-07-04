@@ -1089,7 +1089,14 @@ func recoverDockerfile(ctx context.Context, root, description string) (string, e
 			return "", err
 		}
 	}
-	dockerfile := `FROM golang:1.22-alpine AS build
+	staticAssetCopies := ""
+	if staticFrontendProjectExists(root) {
+		staticAssetCopies = `COPY --from=build /src/index.html /app/index.html
+COPY --from=build /src/styles.css /app/styles.css
+COPY --from=build /src/src /app/src
+`
+	}
+	dockerfile := fmt.Sprintf(`FROM golang:1.22-alpine AS build
 WORKDIR /src
 COPY go.mod ./
 RUN go mod download
@@ -1100,11 +1107,12 @@ FROM alpine:3.20
 RUN addgroup -S app && adduser -S app -G app
 WORKDIR /app
 COPY --from=build /out/app /app/app
+%s
 USER app
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
 ENTRYPOINT ["/app/app"]
-`
+`, staticAssetCopies)
 	dockerignore := `.git
 run.log
 run_state.json
@@ -1137,7 +1145,10 @@ node_modules
 		"```sh",
 		"docker run --rm -p 8080:8080 invaders:local",
 		"curl http://127.0.0.1:8080/healthz",
+		"curl http://127.0.0.1:8080/ | grep '<title>'",
 		"```",
+		"",
+		"The runtime image copies the static browser assets into `/app`, so the container serves the same primary UI from `/` that local `go run .` serves.",
 		"",
 	}, "\n")
 	if err := os.WriteFile(filepath.Join(docsDir, "container-run.md"), []byte(containerDocs), 0o600); err != nil {
