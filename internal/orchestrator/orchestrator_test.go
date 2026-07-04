@@ -792,6 +792,30 @@ func TestExecuteSubtask_FrontendRecoversEmptyRepositoryNoOp(t *testing.T) {
 	}
 }
 
+func TestRecoverFrontendStaticAppUsesInvaderProductConceptTitle(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if _, err := recoverFrontendStaticApp(repo, "新規性のあるインベーダーゲームを作成する"); err != nil {
+		t.Fatalf("recoverFrontendStaticApp() error = %v", err)
+	}
+	index, err := os.ReadFile(filepath.Join(repo, "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(index), "<title>One-Button Invaders</title>") ||
+		!strings.Contains(string(index), `<h1 id="app-title">One-Button Invaders</h1>`) {
+		t.Fatalf("index.html does not use invader product concept title:\n%s", index)
+	}
+	pkg, err := os.ReadFile(filepath.Join(repo, "package.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(pkg), `"name": "one-button-invaders"`) {
+		t.Fatalf("package.json does not use invader product package name:\n%s", pkg)
+	}
+}
+
 func TestRecoverBuiltInSubtask_StaticFrontendFallbackGatePasses(t *testing.T) {
 	t.Parallel()
 
@@ -976,6 +1000,32 @@ func main() {
 	}
 	if err := runShell(context.Background(), repo, "go vet ./..."); err != nil {
 		t.Fatalf("go vet after recovery: %v", err)
+	}
+}
+
+func TestRecoverGoBackendServesExistingStaticIndex(t *testing.T) {
+	t.Parallel()
+	if !commandAvailable("go") {
+		t.Skip("go toolchain unavailable")
+	}
+
+	repo := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repo, "index.html"), []byte("<!doctype html><title>One-Button Invaders</title>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := recoverGoBackend(context.Background(), repo, "create /healthz with net/http and serve the static frontend"); err != nil {
+		t.Fatalf("recoverGoBackend() error = %v", err)
+	}
+	if err := runShell(context.Background(), repo, "go test ./..."); err != nil {
+		t.Fatalf("go test after recovery: %v", err)
+	}
+	mainGo, err := os.ReadFile(filepath.Join(repo, "main.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(mainGo), `http.ServeFile(w, r, "index.html")`) {
+		t.Fatalf("main.go does not serve existing index.html:\n%s", mainGo)
 	}
 }
 

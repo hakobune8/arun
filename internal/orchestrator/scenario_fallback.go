@@ -287,9 +287,18 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 )
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	if _, err := os.Stat("index.html"); err == nil {
+		http.ServeFile(w, r, "index.html")
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("arun-test service\n"))
 }
@@ -315,6 +324,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -344,6 +356,33 @@ func TestRootHandler(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status code = %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
+func TestRootHandlerServesStaticIndexWhenPresent(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<!doctype html><title>Game</title>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(previous) }()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	rootHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if !strings.Contains(rec.Body.String(), "<title>Game</title>") {
+		t.Fatalf("body = %q, want static index", rec.Body.String())
 	}
 }
 `
@@ -421,6 +460,9 @@ func recoverFrontendStaticApp(root, description string) (string, error) {
 	if strings.Contains(strings.ToLower(description), "empty invaders") {
 		projectName = "empty-invaders"
 		title = "Empty Invaders"
+	} else if requestsInvaderExperience(description) {
+		projectName = "one-button-invaders"
+		title = "One-Button Invaders"
 	}
 	packageJSON := fmt.Sprintf(`{
   "name": %q,
@@ -1305,6 +1347,14 @@ func inferProjectName(description, root string) string {
 		return "arun-sprint-app"
 	}
 	return sanitizePackageName(name)
+}
+
+func requestsInvaderExperience(description string) bool {
+	desc := strings.ToLower(description)
+	return strings.Contains(desc, "invader") ||
+		strings.Contains(desc, "space invaders") ||
+		strings.Contains(description, "インベーダ") ||
+		strings.Contains(description, "インベーダー")
 }
 
 func sanitizePackageName(name string) string {

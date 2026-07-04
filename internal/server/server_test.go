@@ -1452,10 +1452,11 @@ func TestImplementationHeavyScrumPlan_UsesSprintStageWorkflow(t *testing.T) {
 	if !strings.Contains(byID["sprint-1-adjust-plan"].Description, "Sprint 1 QA") {
 		t.Fatalf("sprint-1-adjust-plan description = %q, want QA evidence handoff", byID["sprint-1-adjust-plan"].Description)
 	}
-	if !strings.Contains(byID["sprint-1-plan"].Description, "product concept") || !strings.Contains(byID["sprint-1-plan"].Description, "differentiating mechanic") || !strings.Contains(byID["sprint-1-plan"].Description, "single source-of-truth product brief") {
+	if !strings.Contains(byID["sprint-1-plan"].Description, "product concept") || !strings.Contains(byID["sprint-1-plan"].Description, "differentiating mechanic") || !strings.Contains(byID["sprint-1-plan"].Description, "docs/product-brief.md as the single source-of-truth product brief") {
 		t.Fatalf("sprint-1-plan description = %q, want product/design gate", byID["sprint-1-plan"].Description)
 	}
-	if !strings.Contains(byID["sprint-1-qa"].Description, "Compare the product brief against README") {
+	if !strings.Contains(byID["sprint-1-qa"].Description, "Compare docs/product-brief.md against README") ||
+		!strings.Contains(byID["sprint-1-qa"].Description, "duplicate product brief files") {
 		t.Fatalf("sprint-1-qa description = %q, want product coherence QA", byID["sprint-1-qa"].Description)
 	}
 	if !strings.Contains(byID["sprint-3-review"].Description, "accidental binary/workspace artifacts") {
