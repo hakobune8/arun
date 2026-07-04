@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [v1.5.17] - 2026-07-04
+
+### Fixed
+- Copied static frontend assets into deterministic fallback Docker runtime
+  images when a browser UI exists, so container `/` serves the same primary UI
+  as local `go run .`.
+- Added a canonical fallback `docs/product-brief.md` and strengthened fallback
+  game behavior with a gravity-lane mechanic that is implemented in the UI and
+  source code rather than only described in docs.
+- Tightened `implementation-heavy-scrum` gates for duplicate product briefs,
+  README H1 product naming, container `/` smoke checks, and implemented
+  differentiating mechanics.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.17.
+
 ## [v1.5.16] - 2026-07-04
 
 ### Fixed
