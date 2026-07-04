@@ -3016,9 +3016,38 @@ func gitResetHard(dir, token, commit string) error {
 }
 
 func gitPushHead(dir, token, branch string) error {
+	if err := validateGitRef(branch); err != nil {
+		return err
+	}
+	if err := gitFetchRemoteBranchRef(dir, token, branch); err != nil {
+		slog.Debug("refresh remote branch ref before push failed", "branch", branch, "error", err)
+	}
 	refspec := "HEAD:refs/heads/" + branch
 	// codeql[go/command-injection]
 	cmd := exec.Command("git", "push", "--set-upstream", "origin", refspec, "--force-with-lease")
+	if err := runPreparedGitCommand(cmd, dir, token); err != nil {
+		return err
+	}
+	return gitUpdateRemoteTrackingRefToHead(dir, token, branch)
+}
+
+func gitFetchRemoteBranchRef(dir, token, branch string) error {
+	if err := validateGitRef(branch); err != nil {
+		return err
+	}
+	refspec := "refs/heads/" + branch + ":refs/remotes/origin/" + branch
+	// codeql[go/command-injection]
+	cmd := exec.Command("git", "fetch", "origin", refspec)
+	return runPreparedGitCommand(cmd, dir, token)
+}
+
+func gitUpdateRemoteTrackingRefToHead(dir, token, branch string) error {
+	if err := validateGitRef(branch); err != nil {
+		return err
+	}
+	ref := "refs/remotes/origin/" + branch
+	// codeql[go/command-injection]
+	cmd := exec.Command("git", "update-ref", ref, "HEAD")
 	return runPreparedGitCommand(cmd, dir, token)
 }
 

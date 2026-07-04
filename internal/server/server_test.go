@@ -1677,6 +1677,52 @@ func TestPrepareOrchestrationGitHub_ForcesImplementationHeavyArtifactsWithoutGit
 	}
 }
 
+func TestGitPushHeadRefreshesRemoteTrackingRef(t *testing.T) {
+	remote := filepath.Join(t.TempDir(), "remote.git")
+	runGitTestCommand(t, t.TempDir(), "init", "--bare", remote)
+
+	repo := t.TempDir()
+	runGitTestCommand(t, repo, "init")
+	runGitTestCommand(t, repo, "config", "user.email", "arun@example.invalid")
+	runGitTestCommand(t, repo, "config", "user.name", "ARUN")
+	runGitTestCommand(t, repo, "remote", "add", "origin", remote)
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("one\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGitTestCommand(t, repo, "add", ".")
+	runGitTestCommand(t, repo, "commit", "-m", "one")
+
+	const branch = "arun/run-test"
+	if err := gitPushHead(repo, "", branch); err != nil {
+		t.Fatalf("first gitPushHead: %v", err)
+	}
+	firstHead := strings.TrimSpace(runGitTestCommand(t, repo, "rev-parse", "HEAD"))
+	firstTracking := strings.TrimSpace(runGitTestCommand(t, repo, "rev-parse", "refs/remotes/origin/"+branch))
+	if firstTracking != firstHead {
+		t.Fatalf("tracking ref after first push = %s, want %s", firstTracking, firstHead)
+	}
+
+	runGitTestCommand(t, repo, "update-ref", "-d", "refs/remotes/origin/"+branch)
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("two\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGitTestCommand(t, repo, "add", ".")
+	runGitTestCommand(t, repo, "commit", "-m", "two")
+
+	if err := gitPushHead(repo, "", branch); err != nil {
+		t.Fatalf("second gitPushHead with missing tracking ref: %v", err)
+	}
+	secondHead := strings.TrimSpace(runGitTestCommand(t, repo, "rev-parse", "HEAD"))
+	secondTracking := strings.TrimSpace(runGitTestCommand(t, repo, "rev-parse", "refs/remotes/origin/"+branch))
+	if secondTracking != secondHead {
+		t.Fatalf("tracking ref after second push = %s, want %s", secondTracking, secondHead)
+	}
+	remoteHead := strings.TrimSpace(runGitTestCommand(t, repo, "ls-remote", "origin", "refs/heads/"+branch))
+	if !strings.HasPrefix(remoteHead, secondHead+"\t") {
+		t.Fatalf("remote head = %q, want %s", remoteHead, secondHead)
+	}
+}
+
 func runGitTestCommand(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
