@@ -1790,6 +1790,59 @@ func TestGitPushHeadForceRefreshesRewrittenRemoteTrackingRef(t *testing.T) {
 	}
 }
 
+func TestGitPushHeadUsesExplicitRemoteLease(t *testing.T) {
+	remote := filepath.Join(t.TempDir(), "remote.git")
+	runGitTestCommand(t, t.TempDir(), "init", "--bare", remote)
+
+	repo := t.TempDir()
+	runGitTestCommand(t, repo, "init")
+	runGitTestCommand(t, repo, "config", "user.email", "arun@example.invalid")
+	runGitTestCommand(t, repo, "config", "user.name", "ARUN")
+	runGitTestCommand(t, repo, "remote", "add", "origin", remote)
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("one\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGitTestCommand(t, repo, "add", ".")
+	runGitTestCommand(t, repo, "commit", "-m", "one")
+
+	const branch = "arun/run-explicit-lease"
+	headBeforePush, err := gitRemoteBranchHead(repo, "", branch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if headBeforePush != "" {
+		t.Fatalf("gitRemoteBranchHead before first push = %q, want empty", headBeforePush)
+	}
+	if err := gitPushHead(repo, "", branch); err != nil {
+		t.Fatalf("gitPushHead first push: %v", err)
+	}
+	firstHead := strings.TrimSpace(runGitTestCommand(t, repo, "rev-parse", "HEAD"))
+	remoteHead, err := gitRemoteBranchHead(repo, "", branch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if remoteHead != firstHead {
+		t.Fatalf("gitRemoteBranchHead after push = %s, want %s", remoteHead, firstHead)
+	}
+
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("two\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGitTestCommand(t, repo, "add", ".")
+	runGitTestCommand(t, repo, "commit", "-m", "two")
+	if err := gitPushHead(repo, "", branch); err != nil {
+		t.Fatalf("gitPushHead second push: %v", err)
+	}
+	secondHead := strings.TrimSpace(runGitTestCommand(t, repo, "rev-parse", "HEAD"))
+	remoteHead, err = gitRemoteBranchHead(repo, "", branch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if remoteHead != secondHead {
+		t.Fatalf("gitRemoteBranchHead after second push = %s, want %s", remoteHead, secondHead)
+	}
+}
+
 func runGitTestCommand(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
