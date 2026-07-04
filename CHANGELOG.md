@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [v1.5.15] - 2026-07-04
+
+### Fixed
+- Made deterministic Go fallback serve an existing static `index.html` from `/`
+  instead of returning unrelated placeholder text. This keeps generated backend
+  and frontend artifacts connected when recovery paths are used.
+- Stabilized invader-style static frontend fallback naming around one product
+  concept so package metadata, HTML title, and visible UI labels agree.
+- Tightened `implementation-heavy-scrum` guidance to use
+  `docs/product-brief.md` as the single product brief and treat duplicate
+  product brief files as release-blocking product coherence gaps.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.15.
+
 ## [v1.5.14] - 2026-07-04
 
 ### Fixed

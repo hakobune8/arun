@@ -258,6 +258,8 @@ release that changes `charts/arun/**`, update both `version` and
 `appVersion` in `charts/arun/Chart.yaml` intentionally so chart-releaser can
 publish a new immutable chart release.
 
+- [v1.5.15 release notes](docs/release-v1.5.15.md) — Generated product brief
+  and served UI coherence
 - [v1.5.14 release notes](docs/release-v1.5.14.md) — Checkpoint publish timing
   and Web UI list payloads
 - [v1.5.13 release notes](docs/release-v1.5.13.md) — Early scrum
