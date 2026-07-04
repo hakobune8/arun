@@ -1395,6 +1395,12 @@ func TestImplementationHeavyScrumPlan_UsesSprintStageWorkflow(t *testing.T) {
 	if !strings.Contains(byID["sprint-1-adjust-plan"].Description, "Sprint 1 QA") {
 		t.Fatalf("sprint-1-adjust-plan description = %q, want QA evidence handoff", byID["sprint-1-adjust-plan"].Description)
 	}
+	if !strings.Contains(byID["sprint-1-plan"].Description, "product concept") || !strings.Contains(byID["sprint-1-plan"].Description, "differentiating mechanic") {
+		t.Fatalf("sprint-1-plan description = %q, want product/design gate", byID["sprint-1-plan"].Description)
+	}
+	if !strings.Contains(byID["sprint-3-review"].Description, "accidental binary/workspace artifacts") {
+		t.Fatalf("sprint-3-review description = %q, want artifact hygiene check", byID["sprint-3-review"].Description)
+	}
 	if sprint, ok := scrumSprintCheckpoint("sprint-3-report"); !ok || sprint != 3 {
 		t.Fatalf("sprint-3-report checkpoint = %d/%v, want 3/true", sprint, ok)
 	}
@@ -2027,6 +2033,39 @@ func TestArtifactTemplates_DefaultEnglishAndJapanese(t *testing.T) {
 	pr = orchestrationPRBody(record)
 	if !strings.Contains(pr, "## 概要") || !strings.Contains(pr, "Done") {
 		t.Fatalf("japanese PR body = %q", pr)
+	}
+}
+
+func TestArtifactTemplates_PRBodyIsTruncatedForGitHubLimit(t *testing.T) {
+	record := &orchestrationRecord{
+		ID:             "run-0123456789abcdef",
+		BaseBranch:     "main",
+		OutputLanguage: "ja",
+		Agents:         []string{"release-manager"},
+		Strategy:       "sequential",
+		GitHub: &orchestrationGitHubState{
+			Repo:       "owner/repo",
+			BranchName: "arun/run-0123456789abcdef",
+			PRTemplate: "default",
+			PRBase:     "main",
+			IssueURL:   "https://github.com/owner/repo/issues/1",
+		},
+		Summary: strings.Repeat("長いサマリーです。", 10000),
+	}
+
+	body := orchestrationPRBody(record)
+	if len([]byte(body)) > githubPullRequestBodyMaxBytes {
+		t.Fatalf("PR body bytes = %d, want <= %d", len([]byte(body)), githubPullRequestBodyMaxBytes)
+	}
+	if !strings.Contains(body, "GitHub の本文サイズ上限") {
+		start := len(body) - 400
+		if start < 0 {
+			start = 0
+		}
+		t.Fatalf("PR body missing truncation notice: %q", body[start:])
+	}
+	if !strings.Contains(body, "run-0123456789abcdef") {
+		t.Fatalf("PR body missing run metadata")
 	}
 }
 
