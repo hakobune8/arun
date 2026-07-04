@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [v1.5.10] - 2026-07-04
+
+### Fixed
+- Capped generated orchestration pull request bodies before GitHub API
+  submission so long implementation-heavy scrum summaries no longer fail PR
+  creation with GitHub body size validation errors.
+
+### Changed
+- Strengthened the built-in `implementation-heavy-scrum` planning gate so
+  qualitative user requirements are translated into product/design acceptance
+  criteria before implementation.
+- Added game and UX-heavy guidance requiring a concrete differentiating
+  mechanic, interaction, or content choice when the user request calls for one.
+- Added artifact hygiene guidance to avoid committing parent prompt text, ARUN
+  workspace archives, generated run artifacts, or compiled binaries into target
+  repositories.
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.10.
+
 ## [v1.5.9] - 2026-07-04
 
 ### Changed
