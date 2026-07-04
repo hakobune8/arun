@@ -773,8 +773,7 @@ func recoverFrontendDocs(root, description string) (string, error) {
 	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o755); err != nil {
 		return "", fmt.Errorf("create docs dir: %w", err)
 	}
-	projectName := inferProjectName(description, root)
-	title := titleCase(strings.ReplaceAll(projectName, "-", " "))
+	title := inferFrontendProductTitle(description, root)
 	if strings.Contains(strings.ToLower(description), "empty invaders") {
 		title = "Empty Invaders"
 	}
@@ -922,6 +921,49 @@ func repairDockerfileGoSumAssumption(root string) error {
 	return nil
 }
 
+func inferFrontendProductTitle(description, root string) string {
+	if title := readHTMLTitle(filepath.Join(root, "index.html")); title != "" && !isDeploymentTopicTitle(title) {
+		return title
+	}
+	projectName := inferProjectName(description, root)
+	title := titleCase(strings.ReplaceAll(projectName, "-", " "))
+	if isDeploymentTopicTitle(title) && requestsInvaderExperience(description) {
+		return "One-Button Invaders"
+	}
+	if isDeploymentTopicTitle(title) {
+		return titleCase(strings.ReplaceAll(filepath.Base(root), "-", " "))
+	}
+	return title
+}
+
+func readHTMLTitle(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	lower := strings.ToLower(string(data))
+	start := strings.Index(lower, "<title>")
+	end := strings.Index(lower, "</title>")
+	if start < 0 || end <= start {
+		return ""
+	}
+	title := strings.TrimSpace(string(data[start+len("<title>") : end]))
+	if strings.Contains(title, "<") || strings.Contains(title, ">") {
+		return ""
+	}
+	return title
+}
+
+func isDeploymentTopicTitle(title string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(strings.ReplaceAll(title, "-", " ")))
+	switch normalized {
+	case "kubernetes", "k8s", "docker", "helm", "deployment", "deploy", "devops", "frontend", "backend", "static", "container", "ci", "ci cd", "docs", "documentation", "testing":
+		return true
+	default:
+		return false
+	}
+}
+
 func frontendReadme(title, description string) string {
 	return strings.Join([]string{
 		"# " + title,
@@ -949,14 +991,10 @@ func frontendReadme(title, description string) string {
 		"",
 		"Both scripts use `node --check` and do not require package installation.",
 		"",
-		"## Scenario",
-		"",
-		strings.TrimSpace(description),
-		"",
 	}, "\n")
 }
 
-func frontendProductBrief(title, description string) string {
+func frontendProductBrief(title, _ string) string {
 	return strings.Join([]string{
 		"# Product Brief: " + title,
 		"",
@@ -982,10 +1020,6 @@ func frontendProductBrief(title, description string) string {
 		"- Multiplayer.",
 		"- External score services.",
 		"- Complex level progression.",
-		"",
-		"## Source Request",
-		"",
-		strings.TrimSpace(description),
 		"",
 	}, "\n")
 }

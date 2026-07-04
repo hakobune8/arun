@@ -833,6 +833,36 @@ func TestRecoverFrontendStaticAppUsesInvaderProductConceptTitle(t *testing.T) {
 	}
 }
 
+func TestRecoverFrontendDocsKeepsExistingStaticAppTitle(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if _, err := recoverFrontendStaticApp(repo, "新規性のあるインベーダーゲームを作成する"); err != nil {
+		t.Fatalf("recoverFrontendStaticApp() error = %v", err)
+	}
+	description := "Sprint 3 documentation: update README and docs with Kubernetes deploy notes. README H1 must be the product name or repository name, not a deployment topic such as Kubernetes."
+	if _, err := recoverFrontendDocs(repo, description); err != nil {
+		t.Fatalf("recoverFrontendDocs() error = %v", err)
+	}
+	readme, err := os.ReadFile(filepath.Join(repo, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(readme), "# One-Button Invaders\n") {
+		t.Fatalf("README title drifted from existing app title:\n%s", readme)
+	}
+	brief, err := os.ReadFile(filepath.Join(repo, "docs", "product-brief.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(brief), "# Product Brief: One-Button Invaders") {
+		t.Fatalf("product brief title drifted from existing app title:\n%s", brief)
+	}
+	if strings.Contains(string(brief), "Sprint 3 documentation") || strings.Contains(string(brief), "## Source Request") {
+		t.Fatalf("product brief includes copied task prompt text:\n%s", brief)
+	}
+}
+
 func TestRecoverBuiltInSubtask_StaticFrontendFallbackGatePasses(t *testing.T) {
 	t.Parallel()
 
@@ -1139,6 +1169,40 @@ func TestRecoverDockerfileCopiesStaticFrontendAssetsWhenPresent(t *testing.T) {
 	}
 }
 
+func TestDockerQualityGateFailsWhenStaticAssetsAreMissingFromRuntimeImage(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"index.html":                    "<!doctype html><title>Game</title>",
+		filepath.Join("src", "main.js"): "console.log('game')\n",
+		"Dockerfile": `FROM golang:1.23-alpine AS builder
+WORKDIR /app
+COPY . .
+RUN go build -o /app/server .
+FROM alpine:3.21
+WORKDIR /app
+COPY --from=builder /app/server .
+CMD ["./server"]
+`,
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "docker",
+		Description: "Add Dockerfile for a Go server that serves static frontend assets.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed without runtime static asset copies: %+v", status)
+	}
+}
+
 func TestRecoverDockerfileSkipsStaticAssetCopiesWithoutFrontend(t *testing.T) {
 	t.Parallel()
 
@@ -1227,6 +1291,26 @@ func TestHelmQualityGateFailsWithoutChart(t *testing.T) {
 	}))
 	if status.Passed {
 		t.Fatalf("quality gate passed without chart: %+v", status)
+	}
+}
+
+func TestHelmQualityGateFailsForEmptyChart(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	chartDir := filepath.Join(repo, "charts", "inverter")
+	if err := os.MkdirAll(chartDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(chartDir, "Chart.yaml"), []byte("apiVersion: v2\nname: inverter\ntype: application\nversion: 0.1.0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "helm",
+		Description: "Add Helm chart for Kubernetes deployment.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed for empty chart: %+v", status)
 	}
 }
 

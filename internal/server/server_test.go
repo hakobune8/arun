@@ -1737,6 +1737,59 @@ func TestGitPushHeadRefreshesRemoteTrackingRef(t *testing.T) {
 	}
 }
 
+func TestGitPushHeadForceRefreshesRewrittenRemoteTrackingRef(t *testing.T) {
+	remote := filepath.Join(t.TempDir(), "remote.git")
+	runGitTestCommand(t, t.TempDir(), "init", "--bare", remote)
+
+	repo := t.TempDir()
+	runGitTestCommand(t, repo, "init")
+	runGitTestCommand(t, repo, "config", "user.email", "arun@example.invalid")
+	runGitTestCommand(t, repo, "config", "user.name", "ARUN")
+	runGitTestCommand(t, repo, "remote", "add", "origin", remote)
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("one\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGitTestCommand(t, repo, "add", ".")
+	runGitTestCommand(t, repo, "commit", "-m", "one")
+
+	const branch = "arun/run-test"
+	if err := gitPushHead(repo, "", branch); err != nil {
+		t.Fatalf("first gitPushHead: %v", err)
+	}
+
+	peer := t.TempDir()
+	runGitTestCommand(t, peer, "clone", remote, ".")
+	runGitTestCommand(t, peer, "config", "user.email", "arun@example.invalid")
+	runGitTestCommand(t, peer, "config", "user.name", "ARUN")
+	runGitTestCommand(t, peer, "checkout", "--orphan", "rewrite")
+	if err := os.WriteFile(filepath.Join(peer, "README.md"), []byte("remote rewrite\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGitTestCommand(t, peer, "add", ".")
+	runGitTestCommand(t, peer, "commit", "-m", "remote rewrite")
+	runGitTestCommand(t, peer, "push", "--force", "origin", "HEAD:refs/heads/"+branch)
+	rewrittenRemote := strings.TrimSpace(runGitTestCommand(t, peer, "rev-parse", "HEAD"))
+
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("local checkpoint\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGitTestCommand(t, repo, "add", ".")
+	runGitTestCommand(t, repo, "commit", "-m", "local checkpoint")
+	if err := gitPushHead(repo, "", branch); err != nil {
+		t.Fatalf("gitPushHead after remote rewrite: %v", err)
+	}
+
+	head := strings.TrimSpace(runGitTestCommand(t, repo, "rev-parse", "HEAD"))
+	tracking := strings.TrimSpace(runGitTestCommand(t, repo, "rev-parse", "refs/remotes/origin/"+branch))
+	if tracking != head {
+		t.Fatalf("tracking ref after rewritten push = %s, want %s", tracking, head)
+	}
+	remoteHead := strings.TrimSpace(runGitTestCommand(t, repo, "ls-remote", "origin", "refs/heads/"+branch))
+	if !strings.HasPrefix(remoteHead, head+"\t") {
+		t.Fatalf("remote head = %q, want %s after replacing rewritten remote %s", remoteHead, head, rewrittenRemote)
+	}
+}
+
 func runGitTestCommand(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
