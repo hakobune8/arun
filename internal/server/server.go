@@ -3035,7 +3035,7 @@ func gitFetchRemoteBranchRef(dir, token, branch string) error {
 	if err := validateGitRef(branch); err != nil {
 		return err
 	}
-	refspec := "refs/heads/" + branch + ":refs/remotes/origin/" + branch
+	refspec := "+refs/heads/" + branch + ":refs/remotes/origin/" + branch
 	// codeql[go/command-injection]
 	cmd := exec.Command("git", "fetch", "origin", refspec)
 	return runPreparedGitCommand(cmd, dir, token)
