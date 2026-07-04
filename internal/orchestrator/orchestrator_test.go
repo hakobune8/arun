@@ -814,6 +814,23 @@ func TestRecoverFrontendStaticAppUsesInvaderProductConceptTitle(t *testing.T) {
 	if !strings.Contains(string(pkg), `"name": "one-button-invaders"`) {
 		t.Fatalf("package.json does not use invader product package name:\n%s", pkg)
 	}
+	mainJS, err := os.ReadFile(filepath.Join(repo, "src", "main.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(mainJS), `gravity: "floor"`) ||
+		!strings.Contains(string(mainJS), "flipGravity") ||
+		!strings.Contains(string(mainJS), "laneMatched") {
+		t.Fatalf("main.js does not implement gravity-lane mechanic:\n%s", mainJS)
+	}
+	brief, err := os.ReadFile(filepath.Join(repo, "docs", "product-brief.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(brief), "# Product Brief: One-Button Invaders") ||
+		!strings.Contains(string(brief), "gravity-lane flip mechanic") {
+		t.Fatalf("product brief does not describe generated product concept:\n%s", brief)
+	}
 }
 
 func TestRecoverBuiltInSubtask_StaticFrontendFallbackGatePasses(t *testing.T) {
