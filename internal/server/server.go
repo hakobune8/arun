@@ -1725,17 +1725,17 @@ func implementationHeavyScrumPlan(record *orchestrationRecord) *orchestrator.Tas
 	return &orchestrator.TaskPlan{
 		Description: "Implementation-heavy scrum workflow with three PDCA-style sprint checkpoints. Each sprint runs planning, implementation, QA, adjustment planning, remediation, reporting, and one checkpoint commit in one pull request.",
 		Subtasks: []orchestrator.Subtask{
-			step("sprint-1-plan", "analyst", "Sprint 1 product planning and design: inspect the repository state and translate the user's request into a concise product concept before implementation. Identify the target user, core loop or primary workflow, differentiating mechanic or value proposition, non-goals, and sprint-level acceptance criteria. If the request contains qualitative words such as novel, playful, simple, production-ready, or Japanese equivalents, turn each into observable behavior or review criteria. For games or UX-heavy work, define the unique mechanic, interaction model, visual direction, and how QA can verify that the result is more than a generic scaffold. Define validation commands, the files expected to change, and a simple repository layout that separates backend, frontend, deployment, and docs. For new repositories, prefer cmd/<app> or internal/ for Go code and web/ or static/ for browser assets instead of placing every artifact at the repository root. Do not implement code in this planning stage; leave concrete file changes to the following backend and frontend stages."),
-			step("sprint-1-backend", "go-backend", "Sprint 1 coding: create or improve a minimal Go net/http server with a /healthz health endpoint, one product endpoint or static handler, focused tests, clear errors, and simple configuration. Preserve the Sprint 1 product concept and acceptance criteria rather than building a generic scaffold. For an empty repository, initialize the Go module and keep the service easy to containerize.", "sprint-1-plan"),
-			step("sprint-1-frontend", "frontend", "Sprint 1 coding: create or connect a minimal user-facing frontend/static experience that can be served by the project. Put browser assets under a dedicated web/, static/, or assets/ directory unless existing conventions require otherwise. Make the primary path inspectable in a browser, avoid placeholder-only UI, preserve backend work, and implement the differentiating mechanic, interaction model, or user-facing value defined in Sprint 1 planning.", "sprint-1-backend"),
-			step("sprint-1-qa", "qa", "Sprint 1 QA: run available tests or smoke checks, verify the acceptance criteria, primary user path, differentiating mechanic or value proposition, and repository layout clarity, record gaps in repository artifacts, and explicitly call out backend/frontend follow-up work for this sprint adjustment pass. Treat a generic scaffold that does not satisfy the user's core product request as a release-blocking gap.", "sprint-1-frontend"),
+			step("sprint-1-plan", "analyst", "Sprint 1 product planning and design: inspect the repository state and translate the user's request into one concise product concept before implementation. Create or update a single source-of-truth product brief and do not introduce competing concepts, alternate product names, or contradictory mechanics in later docs. Identify the target user, core loop or primary workflow, differentiating mechanic or value proposition, non-goals, and sprint-level acceptance criteria. If the request contains qualitative words such as novel, playful, simple, production-ready, or Japanese equivalents, turn each into observable behavior or review criteria. For games or UX-heavy work, define the unique mechanic, interaction model, visual direction, and how QA can verify that the result is more than a generic scaffold. Define validation commands, the files expected to change, and a simple repository layout that separates backend, frontend, deployment, and docs. For new repositories, prefer cmd/<app> or internal/ for Go code and web/ or static/ for browser assets instead of placing every artifact at the repository root. Do not implement code in this planning stage; leave concrete file changes to the following backend and frontend stages."),
+			step("sprint-1-backend", "go-backend", "Sprint 1 coding: create or improve a minimal Go net/http server with a /healthz health endpoint, one product endpoint or static handler, focused tests, clear errors, and simple configuration. Preserve the Sprint 1 product concept and acceptance criteria rather than building a generic scaffold. For an empty repository, initialize the Go module and make `/` serve the primary frontend or product response that matches the selected concept; avoid a root handler that returns unrelated placeholder text when a browser UI exists.", "sprint-1-plan"),
+			step("sprint-1-frontend", "frontend", "Sprint 1 coding: create or connect a minimal user-facing frontend/static experience that can be served by the project. Put browser assets under a dedicated web/, static/, or assets/ directory unless existing conventions require otherwise. Make the primary path inspectable in a browser, avoid placeholder-only UI, preserve backend work, and implement the differentiating mechanic, interaction model, or user-facing value defined in Sprint 1 planning. Do not create an unconnected alternate frontend tree; app title, visible labels, README, and implementation behavior must use the same product concept.", "sprint-1-backend"),
+			step("sprint-1-qa", "qa", "Sprint 1 QA: run available tests or smoke checks, verify the acceptance criteria, primary user path, differentiating mechanic or value proposition, and repository layout clarity, record gaps in repository artifacts, and explicitly call out backend/frontend follow-up work for this sprint adjustment pass. Compare the product brief against README, app title, visible UI labels, Go server root behavior, frontend code, and docs; treat concept drift, unserved alternate UI files, generic scaffolds, or missing differentiating mechanics as release-blocking gaps.", "sprint-1-frontend"),
 			step("sprint-1-adjust-plan", "analyst", "Sprint 1 adjustment planning: read Sprint 1 QA evidence and turn failures or missing baseline behavior into concise backend/frontend remediation notes. Do not implement code in this planning stage.", "sprint-1-qa"),
 			step("sprint-1-backend-fix", "go-backend", "Sprint 1 remediation: address QA findings that require backend, API, test, or integration changes. Keep the repository runnable from a fresh checkout.", "sprint-1-adjust-plan"),
 			step("sprint-1-frontend-fix", "frontend", "Sprint 1 remediation: address QA findings that require frontend or static asset changes, preserving the backend fixes from this sprint.", "sprint-1-backend-fix"),
 			step("sprint-1-report", "release-manager", "Sprint 1 reporting: summarize delivered baseline, QA evidence, remediation performed, and remaining backlog before the Sprint 1 checkpoint commit. Keep the report focused on product outcome and validation evidence; do not paste the full original task prompt.", "sprint-1-frontend-fix"),
 
-			step("sprint-2-plan", "analyst", "Sprint 2 planning: read Sprint 1 report and repository state, then produce concise product-design refinement notes, deployment packaging notes, and unresolved product gaps. Confirm whether the implemented behavior still matches the user's original intent and differentiating requirement. Do not implement code in this planning stage.", "sprint-1-report"),
-			step("sprint-2-backend", "go-backend", "Sprint 2 coding: harden app startup, configuration, tests, and user-facing behavior before packaging. Address remaining product or design gaps from Sprint 1 if they block the user's requested experience, and avoid broad rewrites that reduce reviewability.", "sprint-2-plan"),
+			step("sprint-2-plan", "analyst", "Sprint 2 planning: read Sprint 1 report and repository state, then produce concise product-design refinement notes, deployment packaging notes, and unresolved product gaps. Confirm whether the implemented behavior still matches the user's original intent, the single product brief, and the differentiating requirement. Do not rename the product concept or introduce a second mechanic unless the first was explicitly rejected as a QA blocker. Do not implement code in this planning stage.", "sprint-1-report"),
+			step("sprint-2-backend", "go-backend", "Sprint 2 coding: harden app startup, configuration, tests, and user-facing behavior before packaging. Address remaining product or design gaps from Sprint 1 if they block the user's requested experience, and avoid broad rewrites that reduce reviewability. Keep `/`, health endpoints, tests, Docker, and Helm aligned with the same primary product path.", "sprint-2-plan"),
 			step("sprint-2-docker", "docker", "Sprint 2 coding: add or improve a Dockerfile and container-focused run instructions for the application produced so far. Keep layers deterministic, avoid secret leakage, and make the image runnable with documented ports and health checks.", "sprint-2-backend"),
 			step("sprint-2-helm", "helm", "Sprint 2 coding: add or improve a Helm chart suitable for deploying this application into the same Kubernetes environment as ARUN. Include values for image, service, probes, resources, and labels. Ingress is not required.", "sprint-2-docker"),
 			step("sprint-2-kubernetes", "kubernetes", "Sprint 2 coding: add Kubernetes Deployment and Service manifests or chart templates for the application. Include selectors, probes where practical, resource defaults, and operational notes. Avoid ingress unless explicitly requested.", "sprint-2-helm"),
@@ -1746,11 +1746,11 @@ func implementationHeavyScrumPlan(record *orchestrationRecord) *orchestrator.Tas
 
 			step("sprint-3-plan", "analyst", "Sprint 3 planning: read Sprint 2 report and repository state, then produce concise product-readiness, CI, documentation, final QA, review, and release-readiness notes. Re-check the user request against the actual product experience and identify any remaining design gap before final polish. Do not implement code in this planning stage.", "sprint-2-report"),
 			step("sprint-3-devops", "devops", "Sprint 3 coding: add or improve GitHub Actions CI so future pull requests can continuously run the available backend/frontend/container checks. Keep workflows minimal, reproducible, and aligned with local validation commands.", "sprint-3-plan"),
-			step("sprint-3-docs", "docs", "Sprint 3 documentation: update README or docs with a product-centered overview, primary user walkthrough, acceptance criteria status, local run, test, Docker, Helm/Kubernetes deploy, rollback or operations notes, and reviewer guidance. Explain what was built and how it behaves before listing commands. Keep README concise, move detailed procedures into focused docs, remove duplicated or stale instructions, and remove any copied parent-task prompt text from repository docs.", "sprint-3-devops"),
-			step("sprint-3-qa", "qa", "Sprint 3 QA: run final smoke and validation checks across app, CI, docs, Docker, Helm, and Kubernetes artifacts. Verify reviewer-facing setup from a fresh checkout perspective, check that frontend/backend/deployment/docs layout is understandable, and record any release-blocking gaps for this sprint adjustment pass.", "sprint-3-docs"),
+			step("sprint-3-docs", "docs", "Sprint 3 documentation: update README or docs with a product-centered overview, primary user walkthrough, acceptance criteria status, local run, test, Docker, Helm/Kubernetes deploy, rollback or operations notes, and reviewer guidance. Explain what was built and how it behaves before listing commands. Keep README concise, move detailed procedures into focused docs, remove duplicated or stale instructions, remove copied parent-task prompt text, and remove links to non-existent sprint reports or operations docs. Documentation must describe the implemented product, not an aspirational or alternate concept.", "sprint-3-devops"),
+			step("sprint-3-qa", "qa", "Sprint 3 QA: run final smoke and validation checks across app, CI, docs, Docker, Helm, and Kubernetes artifacts. Verify reviewer-facing setup from a fresh checkout perspective, check that frontend/backend/deployment/docs layout is understandable, and record any release-blocking gaps for this sprint adjustment pass. Include a product coherence check: the selected product brief, README, app title, served UI, source files, acceptance criteria status, and validation evidence must agree on the same concept and differentiating mechanic.", "sprint-3-docs"),
 			step("sprint-3-adjust-plan", "analyst", "Sprint 3 adjustment planning: read final QA evidence and convert release-blocking issues into concise remediation notes before review. Do not implement code in this planning stage.", "sprint-3-qa"),
 			step("sprint-3-backend-fix", "go-backend", "Sprint 3 remediation: fix any final app, test, startup, or integration issues discovered by QA before review.", "sprint-3-adjust-plan"),
-			step("sprint-3-review", "reviewer", "Sprint 3 review: inspect the final diff for correctness, maintainability, missing tests, user-facing completeness, repository structure, documentation duplication, accidental binary/workspace artifacts, operational safety, and deployment risks. Leave actionable notes in repository artifacts where appropriate.", "sprint-3-backend-fix"),
+			step("sprint-3-review", "reviewer", "Sprint 3 review: inspect the final diff for correctness, maintainability, missing tests, user-facing completeness, repository structure, documentation duplication, accidental binary/workspace artifacts, product concept drift, unserved alternate UI files, broken documentation links, operational safety, and deployment risks. Leave actionable notes in repository artifacts where appropriate.", "sprint-3-backend-fix"),
 			step("sprint-3-report", "release-manager", "Sprint 3 reporting: produce a concise final report covering what was built, acceptance criteria status, the three sprint checkpoints, validation results, GitHub artifacts, residual risks, and remaining backlog. Keep PR-ready output short enough for GitHub and link to detailed docs instead of embedding full sprint logs.", "sprint-3-review"),
 		},
 	}
@@ -3292,36 +3292,38 @@ Target baseline for a new repository:
 
 Quality bar:
 - Start with product planning, not scaffolding. Translate the user's requested value into a concrete concept, user, core loop or workflow, differentiating behavior, non-goals, and acceptance criteria before coding.
+- Keep one product concept as the source of truth. Do not create multiple competing product briefs, alternate product names, or contradictory differentiating mechanics across README, docs, UI labels, and code.
 - When the request includes qualitative intent such as novelty, fun, polish, simplicity, production readiness, or a language-specific equivalent, define observable review criteria for that intent and verify them in QA.
 - For games or UX-heavy apps, implement at least one concrete mechanic, interaction, or content choice that makes the result specific to the request. A generic shell with renamed labels is not enough.
 - Define sprint-level acceptance criteria before implementing and verify them in QA.
 - Prefer cohesive, reviewer-friendly changes over broad generated scaffolding.
 - Keep generated code simple, idiomatic, and runnable from a fresh checkout.
 - Keep frontend, backend, deployment, and documentation concerns separated in the repository layout unless the existing project convention clearly differs. Avoid mixing browser assets, Go server code, Helm charts, and narrative docs in one flat directory when a clearer structure is possible.
+- Serve the primary user-facing experience from the main application path. Avoid creating unconnected alternate frontend trees or a Go root handler that returns placeholder text while the real UI lives elsewhere.
 - Avoid duplicated documentation. Use README as the short entry point and link to focused docs for testing, deployment, operations, and sprint reports.
-- Make outcome documentation product-centered: explain the behavior delivered, the user journey, important implementation decisions, validation evidence, and remaining product gaps. Avoid filling docs with generic process narration or repeated command lists.
+- Make outcome documentation product-centered: explain the behavior delivered, the user journey, important implementation decisions, validation evidence, and remaining product gaps. Avoid filling docs with generic process narration, repeated command lists, aspirational alternate concepts, or links to files that do not exist.
 - Do not copy the full parent task, prompt text, ARUN run workspace, generated archive, or compiled binaries into the target repository. Summarize requirements and commit only source, configuration, tests, docs, and intentional assets.
 - Record exact validation commands and outcomes, including skipped checks and why they were skipped.
-- Treat broken tests, missing startup instructions, non-rendering UI, invalid Helm/Kubernetes output, and unclear next steps as release-blocking gaps.
+- Treat broken tests, missing startup instructions, non-rendering UI, invalid Helm/Kubernetes output, concept drift between planning/docs/code, unserved alternate UI files, broken docs links, and unclear next steps as release-blocking gaps.
 
 Sprint 1:
 - Inspect repository state and choose the smallest coherent product increment.
-- Produce a concise product/design brief before implementation. Include the intended user, core loop or workflow, differentiating behavior, acceptance criteria, non-goals, and how QA will judge the requested value.
-- For an empty repository, start with a minimal Go server plus a lightweight frontend or static response that can be opened, reviewed, and validated without external services.
+- Produce a concise product/design brief before implementation. Include the intended user, core loop or workflow, differentiating behavior, acceptance criteria, non-goals, and how QA will judge the requested value. This brief is the single source of truth for later implementation and documentation.
+- For an empty repository, start with a minimal Go server plus a lightweight frontend or static response that can be opened, reviewed, validated without external services, and served by the main app route.
 - Decide the primary implementation path from repository evidence and define the acceptance criteria for the first user-visible slice. Use backend, frontend, documentation, or a combination only when it fits the repository.
 - Implement a minimal working slice with setup or usage documentation and a repository layout that keeps backend/server code, frontend/static assets, charts/manifests, and docs easy to distinguish.
-- Review and smoke test the slice.
+- Review and smoke test the slice, including whether visible product title, README, source behavior, and acceptance criteria all match the same concept.
 
 Sprint 2:
 - Extend the slice with one meaningful capability, test, CI check, containerization, or Kubernetes integration.
 - Keep changes cohesive and easy to review.
 - Update documentation and run validation.
-- Review risks, gaps, and follow-up work.
+- Review risks, gaps, and follow-up work. Preserve the Sprint 1 product concept unless QA explicitly found it invalid.
 
 Sprint 3:
 - Stabilize the result, improve developer ergonomics, add or refine Helm/Kubernetes deploy artifacts, and remove obvious rough edges.
 - Ensure README or docs explain how to run and verify the work without repeating the same long instructions in multiple files.
-- Verify the final result from a fresh-checkout reviewer perspective.
+- Verify the final result from a fresh-checkout reviewer perspective, including product coherence across README, docs, served UI, source files, tests, and deployment artifacts.
 - Produce final review, smoke-test notes, and a stakeholder report in the selected output language or the repository's usual language.
 
 Expected output:
@@ -3332,6 +3334,7 @@ Expected output:
 - Commands run and validation results.
 - Acceptance criteria status, residual risks, and known limitations.
 - Repository layout summary, including where backend, frontend, deployment, and docs live.
+- Product coherence status: confirm the single concept, app title, primary served path, differentiating mechanic, and docs all match.
 - Final backlog for the next human-led sprint.`,
 			Variables: []scenarioTemplateVariable{
 				{Name: "repo", Label: "Repository", Placeholder: "owner/repo", Required: true},
@@ -3475,36 +3478,38 @@ Operating mode: 新規または sandbox repository 向けの build-first。安�
 
 Quality bar:
 - Scaffold から始めず、product planning から始めてください。ユーザーが求める価値を、具体的な concept、対象 user、core loop または workflow、差別化される behavior、non-goals、acceptance criteria に分解してから実装してください。
+- Product concept は 1 つだけを source of truth にしてください。README、docs、UI labels、code の間で複数の product brief、別名の product name、矛盾した差別化 mechanic を作らないでください。
 - 「新規性」「楽しい」「ポップ」「シンプル」「production-ready」のような定性的意図が含まれる場合は、それぞれを review 可能な observable criteria に変換し、QA で確認してください。
 - Game または UX-heavy app では、要求に固有の mechanic、interaction、content choice を少なくとも 1 つ実装してください。label を変えただけの generic shell は不十分です。
 - 実装前に sprint-level acceptance criteria を定義し、QA で確認してください。
 - 広い generated scaffold より、cohesive で reviewer が追いやすい変更を優先してください。
 - 生成 code は単純、idiomatic、fresh checkout から runnable にしてください。
 - 既存 convention が明確に違わない限り、frontend、backend、deployment、documentation の関心を repository layout 上で分離してください。Browser assets、Go server code、Helm charts、説明 docs を 1 つの flat directory に混在させることは避けてください。
+- Main application path から primary user-facing experience を提供してください。実際の UI が別場所にあるのに Go root handler が placeholder text を返す構成や、接続されていない別 frontend tree は避けてください。
 - 重複 documentation を避けてください。README は短い入口として使い、testing、deployment、operations、sprint reports は focused docs へ link してください。
-- 成果物側の documentation は product-centered にしてください。実装された behavior、user journey、重要な implementation decisions、validation evidence、残っている product gaps を説明し、generic process narration や command list の繰り返しで埋めないでください。
+- 成果物側の documentation は product-centered にしてください。実装された behavior、user journey、重要な implementation decisions、validation evidence、残っている product gaps を説明し、generic process narration、command list の繰り返し、実装されていない別 concept、存在しない file への link で埋めないでください。
 - 親タスク全文、prompt text、ARUN run workspace、generated archive、compiled binary を target repository にコピーしないでください。Requirements は要約し、source、configuration、tests、docs、意図した assets のみ commit してください。
 - 実行した validation commands と outcomes を正確に記録し、skip した check は理由を書いてください。
-- 壊れた tests、startup 手順不足、render できない UI、無効な Helm/Kubernetes output、不明瞭な next steps は release-blocking gaps として扱ってください。
+- 壊れた tests、startup 手順不足、render できない UI、無効な Helm/Kubernetes output、planning/docs/code 間の concept drift、接続されていない別 UI、壊れた docs link、不明瞭な next steps は release-blocking gaps として扱ってください。
 
 Sprint 1:
 - Repository state を調査し、最小で一貫した product increment を選んでください。
-- 実装前に concise な product/design brief を作成してください。対象 user、core loop または workflow、差別化 behavior、acceptance criteria、non-goals、要求された価値を QA がどう判定するかを含めてください。
-- 空 repository の場合は、外部 service なしで開いて review/validation できる minimal Go server と lightweight frontend または static response から始めてください。
+- 実装前に concise な product/design brief を作成してください。対象 user、core loop または workflow、差別化 behavior、acceptance criteria、non-goals、要求された価値を QA がどう判定するかを含めてください。この brief を後続 implementation/documentation の唯一の source of truth にしてください。
+- 空 repository の場合は、外部 service なしで開いて review/validation でき、main app route から提供される minimal Go server と lightweight frontend または static response から始めてください。
 - Repository evidence から primary implementation path を決め、最初の user-visible slice の acceptance criteria を定義してください。Backend、frontend、documentation、またはその組み合わせは repository に合う場合のみ使ってください。
 - Setup または usage documentation を含む minimal working slice を実装し、backend/server code、frontend/static assets、charts/manifests、docs が区別しやすい repository layout にしてください。
-- Slice を review し、smoke test してください。
+- Slice を review し、smoke test してください。visible product title、README、source behavior、acceptance criteria が同じ concept を指しているかも確認してください。
 
 Sprint 2:
 - Slice に意味のある capability、test、CI check、containerization、または Kubernetes integration を 1 つ追加してください。
 - 変更を cohesive で review しやすく保ってください。
 - Documentation を更新し、validation を実行してください。
-- Risks、gaps、follow-up work を review してください。
+- Risks、gaps、follow-up work を review してください。QA が明示的に無効と判定していない限り Sprint 1 product concept を維持してください。
 
 Sprint 3:
 - Result を安定化し、developer ergonomics を改善し、Helm/Kubernetes deploy artifacts を追加または調整し、明らかな rough edges を取り除いてください。
 - README または docs で実行方法と検証方法を説明し、同じ長い手順を複数 file に繰り返さないでください。
-- Fresh checkout の reviewer perspective で final result を確認してください。
+- Fresh checkout の reviewer perspective で final result を確認してください。README、docs、served UI、source files、tests、deployment artifacts が product として一貫しているかも確認してください。
 - 選択された output language または repository の通常言語で final review、smoke-test notes、stakeholder report を作成してください。
 
 Expected output:
@@ -3515,6 +3520,7 @@ Expected output:
 - 実行した commands と validation results。
 - Acceptance criteria status、residual risks、known limitations。
 - Backend、frontend、deployment、docs がどこにあるかを示す repository layout summary。
+- Product coherence status: single concept、app title、primary served path、differentiating mechanic、docs が一致していることを確認してください。
 - 次の human-led sprint の final backlog。`,
 		},
 	}

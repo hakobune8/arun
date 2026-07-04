@@ -1281,7 +1281,7 @@ func TestServer_OrchestrateTemplates_ReturnsBuiltIns(t *testing.T) {
 	if strings.Contains(heavy.TaskTemplate, "Japanese stakeholder report") {
 		t.Fatalf("implementation-heavy-scrum template should not force a Japanese stakeholder report")
 	}
-	for _, want := range []string{"Go HTTP server", "Helm chart", "Kubernetes manifests", "GitHub Actions CI", "Quality bar", "Acceptance criteria", "repository layout", "duplicated documentation", "product-centered"} {
+	for _, want := range []string{"Go HTTP server", "Helm chart", "Kubernetes manifests", "GitHub Actions CI", "Quality bar", "Acceptance criteria", "repository layout", "duplicated documentation", "product-centered", "source of truth", "Product coherence status"} {
 		if !strings.Contains(heavy.TaskTemplate, want) {
 			t.Fatalf("implementation-heavy-scrum task missing %q", want)
 		}
@@ -1320,7 +1320,7 @@ func TestServer_OrchestrateTemplates_LocalizesBuiltInsForJapaneseUI(t *testing.T
 	if !strings.Contains(heavy.Description, "sandbox リポジトリ") {
 		t.Fatalf("localized heavy description = %q", heavy.Description)
 	}
-	for _, want := range []string{"Quality bar", "acceptance criteria", "Fresh checkout", "repository layout", "重複 documentation", "product-centered"} {
+	for _, want := range []string{"Quality bar", "acceptance criteria", "Fresh checkout", "repository layout", "重複 documentation", "product-centered", "source of truth", "Product coherence status"} {
 		if !strings.Contains(heavy.TaskTemplate, want) {
 			t.Fatalf("localized implementation-heavy-scrum task missing %q", want)
 		}
@@ -1396,11 +1396,17 @@ func TestImplementationHeavyScrumPlan_UsesSprintStageWorkflow(t *testing.T) {
 	if !strings.Contains(byID["sprint-1-adjust-plan"].Description, "Sprint 1 QA") {
 		t.Fatalf("sprint-1-adjust-plan description = %q, want QA evidence handoff", byID["sprint-1-adjust-plan"].Description)
 	}
-	if !strings.Contains(byID["sprint-1-plan"].Description, "product concept") || !strings.Contains(byID["sprint-1-plan"].Description, "differentiating mechanic") {
+	if !strings.Contains(byID["sprint-1-plan"].Description, "product concept") || !strings.Contains(byID["sprint-1-plan"].Description, "differentiating mechanic") || !strings.Contains(byID["sprint-1-plan"].Description, "single source-of-truth product brief") {
 		t.Fatalf("sprint-1-plan description = %q, want product/design gate", byID["sprint-1-plan"].Description)
+	}
+	if !strings.Contains(byID["sprint-1-qa"].Description, "Compare the product brief against README") {
+		t.Fatalf("sprint-1-qa description = %q, want product coherence QA", byID["sprint-1-qa"].Description)
 	}
 	if !strings.Contains(byID["sprint-3-review"].Description, "accidental binary/workspace artifacts") {
 		t.Fatalf("sprint-3-review description = %q, want artifact hygiene check", byID["sprint-3-review"].Description)
+	}
+	if !strings.Contains(byID["sprint-3-review"].Description, "product concept drift") {
+		t.Fatalf("sprint-3-review description = %q, want concept drift review", byID["sprint-3-review"].Description)
 	}
 	if sprint, ok := scrumSprintCheckpoint("sprint-3-report"); !ok || sprint != 3 {
 		t.Fatalf("sprint-3-report checkpoint = %d/%v, want 3/true", sprint, ok)
