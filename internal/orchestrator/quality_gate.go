@@ -37,11 +37,13 @@ type QualityContentCheck struct {
 
 const frontendProjectPresenceCommand = `sh -c 'test -f package.json || test -f index.html || find src app pages components assets public styles -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" -o -name "*.vue" -o -name "*.svelte" -o -name "*.css" -o -name "*.html" \) -print -quit 2>/dev/null | grep -q .'`
 
-const frontendValidationCommand = `sh -c 'if [ -f package.json ]; then PM=npm; [ -f pnpm-lock.yaml ] && PM=pnpm; [ -f yarn.lock ] && PM=yarn; [ -f bun.lockb ] && PM=bun; if ! command -v node >/dev/null 2>&1 || ! command -v "$PM" >/dev/null 2>&1; then test -f docs/smoke-test.md || test -f docs/testing.md || test -f README.md || test -f src/main.js || test -f index.html; exit; fi; for script in lint typecheck test build; do if node -e "const p=require(\"./package.json\"); process.exit(p.scripts&&p.scripts[process.argv[1]]?0:1)" "$script"; then case "$PM:$script" in yarn:*) yarn "$script";; pnpm:*) pnpm "$script";; bun:*) bun run "$script";; *) npm run "$script";; esac; fi; done; fi'`
+const frontendValidationCommand = `sh -c 'if [ -f frontend/index.html ]; then test -f main.go && grep -Eq "frontend|static|FileServer" main.go || { echo "frontend/index.html exists but is not served by the Go entrypoint"; exit 1; }; fi; if [ -f package.json ]; then PM=npm; [ -f pnpm-lock.yaml ] && PM=pnpm; [ -f yarn.lock ] && PM=yarn; [ -f bun.lockb ] && PM=bun; if ! command -v node >/dev/null 2>&1 || ! command -v "$PM" >/dev/null 2>&1; then test -f docs/smoke-test.md || test -f docs/testing.md || test -f README.md || test -f src/main.js || test -f index.html; exit; fi; for script in lint typecheck test build; do if node -e "const p=require(\"./package.json\"); process.exit(p.scripts&&p.scripts[process.argv[1]]?0:1)" "$script"; then case "$PM:$script" in yarn:*) yarn "$script";; pnpm:*) pnpm "$script";; bun:*) bun run "$script";; *) npm run "$script";; esac; fi; done; fi'`
 
 const qaEvidenceCommand = `sh -c 'test -f docs/testing.md || test -f docs/smoke-test.md || test -f README.md || find test tests e2e cypress playwright -type f -print -quit 2>/dev/null | grep -q .'`
 
 const qaValidationCommand = `sh -c 'if [ -f package.json ]; then PM=npm; [ -f pnpm-lock.yaml ] && PM=pnpm; [ -f yarn.lock ] && PM=yarn; [ -f bun.lockb ] && PM=bun; if ! command -v node >/dev/null 2>&1 || ! command -v "$PM" >/dev/null 2>&1; then test -f docs/smoke-test.md || test -f docs/testing.md || test -f README.md; exit; fi; ran=0; for script in lint typecheck test build; do if node -e "const p=require(\"./package.json\"); process.exit(p.scripts&&p.scripts[process.argv[1]]?0:1)" "$script"; then ran=1; case "$PM:$script" in yarn:*) yarn "$script";; pnpm:*) pnpm "$script";; bun:*) bun run "$script";; *) npm run "$script";; esac; fi; done; test "$ran" = 1 || test -f docs/smoke-test.md || test -f README.md; elif [ -f go.mod ]; then if command -v go >/dev/null 2>&1; then go test ./...; else test -f main.go && grep -q "/healthz" main.go; fi; else test -f docs/testing.md || test -f docs/smoke-test.md || test -f README.md; fi'`
+
+const docsValidationCommand = `sh -c 'if [ -f docs/remediation_notes.md ]; then ! grep -Eiq "human-led sprint|コード実装は行わず|計画段階|implementation is deferred|no code changes" docs/remediation_notes.md; fi'`
 
 const goTestValidationCommand = `sh -c 'if command -v go >/dev/null 2>&1; then go test ./...; else test -f go.mod && test -f main.go && grep -q "/healthz" main.go; fi'`
 
@@ -106,10 +108,13 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 		}
 	case "docs":
 		if !isCanonicalGoServiceTask(subtask.Description) {
-			return nil
+			return &QualityGate{
+				ValidationCommands: []string{docsValidationCommand},
+			}
 		}
 		return &QualityGate{
-			RequiredFiles: []string{"README.md"},
+			RequiredFiles:      []string{"README.md"},
+			ValidationCommands: []string{docsValidationCommand},
 			ContentChecks: []QualityContentCheck{{
 				File:     "README.md",
 				Contains: []string{"/healthz", "go test", "go run"},

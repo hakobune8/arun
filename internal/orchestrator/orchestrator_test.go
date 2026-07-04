@@ -893,6 +893,59 @@ func TestRecoverBuiltInSubtask_StaticFrontendFallbackGatePasses(t *testing.T) {
 	}
 }
 
+func TestFrontendQualityGateFailsForUnservedFrontendIndex(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, "frontend"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join("frontend", "index.html"): "<!doctype html><title>Alternate</title>",
+		"main.go": `package main
+
+import "net/http"
+
+func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("placeholder"))
+	})
+}
+`,
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "frontend",
+		Description: "Add a browser game UI.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed with unserved frontend/index.html: %+v", status)
+	}
+}
+
+func TestDocsQualityGateFailsForDeferredRemediationNotes(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "docs", "remediation_notes.md"), []byte("実装は次の human-led sprint で実施します。\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "docs",
+		Description: "Sprint 3 documentation for generated product.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed with deferred remediation notes: %+v", status)
+	}
+}
+
 func TestRecoverBuiltInSubtask_FrontendTimeoutRecoversEmptyRepository(t *testing.T) {
 	repo := t.TempDir()
 	if err := os.WriteFile(filepath.Join(repo, "run.log"), []byte("runtime started\n"), 0o600); err != nil {

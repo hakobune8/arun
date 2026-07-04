@@ -3022,13 +3022,39 @@ func gitPushHead(dir, token, branch string) error {
 	if err := gitFetchRemoteBranchRef(dir, token, branch); err != nil {
 		slog.Debug("refresh remote branch ref before push failed", "branch", branch, "error", err)
 	}
+	remoteHead, err := gitRemoteBranchHead(dir, token, branch)
+	if err != nil {
+		return err
+	}
 	refspec := "HEAD:refs/heads/" + branch
+	lease := "--force-with-lease=refs/heads/" + branch + ":" + remoteHead
 	// codeql[go/command-injection]
-	cmd := exec.Command("git", "push", "--set-upstream", "origin", refspec, "--force-with-lease")
+	cmd := exec.Command("git", "push", "--set-upstream", "origin", refspec, lease)
 	if err := runPreparedGitCommand(cmd, dir, token); err != nil {
 		return err
 	}
 	return gitUpdateRemoteTrackingRefToHead(dir, token, branch)
+}
+
+func gitRemoteBranchHead(dir, token, branch string) (string, error) {
+	if err := validateGitRef(branch); err != nil {
+		return "", err
+	}
+	ref := "refs/heads/" + branch
+	// codeql[go/command-injection]
+	cmd := exec.Command("git", "ls-remote", "origin", ref)
+	out, err := runPreparedGitCommandOutput(cmd, dir, token)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(out) == "" {
+		return "", nil
+	}
+	fields := strings.Fields(out)
+	if len(fields) != 2 || fields[1] != ref || !gitObjectPattern.MatchString(fields[0]) {
+		return "", fmt.Errorf("unexpected remote branch ref for %s: %s", branch, out)
+	}
+	return fields[0], nil
 }
 
 func gitFetchRemoteBranchRef(dir, token, branch string) error {
