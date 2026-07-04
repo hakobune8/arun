@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [v1.5.14] - 2026-07-04
+
+### Fixed
+- Published implementation-heavy scrum sprint checkpoints only after the
+  checkpoint report subtask has completed successfully and the checkpoint commit
+  has been created. This prevents pre-checkpoint branch publishing from racing
+  the intended checkpoint push.
+- Reduced `/api/orchestrates` to lightweight list summaries so the Web UI List
+  tab stays responsive when many implementation-heavy runs have large subtasks,
+  results, events, and summaries. Full records remain available from
+  `/api/orchestrates/{id}`.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.14.
+
 ## [v1.5.13] - 2026-07-04
 
 ### Fixed
