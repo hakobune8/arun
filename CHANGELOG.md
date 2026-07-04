@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [v1.5.11] - 2026-07-04
+
+### Fixed
+- Added a deterministic repository hygiene pass before implementation-heavy
+  scrum sprint checkpoint commits and final pull request branch publishing.
+- Removed compiled binary artifacts such as ELF, Mach-O, and PE outputs from
+  generated target repositories before `git add .`.
+- Cleaned copied parent prompt blocks from generated Markdown files when they
+  include the observed `Parent task`, `Operating mode`, `Quality bar`, and
+  `Expected output` contamination markers.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.11.
+
 ## [v1.5.10] - 2026-07-04
 
 ### Fixed
