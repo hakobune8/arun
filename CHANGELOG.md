@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [v1.5.12] - 2026-07-04
+
+### Changed
+- Strengthened the built-in `implementation-heavy-scrum` template and sprint
+  prompts to keep a single source-of-truth product brief across planning,
+  frontend, backend, QA, documentation, and review stages.
+- Added release-blocking product coherence checks for concept drift, alternate
+  product names, unserved frontend trees, placeholder root responses, broken
+  documentation links, and missing differentiating mechanics.
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.12.
+
 ## [v1.5.11] - 2026-07-04
 
 ### Fixed
