@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Changed
+- Increased the built-in `implementation-heavy-scrum` template default
+  `maxDuration` from `120m` to `180m` to allow roughly one hour per sprint for
+  three-sprint live runs.
+- Strengthened the `implementation-heavy-scrum` template and sprint-stage
+  subtask prompts with acceptance criteria, reviewer-facing quality bars,
+  fresh-checkout validation, residual-risk reporting, and release-blocking gap
+  guidance.
+- Added explicit guidance to keep frontend, backend, deployment, and
+  documentation concerns separated in generated repository layouts and to avoid
+  duplicated long-form documentation.
+- Clarified that generated outcome documentation should be product-centered,
+  emphasizing delivered behavior, user journeys, implementation decisions, and
+  product gaps before command lists.
+
 ## [v1.5.8] - 2026-07-04
 
 ### Changed

@@ -1280,13 +1280,13 @@ func TestServer_OrchestrateTemplates_ReturnsBuiltIns(t *testing.T) {
 	if strings.Contains(heavy.TaskTemplate, "Japanese stakeholder report") {
 		t.Fatalf("implementation-heavy-scrum template should not force a Japanese stakeholder report")
 	}
-	for _, want := range []string{"Go HTTP server", "Helm chart", "Kubernetes manifests", "GitHub Actions CI"} {
+	for _, want := range []string{"Go HTTP server", "Helm chart", "Kubernetes manifests", "GitHub Actions CI", "Quality bar", "Acceptance criteria", "repository layout", "duplicated documentation", "product-centered"} {
 		if !strings.Contains(heavy.TaskTemplate, want) {
 			t.Fatalf("implementation-heavy-scrum task missing %q", want)
 		}
 	}
-	if heavy.Limits.MaxDuration != "120m" || heavy.Limits.MaxSubtasks != 30 || heavy.Limits.MaxConcurrentRepoRun != 1 {
-		t.Fatalf("implementation-heavy-scrum limits = %+v, want 120m/30/1", heavy.Limits)
+	if heavy.Limits.MaxDuration != "180m" || heavy.Limits.MaxSubtasks != 30 || heavy.Limits.MaxConcurrentRepoRun != 1 {
+		t.Fatalf("implementation-heavy-scrum limits = %+v, want 180m/30/1", heavy.Limits)
 	}
 	for _, want := range []string{"analyst", "go-backend", "frontend", "docs", "qa", "reviewer", "release-manager", "docker", "helm", "kubernetes", "devops"} {
 		if !containsString(heavy.Agents, want) {
@@ -1318,6 +1318,11 @@ func TestServer_OrchestrateTemplates_LocalizesBuiltInsForJapaneseUI(t *testing.T
 	}
 	if !strings.Contains(heavy.Description, "sandbox リポジトリ") {
 		t.Fatalf("localized heavy description = %q", heavy.Description)
+	}
+	for _, want := range []string{"Quality bar", "acceptance criteria", "Fresh checkout", "repository layout", "重複 documentation", "product-centered"} {
+		if !strings.Contains(heavy.TaskTemplate, want) {
+			t.Fatalf("localized implementation-heavy-scrum task missing %q", want)
+		}
 	}
 	if !strings.Contains(heavy.TaskTemplate, "{{repo}} の {{baseBranch}} 上で") || !strings.Contains(heavy.TaskTemplate, "出力言語: 日本語。") {
 		t.Fatalf("localized heavy task missing language instruction: %q", heavy.TaskTemplate)

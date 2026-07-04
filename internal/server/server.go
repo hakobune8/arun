@@ -1724,33 +1724,33 @@ func implementationHeavyScrumPlan(record *orchestrationRecord) *orchestrator.Tas
 	return &orchestrator.TaskPlan{
 		Description: "Implementation-heavy scrum workflow with three PDCA-style sprint checkpoints. Each sprint runs planning, implementation, QA, adjustment planning, remediation, reporting, and one checkpoint commit in one pull request.",
 		Subtasks: []orchestrator.Subtask{
-			step("sprint-1-plan", "analyst", "Sprint 1 planning: inspect the repository state and produce concise implementation notes for the smallest playable/serviceable baseline. Do not implement code in this planning stage; leave concrete file changes to the following backend and frontend stages."),
-			step("sprint-1-backend", "go-backend", "Sprint 1 coding: create or improve a minimal Go net/http server with a /healthz health endpoint and tests. For an empty repository, initialize the Go module and keep the service easy to containerize.", "sprint-1-plan"),
-			step("sprint-1-frontend", "frontend", "Sprint 1 coding: create or connect a minimal user-facing frontend/static experience that can be served by the project. Preserve any backend work from the previous step.", "sprint-1-backend"),
-			step("sprint-1-qa", "qa", "Sprint 1 QA: run available tests or smoke checks, record gaps in repository artifacts, and explicitly call out backend/frontend follow-up work for this sprint adjustment pass.", "sprint-1-frontend"),
+			step("sprint-1-plan", "analyst", "Sprint 1 planning: inspect the repository state and produce concise implementation notes for the smallest playable/serviceable baseline. Define acceptance criteria, the primary user path, validation commands, the files expected to change, and a simple repository layout that separates backend, frontend, deployment, and docs. Do not implement code in this planning stage; leave concrete file changes to the following backend and frontend stages."),
+			step("sprint-1-backend", "go-backend", "Sprint 1 coding: create or improve a minimal Go net/http server with a /healthz health endpoint, one product endpoint or static handler, focused tests, clear errors, and simple configuration. For an empty repository, initialize the Go module and keep the service easy to containerize.", "sprint-1-plan"),
+			step("sprint-1-frontend", "frontend", "Sprint 1 coding: create or connect a minimal user-facing frontend/static experience that can be served by the project. Make the primary path inspectable in a browser, avoid placeholder-only UI, preserve backend work, and include lightweight JS validation when a frontend asset is added.", "sprint-1-backend"),
+			step("sprint-1-qa", "qa", "Sprint 1 QA: run available tests or smoke checks, verify the acceptance criteria, primary user path, and repository layout clarity, record gaps in repository artifacts, and explicitly call out backend/frontend follow-up work for this sprint adjustment pass.", "sprint-1-frontend"),
 			step("sprint-1-adjust-plan", "analyst", "Sprint 1 adjustment planning: read Sprint 1 QA evidence and turn failures or missing baseline behavior into concise backend/frontend remediation notes. Do not implement code in this planning stage.", "sprint-1-qa"),
 			step("sprint-1-backend-fix", "go-backend", "Sprint 1 remediation: address QA findings that require backend, API, test, or integration changes. Keep the repository runnable from a fresh checkout.", "sprint-1-adjust-plan"),
 			step("sprint-1-frontend-fix", "frontend", "Sprint 1 remediation: address QA findings that require frontend or static asset changes, preserving the backend fixes from this sprint.", "sprint-1-backend-fix"),
 			step("sprint-1-report", "release-manager", "Sprint 1 reporting: summarize delivered baseline, QA evidence, remediation performed, and remaining backlog before the Sprint 1 checkpoint commit.", "sprint-1-frontend-fix"),
 
 			step("sprint-2-plan", "analyst", "Sprint 2 planning: read Sprint 1 report and repository state, then produce concise deployment packaging notes and unresolved product gaps. Do not implement code in this planning stage.", "sprint-1-report"),
-			step("sprint-2-backend", "go-backend", "Sprint 2 coding: harden app startup, configuration, and tests before packaging. Address remaining product gaps from Sprint 1 if they block deployment.", "sprint-2-plan"),
-			step("sprint-2-docker", "docker", "Sprint 2 coding: add or improve a Dockerfile and container-focused run instructions for the application produced so far.", "sprint-2-backend"),
-			step("sprint-2-helm", "helm", "Sprint 2 coding: add or improve a Helm chart suitable for deploying this application into the same Kubernetes environment as ARUN. Ingress is not required.", "sprint-2-docker"),
-			step("sprint-2-kubernetes", "kubernetes", "Sprint 2 coding: add Kubernetes Deployment and Service manifests or chart templates for the application. Avoid ingress unless explicitly requested.", "sprint-2-helm"),
-			step("sprint-2-qa", "qa", "Sprint 2 QA: validate Docker, Helm, Kubernetes, and app-level smoke paths where tooling is available. Record packaging or deployment gaps for this sprint adjustment pass.", "sprint-2-kubernetes"),
+			step("sprint-2-backend", "go-backend", "Sprint 2 coding: harden app startup, configuration, tests, and user-facing behavior before packaging. Address remaining product gaps from Sprint 1 if they block deployment, and avoid broad rewrites that reduce reviewability.", "sprint-2-plan"),
+			step("sprint-2-docker", "docker", "Sprint 2 coding: add or improve a Dockerfile and container-focused run instructions for the application produced so far. Keep layers deterministic, avoid secret leakage, and make the image runnable with documented ports and health checks.", "sprint-2-backend"),
+			step("sprint-2-helm", "helm", "Sprint 2 coding: add or improve a Helm chart suitable for deploying this application into the same Kubernetes environment as ARUN. Include values for image, service, probes, resources, and labels. Ingress is not required.", "sprint-2-docker"),
+			step("sprint-2-kubernetes", "kubernetes", "Sprint 2 coding: add Kubernetes Deployment and Service manifests or chart templates for the application. Include selectors, probes where practical, resource defaults, and operational notes. Avoid ingress unless explicitly requested.", "sprint-2-helm"),
+			step("sprint-2-qa", "qa", "Sprint 2 QA: validate Docker, Helm, Kubernetes, and app-level smoke paths where tooling is available. Record exact commands, observed results, release blockers, and packaging or deployment gaps for this sprint adjustment pass.", "sprint-2-kubernetes"),
 			step("sprint-2-adjust-plan", "analyst", "Sprint 2 adjustment planning: read Sprint 2 QA evidence and turn deployment/package failures into concise remediation notes before the Sprint 2 checkpoint. Do not implement code in this planning stage.", "sprint-2-qa"),
 			step("sprint-2-infra-fix", "kubernetes", "Sprint 2 remediation: fix Kubernetes, Helm, or deployment manifest issues found by QA, coordinating with existing Docker and app artifacts.", "sprint-2-adjust-plan"),
 			step("sprint-2-report", "release-manager", "Sprint 2 reporting: summarize deployment artifacts, QA evidence, remediation performed, and remaining CI/release backlog before the Sprint 2 checkpoint commit.", "sprint-2-infra-fix"),
 
 			step("sprint-3-plan", "analyst", "Sprint 3 planning: read Sprint 2 report and repository state, then produce concise CI, documentation, final QA, review, and release-readiness notes. Do not implement code in this planning stage.", "sprint-2-report"),
-			step("sprint-3-devops", "devops", "Sprint 3 coding: add or improve GitHub Actions CI so future pull requests can continuously run the available backend/frontend/container checks.", "sprint-3-plan"),
-			step("sprint-3-docs", "docs", "Sprint 3 documentation: update README or docs with local run, test, Docker, Helm/Kubernetes deploy, and rollback or operations notes.", "sprint-3-devops"),
-			step("sprint-3-qa", "qa", "Sprint 3 QA: run final smoke and validation checks across app, CI, docs, Docker, Helm, and Kubernetes artifacts. Record any release-blocking gaps for this sprint adjustment pass.", "sprint-3-docs"),
+			step("sprint-3-devops", "devops", "Sprint 3 coding: add or improve GitHub Actions CI so future pull requests can continuously run the available backend/frontend/container checks. Keep workflows minimal, reproducible, and aligned with local validation commands.", "sprint-3-plan"),
+			step("sprint-3-docs", "docs", "Sprint 3 documentation: update README or docs with a product-centered overview, primary user walkthrough, acceptance criteria status, local run, test, Docker, Helm/Kubernetes deploy, rollback or operations notes, and reviewer guidance. Explain what was built and how it behaves before listing commands. Keep README concise, move detailed procedures into focused docs, and remove duplicated or stale instructions.", "sprint-3-devops"),
+			step("sprint-3-qa", "qa", "Sprint 3 QA: run final smoke and validation checks across app, CI, docs, Docker, Helm, and Kubernetes artifacts. Verify reviewer-facing setup from a fresh checkout perspective, check that frontend/backend/deployment/docs layout is understandable, and record any release-blocking gaps for this sprint adjustment pass.", "sprint-3-docs"),
 			step("sprint-3-adjust-plan", "analyst", "Sprint 3 adjustment planning: read final QA evidence and convert release-blocking issues into concise remediation notes before review. Do not implement code in this planning stage.", "sprint-3-qa"),
 			step("sprint-3-backend-fix", "go-backend", "Sprint 3 remediation: fix any final app, test, startup, or integration issues discovered by QA before review.", "sprint-3-adjust-plan"),
-			step("sprint-3-review", "reviewer", "Sprint 3 review: inspect the final diff for correctness, maintainability, missing tests, and deployment risks. Leave actionable notes in repository artifacts where appropriate.", "sprint-3-backend-fix"),
-			step("sprint-3-report", "release-manager", "Sprint 3 reporting: produce a concise final report covering what was built, the three sprint checkpoints, validation results, GitHub artifacts, and remaining backlog.", "sprint-3-review"),
+			step("sprint-3-review", "reviewer", "Sprint 3 review: inspect the final diff for correctness, maintainability, missing tests, user-facing completeness, repository structure, documentation duplication, operational safety, and deployment risks. Leave actionable notes in repository artifacts where appropriate.", "sprint-3-backend-fix"),
+			step("sprint-3-report", "release-manager", "Sprint 3 reporting: produce a concise final report covering what was built, acceptance criteria status, the three sprint checkpoints, validation results, GitHub artifacts, residual risks, and remaining backlog.", "sprint-3-review"),
 		},
 	}
 }
@@ -3247,7 +3247,7 @@ Expected output:
 			CreateIssue:       true,
 			CreatePullRequest: true,
 			Limits: governanceLimits{
-				MaxDuration:          "120m",
+				MaxDuration:          "180m",
 				MaxSubtasks:          30,
 				MaxConcurrentRepoRun: 1,
 			},
@@ -3256,18 +3256,28 @@ Expected output:
 Operating mode: build-first for a new or sandbox repository. Create concrete, reviewable repository artifacts where safe. Prefer a small vertical slice over a broad unfinished scaffold. Do not rewrite unrelated existing work. If the repository is completely empty or has no commits yet, create an initial minimal product scaffold before extending it.
 
 Target baseline for a new repository:
-- A minimal Go HTTP server with a health endpoint and a small product API or static asset handler.
-- A minimal Web UI or static frontend slice when it fits the repository goal.
+- A minimal Go HTTP server with a health endpoint, clear startup/configuration behavior, focused tests, and a small product API or static asset handler.
+- A minimal Web UI or static frontend slice when it fits the repository goal. It must expose a reviewable primary user path rather than placeholder-only screens.
 - Dockerfile and local validation commands.
-- Helm chart and Kubernetes manifests suitable for deploying into the same Kubernetes environment as ARUN. Include Service and Deployment. Ingress is not required.
+- Helm chart and Kubernetes manifests suitable for deploying into the same Kubernetes environment as ARUN. Include Service, Deployment, selectors, labels, probes where practical, and resource defaults. Ingress is not required.
 - GitHub Actions CI that runs tests, lint or smoke checks, and build validation so future PRs can improve the product continuously.
-- README documentation with setup, local run, Kubernetes deploy notes, validation commands, and operational follow-up backlog.
+- README documentation with setup, local run, product walkthrough, Kubernetes deploy notes, validation commands, known limitations, and operational follow-up backlog. Emphasize what the product does, the primary user experience, acceptance criteria, and review points before listing commands. Keep README concise and move deep operational details into focused docs.
+
+Quality bar:
+- Define sprint-level acceptance criteria before implementing and verify them in QA.
+- Prefer cohesive, reviewer-friendly changes over broad generated scaffolding.
+- Keep generated code simple, idiomatic, and runnable from a fresh checkout.
+- Keep frontend, backend, deployment, and documentation concerns separated in the repository layout unless the existing project convention clearly differs. Avoid mixing browser assets, Go server code, Helm charts, and narrative docs in one flat directory when a clearer structure is possible.
+- Avoid duplicated documentation. Use README as the short entry point and link to focused docs for testing, deployment, operations, and sprint reports.
+- Make outcome documentation product-centered: explain the behavior delivered, the user journey, important implementation decisions, validation evidence, and remaining product gaps. Avoid filling docs with generic process narration or repeated command lists.
+- Record exact validation commands and outcomes, including skipped checks and why they were skipped.
+- Treat broken tests, missing startup instructions, non-rendering UI, invalid Helm/Kubernetes output, and unclear next steps as release-blocking gaps.
 
 Sprint 1:
 - Inspect repository state and choose the smallest coherent product increment.
 - For an empty repository, start with a minimal Go server plus a lightweight frontend or static response that can be opened, reviewed, and validated without external services.
-- Decide the primary implementation path from repository evidence. Use backend, frontend, documentation, or a combination only when it fits the repository.
-- Implement a minimal working slice with setup or usage documentation.
+- Decide the primary implementation path from repository evidence and define the acceptance criteria for the first user-visible slice. Use backend, frontend, documentation, or a combination only when it fits the repository.
+- Implement a minimal working slice with setup or usage documentation and a repository layout that keeps backend/server code, frontend/static assets, charts/manifests, and docs easy to distinguish.
 - Review and smoke test the slice.
 
 Sprint 2:
@@ -3278,7 +3288,8 @@ Sprint 2:
 
 Sprint 3:
 - Stabilize the result, improve developer ergonomics, add or refine Helm/Kubernetes deploy artifacts, and remove obvious rough edges.
-- Ensure README or docs explain how to run and verify the work.
+- Ensure README or docs explain how to run and verify the work without repeating the same long instructions in multiple files.
+- Verify the final result from a fresh-checkout reviewer perspective.
 - Produce final review, smoke-test notes, and a stakeholder report in the selected output language or the repository's usual language.
 
 Expected output:
@@ -3286,6 +3297,8 @@ Expected output:
 - Sprint 1, Sprint 2, and Sprint 3 sections.
 - Implementation, documentation, review, smoke, CI/CD, Kubernetes, and release-readiness notes.
 - Commands run and validation results.
+- Acceptance criteria status, residual risks, and known limitations.
+- Repository layout summary, including where backend, frontend, deployment, and docs live.
 - Final backlog for the next human-led sprint.`,
 			Variables: []scenarioTemplateVariable{
 				{Name: "repo", Label: "Repository", Placeholder: "owner/repo", Required: true},
@@ -3420,18 +3433,28 @@ Expected output:
 Operating mode: 新規または sandbox repository 向けの build-first。安全な範囲で、review 可能な具体的 repository artifacts を作成してください。広く未完成な scaffold より、小さな vertical slice を優先してください。無関係な既存 work は書き換えないでください。Repository が完全に空、または commit がまだ無い場合は、拡張前に初期の minimal product scaffold を作成してください。
 
 新規 repository の target baseline:
-- Health endpoint と小さな product API または static asset handler を持つ minimal Go HTTP server。
-- Repository goal に合う場合の minimal Web UI または static frontend slice。
+- Health endpoint、明確な startup/configuration、focused tests、小さな product API または static asset handler を持つ minimal Go HTTP server。
+- Repository goal に合う場合の minimal Web UI または static frontend slice。placeholder だけの画面ではなく、review 可能な primary user path を用意してください。
 - Dockerfile と local validation commands。
-- ARUN と同じ Kubernetes environment に deploy できる Helm chart と Kubernetes manifests。Service と Deployment を含めてください。Ingress は不要です。
+- ARUN と同じ Kubernetes environment に deploy できる Helm chart と Kubernetes manifests。Service、Deployment、selectors、labels、可能な範囲の probes、resource defaults を含めてください。Ingress は不要です。
 - Tests、lint または smoke checks、build validation を実行する GitHub Actions CI。
-- Setup、local run、Kubernetes deploy notes、validation commands、operational follow-up backlog を含む README documentation。
+- Setup、local run、product walkthrough、Kubernetes deploy notes、validation commands、known limitations、operational follow-up backlog を含む README documentation。Commands の列挙より先に、何を作ったか、主要な user experience、acceptance criteria、review points を説明してください。README は短い入口に保ち、詳細な運用手順は focused docs に分離してください。
+
+Quality bar:
+- 実装前に sprint-level acceptance criteria を定義し、QA で確認してください。
+- 広い generated scaffold より、cohesive で reviewer が追いやすい変更を優先してください。
+- 生成 code は単純、idiomatic、fresh checkout から runnable にしてください。
+- 既存 convention が明確に違わない限り、frontend、backend、deployment、documentation の関心を repository layout 上で分離してください。Browser assets、Go server code、Helm charts、説明 docs を 1 つの flat directory に混在させることは避けてください。
+- 重複 documentation を避けてください。README は短い入口として使い、testing、deployment、operations、sprint reports は focused docs へ link してください。
+- 成果物側の documentation は product-centered にしてください。実装された behavior、user journey、重要な implementation decisions、validation evidence、残っている product gaps を説明し、generic process narration や command list の繰り返しで埋めないでください。
+- 実行した validation commands と outcomes を正確に記録し、skip した check は理由を書いてください。
+- 壊れた tests、startup 手順不足、render できない UI、無効な Helm/Kubernetes output、不明瞭な next steps は release-blocking gaps として扱ってください。
 
 Sprint 1:
 - Repository state を調査し、最小で一貫した product increment を選んでください。
 - 空 repository の場合は、外部 service なしで開いて review/validation できる minimal Go server と lightweight frontend または static response から始めてください。
-- Repository evidence から primary implementation path を決めてください。Backend、frontend、documentation、またはその組み合わせは repository に合う場合のみ使ってください。
-- Setup または usage documentation を含む minimal working slice を実装してください。
+- Repository evidence から primary implementation path を決め、最初の user-visible slice の acceptance criteria を定義してください。Backend、frontend、documentation、またはその組み合わせは repository に合う場合のみ使ってください。
+- Setup または usage documentation を含む minimal working slice を実装し、backend/server code、frontend/static assets、charts/manifests、docs が区別しやすい repository layout にしてください。
 - Slice を review し、smoke test してください。
 
 Sprint 2:
@@ -3442,7 +3465,8 @@ Sprint 2:
 
 Sprint 3:
 - Result を安定化し、developer ergonomics を改善し、Helm/Kubernetes deploy artifacts を追加または調整し、明らかな rough edges を取り除いてください。
-- README または docs で実行方法と検証方法を説明してください。
+- README または docs で実行方法と検証方法を説明し、同じ長い手順を複数 file に繰り返さないでください。
+- Fresh checkout の reviewer perspective で final result を確認してください。
 - 選択された output language または repository の通常言語で final review、smoke-test notes、stakeholder report を作成してください。
 
 Expected output:
@@ -3450,6 +3474,8 @@ Expected output:
 - Sprint 1、Sprint 2、Sprint 3 sections。
 - Implementation、documentation、review、smoke、CI/CD、Kubernetes、release-readiness notes。
 - 実行した commands と validation results。
+- Acceptance criteria status、residual risks、known limitations。
+- Backend、frontend、deployment、docs がどこにあるかを示す repository layout summary。
 - 次の human-led sprint の final backlog。`,
 		},
 	}
