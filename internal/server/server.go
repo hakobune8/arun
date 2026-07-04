@@ -808,6 +808,27 @@ type orchestrationRecord struct {
 	UpdatedAt                time.Time                              `json:"updatedAt"`
 }
 
+type orchestrationRecordSummary struct {
+	ID             string                     `json:"id"`
+	Actor          string                     `json:"actor,omitempty"`
+	Repo           string                     `json:"repo"`
+	BaseBranch     string                     `json:"baseBranch"`
+	Task           string                     `json:"task"`
+	Agents         []string                   `json:"agents,omitempty"`
+	Scenario       *scenarioTemplateSelection `json:"scenarioTemplate,omitempty"`
+	ScheduleID     string                     `json:"scheduleId,omitempty"`
+	Strategy       string                     `json:"strategy,omitempty"`
+	LLMPreset      string                     `json:"llmPreset,omitempty"`
+	OutputLanguage string                     `json:"outputLanguage,omitempty"`
+	Limits         governanceLimits           `json:"limits,omitempty"`
+	Usage          governanceUsage            `json:"usage,omitempty"`
+	Status         string                     `json:"status"`
+	Error          string                     `json:"error,omitempty"`
+	GitHub         *orchestrationGitHubState  `json:"github,omitempty"`
+	CreatedAt      time.Time                  `json:"createdAt"`
+	UpdatedAt      time.Time                  `json:"updatedAt"`
+}
+
 type orchestrationEvent struct {
 	Timestamp time.Time `json:"timestamp"`
 	Type      string    `json:"type"`
@@ -1351,7 +1372,7 @@ func (s *Server) runOrchestration(record *orchestrationRecord, agents map[string
 		if err := commitScrumSprintCheckpoint(record, &event); err != nil {
 			appendOrchestrationEvent(record, "sprint.commit_failed", event.Subtask.ID, err.Error())
 			slog.Warn("commit scrum sprint checkpoint failed", "id", record.ID, "subtask", event.Subtask.ID, "error", err)
-		} else if sprint, ok := scrumSprintCheckpoint(event.Subtask.ID); ok {
+		} else if sprint, ok := shouldPublishScrumSprintCheckpoint(record, &event); ok {
 			if err := s.publishScrumSprintCheckpoint(record, sprint); err != nil {
 				appendOrchestrationEvent(record, "sprint.publish_failed", event.Subtask.ID, err.Error())
 				slog.Warn("publish scrum sprint checkpoint failed", "id", record.ID, "subtask", event.Subtask.ID, "error", err)
@@ -1445,7 +1466,11 @@ func (s *Server) handleOrchestrates(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "list orchestrations: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	_ = json.NewEncoder(w).Encode(records) //nolint:errcheck // best-effort response
+	summaries := make([]orchestrationRecordSummary, 0, len(records))
+	for _, record := range records {
+		summaries = append(summaries, summarizeOrchestrationRecord(record))
+	}
+	_ = json.NewEncoder(w).Encode(summaries) //nolint:errcheck // best-effort response
 }
 
 func (s *Server) handleOrchestrateDetail(w http.ResponseWriter, r *http.Request) {
@@ -1803,6 +1828,16 @@ func commitScrumSprintCheckpoint(record *orchestrationRecord, event *orchestrato
 	return nil
 }
 
+func shouldPublishScrumSprintCheckpoint(record *orchestrationRecord, event *orchestrator.SubtaskEvent) (int, bool) {
+	if !usesImplementationHeavyScrumPlan(record) || event == nil || event.Type != orchestrator.SubtaskCompleted {
+		return 0, false
+	}
+	if event.Result == nil || !event.Result.Success {
+		return 0, false
+	}
+	return scrumSprintCheckpoint(event.Subtask.ID)
+}
+
 func scrumSprintCheckpoint(subtaskID string) (int, bool) {
 	switch subtaskID {
 	case "sprint-1-report":
@@ -1952,6 +1987,32 @@ func listOrchestrationRecords() ([]*orchestrationRecord, error) {
 		return records[i].CreatedAt.After(records[j].CreatedAt)
 	})
 	return records, nil
+}
+
+func summarizeOrchestrationRecord(record *orchestrationRecord) orchestrationRecordSummary {
+	if record == nil {
+		return orchestrationRecordSummary{}
+	}
+	return orchestrationRecordSummary{
+		ID:             record.ID,
+		Actor:          record.Actor,
+		Repo:           record.Repo,
+		BaseBranch:     record.BaseBranch,
+		Task:           record.Task,
+		Agents:         record.Agents,
+		Scenario:       record.Scenario,
+		ScheduleID:     record.ScheduleID,
+		Strategy:       record.Strategy,
+		LLMPreset:      record.LLMPreset,
+		OutputLanguage: record.OutputLanguage,
+		Limits:         record.Limits,
+		Usage:          record.Usage,
+		Status:         record.Status,
+		Error:          record.Error,
+		GitHub:         record.GitHub,
+		CreatedAt:      record.CreatedAt,
+		UpdatedAt:      record.UpdatedAt,
+	}
 }
 
 func normalizeRemoteRepo(repo string) (string, bool) {
