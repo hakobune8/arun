@@ -927,6 +927,40 @@ func main() {
 	}
 }
 
+func TestFrontendQualityGateFailsForUnservedWebIndex(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, "web"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join("web", "index.html"): "<!doctype html><title>Alternate</title>",
+		"main.go": `package main
+
+import "net/http"
+
+func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("placeholder"))
+	})
+}
+`,
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "frontend",
+		Description: "Add a browser game UI.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed with unserved web/index.html: %+v", status)
+	}
+}
+
 func TestDocsQualityGateFailsForDeferredRemediationNotes(t *testing.T) {
 	t.Parallel()
 
@@ -1364,6 +1398,66 @@ func TestHelmQualityGateFailsForEmptyChart(t *testing.T) {
 	}))
 	if status.Passed {
 		t.Fatalf("quality gate passed for empty chart: %+v", status)
+	}
+}
+
+func TestHelmQualityGateFailsWhenAnyChartIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	validChart := filepath.Join(repo, "charts", "valid")
+	if err := os.MkdirAll(filepath.Join(validChart, "templates"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	validFiles := map[string]string{
+		filepath.Join(validChart, "Chart.yaml"):  "apiVersion: v2\nname: valid\ntype: application\nversion: 0.1.0\n",
+		filepath.Join(validChart, "values.yaml"): "replicaCount: 1\n",
+		filepath.Join(validChart, "templates", "deployment.yaml"): `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valid
+spec:
+  selector:
+    matchLabels:
+      app: valid
+  template:
+    metadata:
+      labels:
+        app: valid
+    spec:
+      containers:
+        - name: valid
+          image: nginx
+`,
+		filepath.Join(validChart, "templates", "service.yaml"): `apiVersion: v1
+kind: Service
+metadata:
+  name: valid
+spec:
+  selector:
+    app: valid
+  ports:
+    - port: 80
+`,
+	}
+	for path, content := range validFiles {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	emptyChart := filepath.Join(repo, "charts", "empty")
+	if err := os.MkdirAll(emptyChart, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(emptyChart, "Chart.yaml"), []byte("apiVersion: v2\nname: empty\ntype: application\nversion: 0.1.0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "helm",
+		Description: "Add Helm charts for Kubernetes deployment.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed when one chart is empty: %+v", status)
 	}
 }
 
