@@ -258,6 +258,8 @@ release that changes `charts/arun/**`, update both `version` and
 `appVersion` in `charts/arun/Chart.yaml` intentionally so chart-releaser can
 publish a new immutable chart release.
 
+- [v1.5.19 release notes](docs/release-v1.5.19.md) — Explicit checkpoint
+  publish leases and generated UI gates
 - [v1.5.18 release notes](docs/release-v1.5.18.md) — Scrum publish and
   generated artifact gates
 - [v1.5.17 release notes](docs/release-v1.5.17.md) — Generated app container
