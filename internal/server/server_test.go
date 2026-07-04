@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -1432,6 +1433,53 @@ func TestCommitScrumSprintCheckpoint_CreatesThreeCheckpointCommits(t *testing.T)
 	}
 	if len(record.Events) != 3 {
 		t.Fatalf("events = %d, want 3", len(record.Events))
+	}
+}
+
+func TestCommitScrumSprintCheckpoint_ScrubsGeneratedArtifacts(t *testing.T) {
+	repo := t.TempDir()
+	runGitTestCommand(t, repo, "init")
+	binaryName := "20260704T032604-run-fd7ee96cb4117060-hakobune8-arun-test"
+	if err := os.WriteFile(filepath.Join(repo, binaryName), []byte{0x7f, 'E', 'L', 'F', 0x02, 0x01}, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	readme := "# Product\n\nUseful overview.\n\n## Scenario\n\nParent task:\nmake a game\n\nOperating mode: build-first\n\nQuality bar:\n- good\n\nExpected output:\n- files\n"
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte(readme), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	record := &orchestrationRecord{
+		ID:       "run-test",
+		RepoPath: repo,
+		Scenario: &scenarioTemplateSelection{ID: "implementation-heavy-scrum"},
+	}
+
+	event := &orchestrator.SubtaskEvent{
+		Type:    orchestrator.SubtaskCompleted,
+		Subtask: orchestrator.Subtask{ID: "sprint-3-report"},
+		Result:  &orchestrator.SubtaskResult{Success: true},
+	}
+	if err := commitScrumSprintCheckpoint(record, event); err != nil {
+		t.Fatalf("commit checkpoint: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, binaryName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("binary artifact stat err = %v, want not exist", err)
+	}
+	cleaned, err := os.ReadFile(filepath.Join(repo, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(cleaned), "Parent task:") || strings.Contains(string(cleaned), "Quality bar:") {
+		t.Fatalf("README still contains prompt block:\n%s", cleaned)
+	}
+	if !strings.Contains(string(cleaned), "Useful overview.") {
+		t.Fatalf("README lost product content:\n%s", cleaned)
+	}
+	show := runGitTestCommand(t, repo, "show", "--name-only", "--format=", "HEAD")
+	if strings.Contains(show, binaryName) {
+		t.Fatalf("checkpoint committed binary artifact:\n%s", show)
+	}
+	if len(record.Events) != 2 {
+		t.Fatalf("events = %d, want hygiene plus commit", len(record.Events))
 	}
 }
 

@@ -1770,6 +1770,13 @@ func commitScrumSprintCheckpoint(record *orchestrationRecord, event *orchestrato
 	if strings.TrimSpace(record.RepoPath) == "" {
 		return fmt.Errorf("missing repository workspace")
 	}
+	hygiene, err := scrubRepositoryArtifacts(record.RepoPath)
+	if err != nil {
+		return fmt.Errorf("repository hygiene: %w", err)
+	}
+	if len(hygiene.Removed) > 0 || len(hygiene.Updated) > 0 {
+		appendOrchestrationEvent(record, "repository.hygiene", event.Subtask.ID, repositoryHygieneMessage(hygiene))
+	}
 	if err := gitAddAll(record.RepoPath, record.GitHubToken); err != nil {
 		return err
 	}
@@ -2592,6 +2599,9 @@ func publishOrchestrationBranch(record *orchestrationRecord) error {
 	if err := validateGitRef(record.GitHub.PRBase); err != nil {
 		return err
 	}
+	if _, err := scrubRepositoryArtifacts(record.RepoPath); err != nil {
+		return fmt.Errorf("repository hygiene: %w", err)
+	}
 	if err := gitAddAll(record.RepoPath, record.GitHubToken); err != nil {
 		return err
 	}
@@ -2614,6 +2624,20 @@ func publishOrchestrationBranch(record *orchestrationRecord) error {
 		return err
 	}
 	return nil
+}
+
+func repositoryHygieneMessage(result repositoryHygieneResult) string {
+	var parts []string
+	if len(result.Removed) > 0 {
+		parts = append(parts, fmt.Sprintf("removed %d compiled artifact(s)", len(result.Removed)))
+	}
+	if len(result.Updated) > 0 {
+		parts = append(parts, fmt.Sprintf("cleaned %d prompt-contaminated Markdown file(s)", len(result.Updated)))
+	}
+	if len(parts) == 0 {
+		return "Repository hygiene check passed"
+	}
+	return "Repository hygiene: " + strings.Join(parts, ", ")
 }
 
 func ensurePullRequestBaseBranch(dir, token, baseBranch, message string) error {
