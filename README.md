@@ -262,6 +262,8 @@ release that changes `charts/arun/**`, update both `version` and
 `appVersion` in `charts/arun/Chart.yaml` intentionally so chart-releaser can
 publish a new immutable chart release.
 
+- [v1.5.28 release notes](docs/release-v1.5.28.md) — Generated module path,
+  issue body, and frontend consistency gates.
 - [v1.5.27 release notes](docs/release-v1.5.27.md) — Generated client/server
   layout hygiene.
 - [v1.5.26 release notes](docs/release-v1.5.26.md) — Duplicate docs product

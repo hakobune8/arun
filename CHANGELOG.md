@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [v1.5.28] - 2026-07-06
+
 ### Fixed
 - Failed generated frontend quality gates when `client/index.html` references
   missing local CSS or JavaScript assets, or when a Go `staticAssetPath`
@@ -18,6 +20,10 @@
 - Shortened default GitHub issue bodies created by Web UI orchestrations so the
   issue tracks run metadata and a concise request summary instead of embedding
   the full parent task template.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.28.
 
 ## [v1.5.27] - 2026-07-05
 
