@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [v1.5.27] - 2026-07-05
+
+### Fixed
+- Separated deterministic generated app artifacts into `server/` for the Go
+  HTTP entrypoint and `client/` for browser assets, avoiding root-level
+  frontend/backend mixing.
+- Added generated artifact cleanup that migrates root-mixed `main.go`,
+  `index.html`, `styles.css`, and `src/main.js` into `server/` and `client/`
+  instead of only failing stricter gates.
+- Updated frontend, Docker, CI, and eval quality gates for the separated
+  layout while preserving deterministic recovery paths.
+
+### Changed
+- Updated implementation-heavy scrum task guidance to prefer `client/`,
+  `server/`, `docs/`, and deployment directories, with clean-architecture
+  friendly backend growth guidance.
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.27.
+
 ## [v1.5.26] - 2026-07-05
 
 ### Fixed
