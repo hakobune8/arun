@@ -961,6 +961,52 @@ func main() {
 	}
 }
 
+func TestFrontendQualityGateFailsForUnservedAlternateIndexWithStaticAssetPath(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, "web"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join("web", "index.html"): "<!doctype html><title>Gravity Invaders</title>",
+		"main.go": `package main
+
+import "net/http"
+
+func staticAssetPath(urlPath string) (string, bool) {
+	return "styles.css", true
+}
+
+func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			if assetPath, ok := staticAssetPath(r.URL.Path); ok {
+				http.ServeFile(w, r, assetPath)
+				return
+			}
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeFile(w, r, "index.html")
+	})
+}
+`,
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "frontend",
+		Description: "Add a browser game UI.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed with unserved web/index.html and staticAssetPath: %+v", status)
+	}
+}
+
 func TestFrontendQualityGateFailsForUnservedRootAssets(t *testing.T) {
 	t.Parallel()
 
@@ -1034,6 +1080,64 @@ func main() {
 	}
 	if !unservedRootFrontendAssetsExist(repo) {
 		t.Fatalf("unservedRootFrontendAssetsExist() = false, want true")
+	}
+}
+
+func TestCleanupGeneratedArtifactHygieneRemovesUnservedAlternateUIAndIncompleteCharts(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, "web"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "charts", "invader-game"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"index.html":                       "<!doctype html><title>One-Button Invaders</title>",
+		filepath.Join("web", "index.html"): "<!doctype html><title>Gravity Invaders</title>",
+		filepath.Join("charts", "invader-game", "Chart.yaml"): "apiVersion: v2\nname: invader-game\ntype: application\nversion: 0.1.0\n",
+		"main.go": `package main
+
+import "net/http"
+
+func staticAssetPath(urlPath string) (string, bool) {
+	return "styles.css", true
+}
+
+func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			if assetPath, ok := staticAssetPath(r.URL.Path); ok {
+				http.ServeFile(w, r, assetPath)
+				return
+			}
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeFile(w, r, "index.html")
+	})
+}
+`,
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	if err := cleanupGeneratedArtifactHygiene(repo); err != nil {
+		t.Fatalf("cleanupGeneratedArtifactHygiene() error = %v", err)
+	}
+	for _, removed := range []string{
+		filepath.Join("web", "index.html"),
+		filepath.Join("charts", "invader-game", "Chart.yaml"),
+	} {
+		if _, err := os.Stat(filepath.Join(repo, removed)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%s still exists or unexpected error: %v", removed, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(repo, "index.html")); err != nil {
+		t.Fatalf("root index removed unexpectedly: %v", err)
 	}
 }
 
