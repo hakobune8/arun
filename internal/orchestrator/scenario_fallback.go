@@ -1197,6 +1197,9 @@ func cleanupGeneratedArtifactHygiene(root string) error {
 	if err := removeUnservedAlternateFrontendTrees(root); err != nil {
 		return err
 	}
+	if err := removeIncompleteHelmCharts(root); err != nil {
+		return err
+	}
 	if err := removeGeneratedBinaryArtifacts(root); err != nil {
 		return err
 	}
@@ -1305,8 +1308,39 @@ func mainServesFrontendDir(root, dir string) bool {
 	}
 	content := string(data)
 	return strings.Contains(content, dir) ||
-		strings.Contains(content, "static") ||
-		strings.Contains(content, "FileServer")
+		strings.Contains(content, "FileServer") ||
+		strings.Contains(content, "http.Dir") ||
+		strings.Contains(content, "StripPrefix")
+}
+
+func removeIncompleteHelmCharts(root string) error {
+	chartsDir := filepath.Join(root, "charts")
+	entries, err := os.ReadDir(chartsDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		chartDir := filepath.Join(chartsDir, entry.Name())
+		if !fileExists(filepath.Join(chartDir, "Chart.yaml")) || helmChartComplete(chartDir) {
+			continue
+		}
+		if err := os.RemoveAll(chartDir); err != nil {
+			return fmt.Errorf("remove incomplete Helm chart %s: %w", entry.Name(), err)
+		}
+	}
+	return nil
+}
+
+func helmChartComplete(chartDir string) bool {
+	return fileExists(filepath.Join(chartDir, "values.yaml")) &&
+		fileExists(filepath.Join(chartDir, "templates", "deployment.yaml")) &&
+		fileExists(filepath.Join(chartDir, "templates", "service.yaml"))
 }
 
 func removeGeneratedBinaryArtifacts(root string) error {
