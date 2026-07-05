@@ -1294,6 +1294,37 @@ func TestCleanupGeneratedArtifactHygieneRemovesDuplicateRootProductBrief(t *test
 	}
 }
 
+func TestCleanupGeneratedArtifactHygieneRemovesCaseVariantDocsProductBrief(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join("docs", "product-brief.md"): "# Product Brief: One-Button Invaders\n\nGravity-lane flip mechanic.\n",
+		filepath.Join("docs", "PRODUCT_BRIEF.md"): "# Gravity Invaders\n\nGravity field chain-collision mechanic.\n",
+		filepath.Join("docs", "testing.md"):       "# Testing\n\nRelevant testing documentation.\n",
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	if err := cleanupGeneratedArtifactHygiene(repo); err != nil {
+		t.Fatalf("cleanupGeneratedArtifactHygiene() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "docs", "PRODUCT_BRIEF.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("docs/PRODUCT_BRIEF.md stat err = %v, want not exist", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "docs", "product-brief.md")); err != nil {
+		t.Fatalf("canonical docs/product-brief.md removed unexpectedly: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "docs", "testing.md")); err != nil {
+		t.Fatalf("unrelated docs/testing.md removed unexpectedly: %v", err)
+	}
+}
+
 func TestRecoverBuiltInSubtask_DocsQualityGateRecoveryRemovesInvalidReport(t *testing.T) {
 	t.Parallel()
 
