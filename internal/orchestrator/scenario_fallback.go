@@ -2071,11 +2071,29 @@ func inferModulePath(description, root string) string {
 			return modulePath
 		}
 	}
+	if modulePath := githubModuleFromGitRemote(root); modulePath != "" {
+		return modulePath
+	}
 	name := filepath.Base(root)
 	if name == "." || name == string(filepath.Separator) || name == "" {
 		return "arun-scenario"
 	}
-	return name
+	return sanitizePackageName(name)
+}
+
+func githubModuleFromGitRemote(root string) string {
+	if strings.TrimSpace(root) == "" || !commandAvailable("git") {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "remote", "get-url", "origin")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return githubModuleFromToken(strings.TrimSpace(string(out)))
 }
 
 func inferProjectName(description, root string) string {
@@ -2141,6 +2159,9 @@ func githubModuleFromToken(token string) string {
 	token = strings.Trim(token, " \t\r\n.,;:()[]{}<>\"'`")
 	token = strings.TrimPrefix(token, "https://")
 	token = strings.TrimPrefix(token, "http://")
+	token = strings.TrimPrefix(token, "ssh://")
+	token = strings.TrimPrefix(token, "git@")
+	token = strings.Replace(token, "github.com:", "github.com/", 1)
 	if !strings.HasPrefix(token, "github.com/") {
 		return ""
 	}

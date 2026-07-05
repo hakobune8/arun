@@ -12,6 +12,12 @@
 - Allowed release-manager recovery to create `CHANGELOG.md` for partial
   generated frontend artifacts so report-stage quality gates do not cascade
   only because release notes were missing.
+- Inferred generated Go module paths from the repository's GitHub remote before
+  falling back to workspace directory names, avoiding timestamp-based module
+  paths in empty-repository fallback output.
+- Shortened default GitHub issue bodies created by Web UI orchestrations so the
+  issue tracks run metadata and a concise request summary instead of embedding
+  the full parent task template.
 
 ## [v1.5.27] - 2026-07-05
 
