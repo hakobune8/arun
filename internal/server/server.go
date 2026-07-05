@@ -1753,7 +1753,7 @@ func implementationHeavyScrumPlan(record *orchestrationRecord) *orchestrator.Tas
 		}
 	}
 	return &orchestrator.TaskPlan{
-		Description: "Implementation-heavy scrum workflow with three PDCA-style sprint checkpoints. Each sprint runs planning, implementation, QA, adjustment planning, remediation, reporting, and one checkpoint commit in one pull request.",
+		Description: "Implementation-heavy scrum workflow with three PDCA-style sprint checkpoints. Each sprint runs planning, implementation, QA, adjustment planning, remediation, and reporting in one pull request, with changed subtasks committed individually before the sprint checkpoint.",
 		Subtasks: []orchestrator.Subtask{
 			step("sprint-1-plan", "analyst", "Sprint 1 product planning and design: inspect the repository state and translate the user's request into one concise product concept before implementation. Create or update docs/product-brief.md as the single source-of-truth product brief, and create or update docs/artifact-contract.md as the implementation contract for primary route, frontend directory and entrypoint, required local assets, backend module path and entrypoint, served routes, Docker/Helm packaging expectations, and validation commands. Do not create product/design.md, docs/PRODUCT_BRIEF.md, duplicate product brief files, competing concepts, alternate product names, or contradictory mechanics in later docs; in short, do not create product/design.md as a second product brief. Identify the target user, core loop or primary workflow, differentiating mechanic or value proposition, non-goals, and sprint-level acceptance criteria. If the request contains qualitative words such as novel, playful, simple, production-ready, or Japanese equivalents, turn each into observable behavior or review criteria. For games or UX-heavy work, define one differentiating mechanic that must appear in the implemented UI or source code, not only in documentation. Define validation commands, the files expected to change, and a simple repository layout that separates backend, frontend, deployment, and docs. For new repositories, prefer `server/` for the Go HTTP entrypoint and backend logic, `client/` for browser assets, `docs/` for product and validation notes, and `charts/` or `k8s/` for deployment artifacts. Keep the backend easy to evolve toward clean architecture by separating HTTP handling from domain/application logic when the implementation grows beyond a tiny vertical slice. Do not place Go server files, browser assets, Helm charts, and narrative docs together at the repository root. Do not implement code in this planning stage; leave concrete file changes to the following backend and frontend stages."),
 			step("sprint-1-backend", "go-backend", "Sprint 1 coding: create or improve a minimal Go net/http server with a /healthz health endpoint, one product endpoint or static handler, focused tests, clear errors, and simple configuration. Preserve docs/product-brief.md and satisfy docs/artifact-contract.md rather than building a generic scaffold. For an empty repository, initialize the Go module from the contract and make `/` serve the primary frontend or product response that matches the selected concept; avoid a root handler that returns unrelated placeholder text when a browser UI exists. If the frontend contract names required local assets, serve every referenced CSS/JS path from the Go entrypoint.", "sprint-1-plan"),
@@ -1762,7 +1762,7 @@ func implementationHeavyScrumPlan(record *orchestrationRecord) *orchestrator.Tas
 			step("sprint-1-adjust-plan", "analyst", "Sprint 1 adjustment planning: read Sprint 1 QA evidence and turn failures, artifact-contract violations, or missing baseline behavior into concise backend/frontend remediation notes. Do not implement code in this planning stage.", "sprint-1-qa"),
 			step("sprint-1-backend-fix", "go-backend", "Sprint 1 remediation: address QA findings that require backend, API, test, or integration changes. Keep the repository runnable from a fresh checkout.", "sprint-1-adjust-plan"),
 			step("sprint-1-frontend-fix", "frontend", "Sprint 1 remediation: address QA findings that require frontend or static asset changes, preserving the backend fixes from this sprint.", "sprint-1-backend-fix"),
-			step("sprint-1-report", "release-manager", "Sprint 1 reporting: summarize delivered baseline, QA evidence, remediation performed, and remaining backlog before the Sprint 1 checkpoint commit. Keep the report focused on product outcome and validation evidence; do not paste the full original task prompt.", "sprint-1-frontend-fix"),
+			step("sprint-1-report", "release-manager", "Sprint 1 reporting: summarize delivered baseline, QA evidence, remediation performed, and remaining backlog before the Sprint 1 checkpoint. Keep the report focused on product outcome and validation evidence; do not paste the full original task prompt.", "sprint-1-frontend-fix"),
 
 			step("sprint-2-plan", "analyst", "Sprint 2 planning: read Sprint 1 report and repository state, then produce concise product-design refinement notes, deployment packaging notes, and unresolved product gaps. Confirm whether the implemented behavior still matches the user's original intent, the single product brief, and the differentiating requirement. Do not rename the product concept or introduce a second mechanic unless the first was explicitly rejected as a QA blocker. Do not implement code in this planning stage.", "sprint-1-report"),
 			step("sprint-2-backend", "go-backend", "Sprint 2 coding: harden app startup, configuration, tests, and user-facing behavior before packaging. Address remaining product, design, or artifact-contract gaps from Sprint 1 if they block the user's requested experience, and avoid broad rewrites that reduce reviewability. Keep `/`, health endpoints, tests, Docker, and Helm aligned with the same primary product path defined in docs/artifact-contract.md.", "sprint-2-plan"),
@@ -1772,7 +1772,7 @@ func implementationHeavyScrumPlan(record *orchestrationRecord) *orchestrator.Tas
 			step("sprint-2-qa", "qa", "Sprint 2 QA: validate Docker, Helm, Kubernetes, artifact contract, and app-level smoke paths where tooling is available. When Docker is available, build and run the image, then verify `/healthz` and `/` from the container; when Docker is unavailable, statically confirm the runtime image copies all files needed for the primary UI named in docs/artifact-contract.md. Record exact commands, observed results, release blockers, and packaging or deployment gaps for this sprint adjustment pass.", "sprint-2-kubernetes"),
 			step("sprint-2-adjust-plan", "analyst", "Sprint 2 adjustment planning: read Sprint 2 QA evidence and turn deployment/package failures into concise remediation notes before the Sprint 2 checkpoint. Do not implement code in this planning stage.", "sprint-2-qa"),
 			step("sprint-2-infra-fix", "kubernetes", "Sprint 2 remediation: fix Kubernetes, Helm, or deployment manifest issues found by QA, coordinating with existing Docker and app artifacts.", "sprint-2-adjust-plan"),
-			step("sprint-2-report", "release-manager", "Sprint 2 reporting: summarize deployment artifacts, QA evidence, remediation performed, and remaining CI/release backlog before the Sprint 2 checkpoint commit. Keep the report concise and avoid repeating long command blocks already covered in focused docs.", "sprint-2-infra-fix"),
+			step("sprint-2-report", "release-manager", "Sprint 2 reporting: summarize deployment artifacts, QA evidence, remediation performed, and remaining CI/release backlog before the Sprint 2 checkpoint. Keep the report concise and avoid repeating long command blocks already covered in focused docs.", "sprint-2-infra-fix"),
 
 			step("sprint-3-plan", "analyst", "Sprint 3 planning: read Sprint 2 report and repository state, then produce concise product-readiness, CI, documentation, final QA, review, and release-readiness notes. Re-check the user request against the actual product experience and identify any remaining design gap before final polish. Do not implement code in this planning stage.", "sprint-2-report"),
 			step("sprint-3-devops", "devops", "Sprint 3 coding: add or improve GitHub Actions CI so future pull requests can continuously run the available backend/frontend/container checks. Keep workflows minimal, reproducible, and aligned with local validation commands.", "sprint-3-plan"),
@@ -1793,13 +1793,10 @@ func commitScrumSprintCheckpoint(record *orchestrationRecord, event *orchestrato
 	if event.Result == nil || !event.Result.Success {
 		return nil
 	}
-	sprint, ok := scrumSprintCheckpoint(event.Subtask.ID)
-	if !ok {
-		return nil
-	}
 	if strings.TrimSpace(record.RepoPath) == "" {
 		return fmt.Errorf("missing repository workspace")
 	}
+	sprint, isSprintCheckpoint := scrumSprintCheckpoint(event.Subtask.ID)
 	hygiene, err := scrubRepositoryArtifacts(record.RepoPath)
 	if err != nil {
 		return fmt.Errorf("repository hygiene: %w", err)
@@ -1816,15 +1813,29 @@ func commitScrumSprintCheckpoint(record *orchestrationRecord, event *orchestrato
 	if err := gitConfig(record.RepoPath, record.GitHubToken, "user.name", "ARUN"); err != nil {
 		return err
 	}
-	message := fmt.Sprintf("ARUN %s sprint %d checkpoint", record.ID, sprint)
 	if gitTreeClean(record.RepoPath, record.GitHubToken) {
+		if !isSprintCheckpoint {
+			return nil
+		}
+		message := fmt.Sprintf("ARUN %s sprint %d checkpoint", record.ID, sprint)
 		if err := gitCommitAllowEmpty(record.RepoPath, record.GitHubToken, message); err != nil {
 			return err
 		}
-	} else if err := gitCommit(record.RepoPath, record.GitHubToken, message); err != nil {
+		appendOrchestrationEvent(record, "sprint.commit", event.Subtask.ID, fmt.Sprintf("Committed Sprint %d checkpoint", sprint))
+		return nil
+	}
+	message := fmt.Sprintf("ARUN %s %s", record.ID, event.Subtask.ID)
+	if isSprintCheckpoint {
+		message = fmt.Sprintf("ARUN %s sprint %d checkpoint", record.ID, sprint)
+	}
+	if err := gitCommit(record.RepoPath, record.GitHubToken, message); err != nil {
 		return err
 	}
-	appendOrchestrationEvent(record, "sprint.commit", event.Subtask.ID, fmt.Sprintf("Committed Sprint %d checkpoint", sprint))
+	if isSprintCheckpoint {
+		appendOrchestrationEvent(record, "sprint.commit", event.Subtask.ID, fmt.Sprintf("Committed Sprint %d checkpoint", sprint))
+	} else {
+		appendOrchestrationEvent(record, "subtask.commit", event.Subtask.ID, fmt.Sprintf("Committed %s changes", event.Subtask.ID))
+	}
 	return nil
 }
 
@@ -4362,9 +4373,9 @@ func orchestrationPRBody(record *orchestrationRecord) string {
 
 func prBodyReadabilityNotice(language string) string {
 	if language == "ja" {
-		return "\n\n---\n\nこの PR 本文は読みやすさを保つため ARUN により短縮されました。詳細は run summary、生成された repository docs、各 sprint checkpoint を確認してください。\n"
+		return "\n\n---\n\nこの PR 本文は読みやすさを保つため ARUN により短縮されました。詳細は run summary、生成された repository docs、subtask/sprint checkpoint commit を確認してください。\n"
 	}
-	return "\n\n---\n\nThis PR body was shortened by ARUN for readability. See the run summary, generated repository docs, and sprint checkpoint commits for full details.\n"
+	return "\n\n---\n\nThis PR body was shortened by ARUN for readability. See the run summary, generated repository docs, and subtask/sprint checkpoint commits for full details.\n"
 }
 
 func truncateMarkdownBytes(body string, maxBytes int, notice string) string {
@@ -4534,7 +4545,7 @@ func structuredPullRequestSummary(record *orchestrationRecord, language string) 
 			lines = append(lines, fmt.Sprintf("- 実行中: %d", running))
 		}
 		lines = append(lines,
-			"- Sprint checkpoint: この PR branch の commit を確認してください。",
+			"- Subtask/sprint checkpoints: この PR branch の commit を確認してください。",
 			"- 詳細: run artifacts と生成された repository docs を確認してください。",
 		)
 		return strings.Join(lines, "\n")
@@ -4547,7 +4558,7 @@ func structuredPullRequestSummary(record *orchestrationRecord, language string) 
 		lines = append(lines, fmt.Sprintf("- Running: %d", running))
 	}
 	lines = append(lines,
-		"- Sprint checkpoints: see the commits on this PR branch.",
+		"- Subtask/sprint checkpoints: see the commits on this PR branch.",
 		"- Details: see the run artifacts and generated repository docs.",
 	)
 	return strings.Join(lines, "\n")
