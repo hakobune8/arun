@@ -1209,6 +1209,9 @@ func cleanupGeneratedArtifactHygiene(root string) error {
 	if err := removeDuplicateRootProductBrief(root); err != nil {
 		return err
 	}
+	if err := removeDuplicateDocsProductBriefs(root); err != nil {
+		return err
+	}
 	if err := scrubPromptContaminationFromGeneratedMarkdown(root); err != nil {
 		return err
 	}
@@ -1370,6 +1373,35 @@ func removeDuplicateRootProductBrief(root string) error {
 	}
 	if err := os.Remove(filepath.Join(root, "product-brief.md")); err != nil {
 		return fmt.Errorf("remove duplicate root product brief: %w", err)
+	}
+	return nil
+}
+
+func removeDuplicateDocsProductBriefs(root string) error {
+	canonical := filepath.Join(root, "docs", "product-brief.md")
+	if !fileExists(canonical) {
+		return nil
+	}
+	entries, err := os.ReadDir(filepath.Join(root, "docs"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		normalized := strings.ReplaceAll(strings.ToLower(name), "_", "-")
+		if name == "product-brief.md" || normalized != "product-brief.md" {
+			continue
+		}
+		rel := filepath.Join("docs", name)
+		if err := os.Remove(filepath.Join(root, rel)); err != nil {
+			return fmt.Errorf("remove duplicate docs product brief %s: %w", rel, err)
+		}
 	}
 	return nil
 }
