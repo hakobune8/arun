@@ -23,6 +23,19 @@ litellm --config litellm_config.yaml
 | `ARUN_ORCHESTRATE_SUBTASK_TIMEOUT` | `10m` | Maximum runtime for one orchestration subtask |
 | `ARUN_ORCHESTRATE_PLAN_TIMEOUT` | `90s` | Maximum runtime for orchestration planning |
 
+### Validation Model Guidance
+
+ARUN is model-agnostic: any LiteLLM-compatible chat model can be used if it
+supports the repository workflows and token budgets you configure. For
+repeatable open-weight validation, the current recommended validation model is
+Qwen3.6-35B-A3B.
+
+Treat this recommendation as an evaluation baseline, not a hard runtime
+dependency. Production deployments can route presets to different proprietary
+or open-weight models, but release validation and scenario comparisons should
+record the model and preset used so regressions can be distinguished from model
+changes.
+
 ### Governance Limits
 
 Web UI and API orchestrations accept optional `limits` values. These are stored
