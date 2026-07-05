@@ -103,6 +103,26 @@ entries:
     version: 1.0.0
   arun:
   - apiVersion: v2
+    appVersion: v1.5.26
+    created: "2026-07-05T13:23:09.558910342Z"
+    description: A Go runtime for autonomous coding agents — Web UI server
+    digest: c496f4576aa5cf2c5cccfce0eed9649867285904a91e495539fb99ca2a8e3c4f
+    home: https://github.com/hakobune8/arun
+    keywords:
+    - arun
+    - coding-agent
+    - ai
+    maintainers:
+    - name: ARUN maintainers
+      url: https://github.com/hakobune8/arun
+    name: arun
+    sources:
+    - https://github.com/hakobune8/arun
+    type: application
+    urls:
+    - https://github.com/hakobune8/arun/releases/download/arun-1.5.26/arun-1.5.26.tgz
+    version: 1.5.26
+  - apiVersion: v2
     appVersion: v1.5.25
     created: "2026-07-05T11:37:59.841263124Z"
     description: A Go runtime for autonomous coding agents — Web UI server
@@ -622,4 +642,4 @@ entries:
     urls:
     - https://github.com/hakobune8/arun/releases/download/arun-1.5.0/arun-1.5.0.tgz
     version: 1.5.0
-generated: "2026-07-05T11:37:59.841483724Z"
+generated: "2026-07-05T13:23:09.559179866Z"
