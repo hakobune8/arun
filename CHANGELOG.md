@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [v1.5.21] - 2026-07-05
+
+### Fixed
+- Recovered frontend validation failures when generated repositories contain
+  unserved alternate UI trees such as `web/index.html`, so deterministic
+  fallback removes stale browser artifacts instead of cascading the run failure.
+- Removed generated binary artifacts during deterministic fallback hygiene.
+- Stopped deterministic frontend fallback docs from copying full task/prompt
+  text into smoke-test, testing, and changelog content.
+
+### Changed
+- Documented Qwen3.6-35B-A3B as the current recommended open-weight validation
+  model while keeping ARUN model-agnostic.
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.21.
+
 ## [v1.5.20] - 2026-07-05
 
 ### Fixed

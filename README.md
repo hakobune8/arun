@@ -262,6 +262,8 @@ release that changes `charts/arun/**`, update both `version` and
 `appVersion` in `charts/arun/Chart.yaml` intentionally so chart-releaser can
 publish a new immutable chart release.
 
+- [v1.5.21 release notes](docs/release-v1.5.21.md) — Frontend artifact
+  recovery and validation model guidance
 - [v1.5.20 release notes](docs/release-v1.5.20.md) — Generated PR quality
   gates and PR body hygiene
 - [v1.5.19 release notes](docs/release-v1.5.19.md) — Explicit checkpoint
