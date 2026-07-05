@@ -2490,17 +2490,24 @@ func TestArtifactTemplates_PRBodyScrubsPromptContamination(t *testing.T) {
 			PRTemplate: "default",
 			PRBase:     "main",
 		},
+		Status: "completed",
+		Subtasks: []orchestrationSubtaskState{
+			{ID: "sprint-1-plan", Status: "completed"},
+			{ID: "sprint-1-frontend", Status: "completed"},
+		},
 		Summary: "# Multi-Agent Execution Results\n\n## [PASS] sprint-1-plan\nDelivered product brief.\n\nParent task:\n新規性のあるインベーダーゲーム\n\nOperating mode: build-first\n\nQuality bar:\n- observable\n\nExpected output:\n- repository artifacts\n",
 	}
 
 	body := orchestrationPRBody(record)
-	for _, blocked := range []string{"Parent task:", "Operating mode:", "Quality bar:", "Expected output:"} {
+	for _, blocked := range []string{"# Multi-Agent Execution Results", "## [PASS]", "Delivered product brief.", "Parent task:", "Operating mode:", "Quality bar:", "Expected output:"} {
 		if strings.Contains(body, blocked) {
 			t.Fatalf("PR body still contains %q:\n%s", blocked, body)
 		}
 	}
-	if !strings.Contains(body, "Delivered product brief.") {
-		t.Fatalf("PR body lost useful summary:\n%s", body)
+	for _, want := range []string{"状態: completed", "サブタスク: 2/2 completed, 0 failed", "Sprint checkpoint"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("PR body missing %q:\n%s", want, body)
+		}
 	}
 }
 

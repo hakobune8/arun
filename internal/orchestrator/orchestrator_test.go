@@ -961,6 +961,82 @@ func main() {
 	}
 }
 
+func TestFrontendQualityGateFailsForUnservedRootAssets(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"index.html":                    `<link rel="stylesheet" href="./styles.css"><script type="module" src="./src/main.js"></script>`,
+		"styles.css":                    `body { color: white; }`,
+		filepath.Join("src", "main.js"): `console.log("ok");`,
+		"main.go": `package main
+
+import "net/http"
+
+func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeFile(w, r, "index.html")
+	})
+}
+`,
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "frontend",
+		Description: "Add a browser game UI.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed with unserved root CSS/JS assets: %+v", status)
+	}
+}
+
+func TestUnservedRootFrontendAssetsExist(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"index.html":                    `<link rel="stylesheet" href="./styles.css"><script type="module" src="./src/main.js"></script>`,
+		"styles.css":                    `body { color: white; }`,
+		filepath.Join("src", "main.js"): `console.log("ok");`,
+		"main.go": `package main
+
+import "net/http"
+
+func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeFile(w, r, "index.html")
+	})
+}
+`,
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	if !unservedRootFrontendAssetsExist(repo) {
+		t.Fatalf("unservedRootFrontendAssetsExist() = false, want true")
+	}
+}
+
 func TestDocsQualityGateFailsForDeferredRemediationNotes(t *testing.T) {
 	t.Parallel()
 
@@ -1090,6 +1166,71 @@ func TestHealthzHandler(t *testing.T) {
 	}
 	if result.QualityGate == nil || !result.QualityGate.Passed {
 		t.Fatalf("quality gate = %+v, want passed", result.QualityGate)
+	}
+}
+
+func TestRecoverBuiltInSubtask_FrontendValidationRecoversUnservedRootAssets(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"go.mod":                        "module github.com/hakobune8/arun-test\n\ngo 1.22\n",
+		"index.html":                    `<link rel="stylesheet" href="./styles.css"><script type="module" src="./src/main.js"></script>`,
+		"styles.css":                    `body { color: white; }`,
+		filepath.Join("src", "main.js"): `console.log("ok");`,
+		"main.go": `package main
+
+import "net/http"
+
+func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeFile(w, r, "index.html")
+	})
+}
+`,
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-root-assets-step"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"frontend": &recordingAgent{name: "frontend"}},
+		&runtime.Config{},
+	)
+	subtask := &Subtask{
+		ID:          "sprint-1-frontend",
+		AgentName:   "frontend",
+		Description: "Sprint 1 coding: create or connect a minimal user-facing frontend/static experience.",
+	}
+	applyDefaultQualityGate(subtask)
+
+	result, ok := o.recoverBuiltInSubtask(context.Background(), subtask, runSandbox, errors.New("validation failed after 3 retries: index.html references styles.css but main.go does not serve static assets"))
+	if !ok || !result.Success {
+		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
+	}
+	if result.QualityGate == nil || !result.QualityGate.Passed {
+		t.Fatalf("quality gate = %+v, want passed", result.QualityGate)
+	}
+	mainGo, err := os.ReadFile(filepath.Join(repo, "main.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(mainGo), "staticAssetPath") {
+		t.Fatalf("main.go did not gain static asset serving:\n%s", mainGo)
 	}
 }
 

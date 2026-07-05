@@ -4413,7 +4413,7 @@ func renderArtifactBody(record *orchestrationRecord, artifact string) string {
 		data.IssueURL = record.GitHub.IssueURL
 	}
 	if artifact == "pull_request" {
-		data.Summary = concisePullRequestSummary(data.Summary, artifactLanguage(record))
+		data.Summary = concisePullRequestSummary(record, artifactLanguage(record))
 	}
 	rendered, err := renderTextTemplate(body, &data)
 	if err != nil {
@@ -4423,7 +4423,11 @@ func renderArtifactBody(record *orchestrationRecord, artifact string) string {
 	return safety.NewRedactor().RedactString(rendered)
 }
 
-func concisePullRequestSummary(summary, language string) string {
+func concisePullRequestSummary(record *orchestrationRecord, language string) string {
+	if record == nil {
+		return ""
+	}
+	summary := record.Summary
 	summary = strings.TrimSpace(summary)
 	if summary == "" {
 		return ""
@@ -4431,6 +4435,9 @@ func concisePullRequestSummary(summary, language string) string {
 	summary = scrubPromptContaminationFromText(summary)
 	if summary == "" {
 		return ""
+	}
+	if looksLikeRawExecutionSummary(summary) {
+		return structuredPullRequestSummary(record, language)
 	}
 	notice := "\n\nSummary shortened. See run artifacts and generated repository docs for full details."
 	if language == "ja" {
@@ -4440,6 +4447,64 @@ func concisePullRequestSummary(summary, language string) string {
 		return summary
 	}
 	return truncateMarkdownBytes(summary, githubPullRequestSummaryMaxBytes, notice)
+}
+
+func looksLikeRawExecutionSummary(summary string) bool {
+	return strings.Contains(summary, "# Multi-Agent Execution Results") ||
+		strings.Contains(summary, "## [PASS]") ||
+		strings.Contains(summary, "## [FAIL]") ||
+		strings.Contains(summary, "Executed by ")
+}
+
+func structuredPullRequestSummary(record *orchestrationRecord, language string) string {
+	completed, failed, running := 0, 0, 0
+	for _, subtask := range record.Subtasks {
+		switch strings.ToLower(strings.TrimSpace(subtask.Status)) {
+		case "completed":
+			completed++
+		case "failed":
+			failed++
+		case "running":
+			running++
+		}
+	}
+	total := len(record.Subtasks)
+	if total == 0 {
+		total = len(record.Results)
+		for _, result := range record.Results {
+			if result.Success {
+				completed++
+			} else {
+				failed++
+			}
+		}
+	}
+	if language == "ja" {
+		lines := []string{
+			fmt.Sprintf("- 状態: %s", strings.TrimSpace(record.Status)),
+			fmt.Sprintf("- サブタスク: %d/%d completed, %d failed", completed, total, failed),
+		}
+		if running > 0 {
+			lines = append(lines, fmt.Sprintf("- 実行中: %d", running))
+		}
+		lines = append(lines,
+			"- Sprint checkpoint: この PR branch の commit を確認してください。",
+			"- 詳細: run artifacts と生成された repository docs を確認してください。",
+		)
+		return strings.Join(lines, "\n")
+	}
+	lines := []string{
+		fmt.Sprintf("- Status: %s", strings.TrimSpace(record.Status)),
+		fmt.Sprintf("- Subtasks: %d/%d completed, %d failed", completed, total, failed),
+	}
+	if running > 0 {
+		lines = append(lines, fmt.Sprintf("- Running: %d", running))
+	}
+	lines = append(lines,
+		"- Sprint checkpoints: see the commits on this PR branch.",
+		"- Details: see the run artifacts and generated repository docs.",
+	)
+	return strings.Join(lines, "\n")
 }
 
 func scrubPromptContaminationFromText(content string) string {
