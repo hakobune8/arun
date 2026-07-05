@@ -1206,6 +1206,9 @@ func cleanupGeneratedArtifactHygiene(root string) error {
 	if err := removeGeneratedDocsWithInvalidRepositoryClaims(root); err != nil {
 		return err
 	}
+	if err := removeDuplicateRootProductBrief(root); err != nil {
+		return err
+	}
 	if err := scrubPromptContaminationFromGeneratedMarkdown(root); err != nil {
 		return err
 	}
@@ -1356,6 +1359,17 @@ func removeGeneratedDocsWithInvalidRepositoryClaims(root string) error {
 		if err := os.Remove(path); err != nil {
 			return fmt.Errorf("remove inconsistent generated doc %s: %w", rel, err)
 		}
+	}
+	return nil
+}
+
+func removeDuplicateRootProductBrief(root string) error {
+	if !fileExists(filepath.Join(root, "docs", "product-brief.md")) ||
+		!fileExists(filepath.Join(root, "product-brief.md")) {
+		return nil
+	}
+	if err := os.Remove(filepath.Join(root, "product-brief.md")); err != nil {
+		return fmt.Errorf("remove duplicate root product brief: %w", err)
 	}
 	return nil
 }
