@@ -46,6 +46,7 @@ fi
 cleanup_local() {
   if [[ -n "${PORT_FORWARD_PID:-}" ]]; then
     kill "$PORT_FORWARD_PID" >/dev/null 2>&1 || true
+    wait "$PORT_FORWARD_PID" >/dev/null 2>&1 || true
   fi
 }
 

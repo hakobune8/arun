@@ -104,6 +104,7 @@ kubectl -n "$BUILD_NAMESPACE" port-forward svc/buildkit "${BUILDKIT_LOCAL_PORT}:
 PORT_FORWARD_PID=$!
 cleanup() {
   kill "$PORT_FORWARD_PID" >/dev/null 2>&1 || true
+  wait "$PORT_FORWARD_PID" >/dev/null 2>&1 || true
   cleanup_values
 }
 trap cleanup EXIT
