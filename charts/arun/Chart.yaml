@@ -2,8 +2,8 @@ apiVersion: v2
 name: arun
 description: A Go runtime for autonomous coding agents — Web UI server
 type: application
-version: 1.5.26
-appVersion: "v1.5.26"
+version: 1.5.27
+appVersion: "v1.5.27"
 home: https://github.com/hakobune8/arun
 sources:
   - https://github.com/hakobune8/arun
