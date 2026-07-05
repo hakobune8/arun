@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [v1.5.25] - 2026-07-05
+
+### Fixed
+- Removed duplicate root-level `product-brief.md` during generated artifact
+  hygiene when canonical `docs/product-brief.md` already exists, preventing
+  stale product concepts from surviving final checkpoints.
+- Added regression coverage for generated branches where the implementation and
+  `docs/product-brief.md` agree but root `product-brief.md` describes a
+  different product concept.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.25.
+
 ## [v1.5.24] - 2026-07-05
 
 ### Fixed

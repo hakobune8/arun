@@ -262,6 +262,8 @@ release that changes `charts/arun/**`, update both `version` and
 `appVersion` in `charts/arun/Chart.yaml` intentionally so chart-releaser can
 publish a new immutable chart release.
 
+- [v1.5.25 release notes](docs/release-v1.5.25.md) — Duplicate product brief
+  hygiene for generated repositories
 - [v1.5.24 release notes](docs/release-v1.5.24.md) — Generated artifact
   consistency gates and recovery for stale sprint reports
 - [v1.5.23 release notes](docs/release-v1.5.23.md) — Generated artifact
