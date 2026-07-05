@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [v1.5.24] - 2026-07-05
+
+### Fixed
+- Removed orphan generated Helm chart fragments such as `charts/*/templates`
+  without a matching `Chart.yaml`, preventing fresh-checkout chart validation
+  from missing stale deployment artifacts.
+- Failed generated docs quality gates when sprint/report docs claim missing
+  endpoints or repository layout directories that do not exist in the produced
+  branch.
+- Recovered docs gate failures by removing stale generated sprint/report docs
+  with invalid repository claims and then re-running the quality gate instead
+  of masking the failure as a fallback pass.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.24.
+
 ## [v1.5.23] - 2026-07-05
 
 ### Fixed
