@@ -362,13 +362,13 @@ func TestQAQualityGate_AllowsStaticFrontendSmokeEvidence(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(repo, "docs"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(repo, "src"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, "client", "src"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(repo, "package.json"), []byte(`{"scripts":{"test":"node --check src/main.js","build":"node --check src/main.js"}}`), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, "package.json"), []byte(`{"scripts":{"test":"node --check client/src/main.js","build":"node --check client/src/main.js"}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(repo, "src", "main.js"), []byte(`console.log("ok");`), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, "client", "src", "main.js"), []byte(`console.log("ok");`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(repo, "docs", "smoke-test.md"), []byte("# Smoke Test\n\nRun npm test.\n"), 0o600); err != nil {
@@ -782,7 +782,7 @@ func TestExecuteSubtask_FrontendRecoversEmptyRepositoryNoOp(t *testing.T) {
 	if !strings.Contains(result.Output, "static frontend scaffold") {
 		t.Fatalf("output = %q, want frontend fallback detail", result.Output)
 	}
-	for _, file := range []string{"package.json", "index.html", "styles.css", filepath.Join("src", "main.js"), "README.md", filepath.Join("docs", "smoke-test.md"), filepath.Join("docs", "testing.md"), "CHANGELOG.md"} {
+	for _, file := range []string{"package.json", filepath.Join("client", "index.html"), filepath.Join("client", "styles.css"), filepath.Join("client", "src", "main.js"), "README.md", filepath.Join("docs", "smoke-test.md"), filepath.Join("docs", "testing.md"), "CHANGELOG.md"} {
 		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
 			t.Fatalf("%s not created: %v", file, err)
 		}
@@ -799,7 +799,7 @@ func TestRecoverFrontendStaticAppUsesInvaderProductConceptTitle(t *testing.T) {
 	if _, err := recoverFrontendStaticApp(repo, "新規性のあるインベーダーゲームを作成する"); err != nil {
 		t.Fatalf("recoverFrontendStaticApp() error = %v", err)
 	}
-	index, err := os.ReadFile(filepath.Join(repo, "index.html"))
+	index, err := os.ReadFile(filepath.Join(repo, "client", "index.html"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -814,7 +814,7 @@ func TestRecoverFrontendStaticAppUsesInvaderProductConceptTitle(t *testing.T) {
 	if !strings.Contains(string(pkg), `"name": "one-button-invaders"`) {
 		t.Fatalf("package.json does not use invader product package name:\n%s", pkg)
 	}
-	mainJS, err := os.ReadFile(filepath.Join(repo, "src", "main.js"))
+	mainJS, err := os.ReadFile(filepath.Join(repo, "client", "src", "main.js"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -932,6 +932,9 @@ func TestFrontendQualityGateFailsForUnservedWebIndex(t *testing.T) {
 
 	repo := t.TempDir()
 	if err := os.Mkdir(filepath.Join(repo, "web"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(repo, "src"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	files := map[string]string{
@@ -1090,6 +1093,9 @@ func TestCleanupGeneratedArtifactHygieneRemovesUnservedAlternateUIAndIncompleteC
 	if err := os.Mkdir(filepath.Join(repo, "web"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Mkdir(filepath.Join(repo, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(filepath.Join(repo, "charts", "invader-game"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1098,6 +1104,8 @@ func TestCleanupGeneratedArtifactHygieneRemovesUnservedAlternateUIAndIncompleteC
 	}
 	files := map[string]string{
 		"index.html":                       "<!doctype html><title>One-Button Invaders</title>",
+		"styles.css":                       "body { color: white; }",
+		filepath.Join("src", "main.js"):    `console.log("ok");`,
 		filepath.Join("web", "index.html"): "<!doctype html><title>Gravity Invaders</title>",
 		filepath.Join("charts", "invader-game", "Chart.yaml"):                "apiVersion: v2\nname: invader-game\ntype: application\nversion: 0.1.0\n",
 		filepath.Join("charts", "orphan-chart", "templates", "service.yaml"): "apiVersion: v1\nkind: Service\n",
@@ -1141,8 +1149,11 @@ func main() {
 			t.Fatalf("%s still exists or unexpected error: %v", removed, err)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(repo, "index.html")); err != nil {
-		t.Fatalf("root index removed unexpectedly: %v", err)
+	if _, err := os.Stat(filepath.Join(repo, "client", "index.html")); err != nil {
+		t.Fatalf("client index missing after migration: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "server", "main.go")); err != nil {
+		t.Fatalf("server main missing after migration: %v", err)
 	}
 }
 
@@ -1392,7 +1403,7 @@ func TestRecoverBuiltInSubtask_FrontendTimeoutRecoversEmptyRepository(t *testing
 	if !ok || !result.Success {
 		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
 	}
-	for _, file := range []string{"package.json", "index.html", filepath.Join("src", "main.js"), filepath.Join("docs", "smoke-test.md")} {
+	for _, file := range []string{"package.json", filepath.Join("client", "index.html"), filepath.Join("client", "src", "main.js"), filepath.Join("docs", "smoke-test.md")} {
 		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
 			t.Fatalf("%s not created: %v", file, err)
 		}
@@ -1471,7 +1482,7 @@ func TestHealthzHandler(t *testing.T) {
 	if !ok || !result.Success {
 		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
 	}
-	for _, file := range []string{"package.json", "index.html", "styles.css", filepath.Join("src", "main.js"), filepath.Join("docs", "smoke-test.md")} {
+	for _, file := range []string{"package.json", filepath.Join("client", "index.html"), filepath.Join("client", "styles.css"), filepath.Join("client", "src", "main.js"), filepath.Join("docs", "smoke-test.md")} {
 		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
 			t.Fatalf("%s not created: %v", file, err)
 		}
@@ -1530,19 +1541,19 @@ func main() {
 	}
 	applyDefaultQualityGate(subtask)
 
-	result, ok := o.recoverBuiltInSubtask(context.Background(), subtask, runSandbox, errors.New("validation failed after 3 retries: index.html references styles.css but main.go does not serve static assets"))
+	result, ok := o.recoverBuiltInSubtask(context.Background(), subtask, runSandbox, errors.New("validation failed after 3 retries: index.html references styles.css but server/main.go does not serve static assets"))
 	if !ok || !result.Success {
 		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
 	}
 	if result.QualityGate == nil || !result.QualityGate.Passed {
 		t.Fatalf("quality gate = %+v, want passed", result.QualityGate)
 	}
-	mainGo, err := os.ReadFile(filepath.Join(repo, "main.go"))
+	mainGo, err := os.ReadFile(filepath.Join(repo, "server", "main.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(mainGo), "staticAssetPath") {
-		t.Fatalf("main.go did not gain static asset serving:\n%s", mainGo)
+		t.Fatalf("server/main.go did not gain static asset serving:\n%s", mainGo)
 	}
 }
 
@@ -1597,7 +1608,10 @@ func TestRecoverGoBackendServesExistingStaticIndex(t *testing.T) {
 	}
 
 	repo := t.TempDir()
-	if err := os.WriteFile(filepath.Join(repo, "index.html"), []byte("<!doctype html><title>One-Button Invaders</title>"), 0o600); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, "client"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "client", "index.html"), []byte("<!doctype html><title>One-Button Invaders</title>"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1607,12 +1621,12 @@ func TestRecoverGoBackendServesExistingStaticIndex(t *testing.T) {
 	if err := runShell(context.Background(), repo, "go test ./..."); err != nil {
 		t.Fatalf("go test after recovery: %v", err)
 	}
-	mainGo, err := os.ReadFile(filepath.Join(repo, "main.go"))
+	mainGo, err := os.ReadFile(filepath.Join(repo, "server", "main.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(mainGo), `http.ServeFile(w, r, "index.html")`) {
-		t.Fatalf("main.go does not serve existing index.html:\n%s", mainGo)
+	if !strings.Contains(string(mainGo), `path.Join(staticDir, "index.html")`) {
+		t.Fatalf("server/main.go does not serve existing client/index.html:\n%s", mainGo)
 	}
 }
 
@@ -1692,9 +1706,8 @@ func TestRecoverDockerfileCopiesStaticFrontendAssetsWhenPresent(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"COPY --from=build /src/index.html /app/index.html",
-		"COPY --from=build /src/styles.css /app/styles.css",
-		"COPY --from=build /src/src /app/src",
+		"RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags=\"-s -w\" -o /out/app ./server",
+		"COPY --from=build /src/client /app/client",
 	} {
 		if !strings.Contains(string(dockerfile), want) {
 			t.Fatalf("Dockerfile missing %q:\n%s", want, dockerfile)
@@ -1988,18 +2001,18 @@ func TestRecoverGoBackend_CreatesValidService(t *testing.T) {
 	if !strings.Contains(out, "Go net/http service") {
 		t.Fatalf("output = %q", out)
 	}
-	for _, file := range []string{"go.mod", "main.go"} {
+	for _, file := range []string{"go.mod", filepath.Join("server", "main.go")} {
 		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
 			t.Fatalf("%s not created: %v", file, err)
 		}
 	}
-	mainData, err := os.ReadFile(filepath.Join(repo, "main.go"))
+	mainData, err := os.ReadFile(filepath.Join(repo, "server", "main.go"))
 	if err != nil {
-		t.Fatalf("read main.go: %v", err)
+		t.Fatalf("read server/main.go: %v", err)
 	}
 	for _, want := range []string{"net/http", "healthzHandler", `"status": "ok"`} {
 		if !strings.Contains(string(mainData), want) {
-			t.Fatalf("main.go missing %q:\n%s", want, mainData)
+			t.Fatalf("server/main.go missing %q:\n%s", want, mainData)
 		}
 	}
 }
@@ -2048,7 +2061,7 @@ func TestRecoverGoCI_CreatesWorkflowAndTests(t *testing.T) {
 	if !strings.Contains(out, "GitHub Actions") {
 		t.Fatalf("output = %q", out)
 	}
-	for _, file := range []string{"main_test.go", filepath.Join(".github", "workflows", "go.yml")} {
+	for _, file := range []string{filepath.Join("server", "main_test.go"), filepath.Join(".github", "workflows", "go.yml")} {
 		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
 			t.Fatalf("%s not created: %v", file, err)
 		}
@@ -2441,8 +2454,8 @@ func TestRecoverBuiltInSubtask_UsesFreshContextAfterTimeout(t *testing.T) {
 	if !ok || !result.Success {
 		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success despite canceled subtask context", result, ok)
 	}
-	if _, err := os.Stat(filepath.Join(repo, "main.go")); err != nil {
-		t.Fatalf("main.go not created: %v", err)
+	if _, err := os.Stat(filepath.Join(repo, "server", "main.go")); err != nil {
+		t.Fatalf("server/main.go not created: %v", err)
 	}
 }
 
