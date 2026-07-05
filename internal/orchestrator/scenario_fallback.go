@@ -29,7 +29,7 @@ import (
 )
 
 func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask *Subtask, runSandbox sandbox.Sandbox, runtimeErr error) (SubtaskResult, bool) {
-	if subtask.AgentName == "frontend" && shouldRecoverFrontendScaffold(runSandbox.RootDir(), subtask.Description) {
+	if subtask.AgentName == "frontend" && (shouldRecoverFrontendScaffold(runSandbox.RootDir(), subtask.Description) || unservedAlternateFrontendExists(runSandbox.RootDir())) {
 		out, err := recoverFrontendStaticApp(runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
 	}
@@ -203,6 +203,9 @@ func fallbackRecoveryContext() (context.Context, context.CancelFunc) {
 func (o *Orchestrator) recoveredSubtaskResult(subtask *Subtask, runSandbox sandbox.Sandbox, output string, runtimeErr, fallbackErr error) SubtaskResult {
 	if fallbackErr != nil {
 		return SubtaskResult{}
+	}
+	if err := cleanupGeneratedArtifactHygiene(runSandbox.RootDir()); err != nil {
+		output = strings.TrimSpace(output + "\n" + "Hygiene cleanup warning: " + err.Error())
 	}
 	_ = runCmd(context.Background(), runSandbox.RootDir(), "git", "add", "-N", ".") //nolint:errcheck // best-effort diff visibility for new files
 	diff := gitDiff(context.Background(), runSandbox.RootDir())
@@ -766,7 +769,10 @@ tick();
 			return "", fmt.Errorf("write %s: %w", name, err)
 		}
 	}
-	return "Created minimal static frontend scaffold for an empty repository with a browser game, README, smoke-test, testing, and release notes.", nil
+	if err := cleanupGeneratedArtifactHygiene(root); err != nil {
+		return "", err
+	}
+	return "Created minimal static frontend scaffold for an empty repository with a browser game, README, smoke-test, testing, and release notes; removed unserved alternate frontend trees and generated binary artifacts when present.", nil
 }
 
 func recoverFrontendDocs(root, description string) (string, error) {
@@ -789,6 +795,9 @@ func recoverFrontendDocs(root, description string) (string, error) {
 			return "", fmt.Errorf("write %s: %w", name, err)
 		}
 	}
+	if err := cleanupGeneratedArtifactHygiene(root); err != nil {
+		return "", err
+	}
 	return "Added static frontend README, smoke-test, testing, and changelog documentation.", nil
 }
 
@@ -802,12 +811,18 @@ func recoverFrontendQA(root, description string) (string, error) {
 	if err := os.WriteFile(filepath.Join(root, "docs", "testing.md"), []byte(frontendTestingDoc(description)), 0o600); err != nil {
 		return "", fmt.Errorf("write docs/testing.md: %w", err)
 	}
+	if err := cleanupGeneratedArtifactHygiene(root); err != nil {
+		return "", err
+	}
 	return "Added static frontend QA evidence in docs/smoke-test.md and docs/testing.md.", nil
 }
 
 func recoverFrontendRelease(root, description string) (string, error) {
 	if err := os.WriteFile(filepath.Join(root, "CHANGELOG.md"), []byte(frontendChangelog(description)), 0o600); err != nil {
 		return "", fmt.Errorf("write CHANGELOG.md: %w", err)
+	}
+	if err := cleanupGeneratedArtifactHygiene(root); err != nil {
+		return "", err
 	}
 	return "Added CHANGELOG.md for the static frontend scaffold release.", nil
 }
@@ -1037,9 +1052,10 @@ func frontendSmokeTest(description string) string {
 		"7. Click `Restart` and confirm score returns to 0, lives returns to 3, and gravity returns to Floor.",
 		"8. Run `npm test` and `npm run build`.",
 		"",
-		"## Scenario",
+		"## Product Coverage",
 		"",
-		strings.TrimSpace(description),
+		"- Validates the generated browser game from the primary served route.",
+		"- Focuses on implemented controls, scoring, lives, restart behavior, and layout.",
 		"",
 	}, "\n")
 }
@@ -1069,9 +1085,10 @@ func frontendTestingDoc(description string) string {
 		"- Confirm Restart restores score to 0 and lives to 3.",
 		"- Confirm the page remains usable on narrow and wide viewports.",
 		"",
-		"## Scenario coverage",
+		"## Product Coverage",
 		"",
-		strings.TrimSpace(description),
+		"- Covers the generated gravity-lane invader game and its primary review path.",
+		"- Does not claim Docker, Helm, Kubernetes, or CI execution unless those commands were run separately.",
 		"",
 	}, "\n")
 }
@@ -1093,11 +1110,154 @@ func frontendChangelog(description string) string {
 		"- Run `npm test` and `npm run build` when a JavaScript runtime is available.",
 		"- Perform the manual browser smoke check documented in `docs/testing.md`.",
 		"",
-		"## Scenario",
-		"",
-		strings.TrimSpace(description),
-		"",
 	}, "\n")
+}
+
+func cleanupGeneratedArtifactHygiene(root string) error {
+	if err := removeUnservedAlternateFrontendTrees(root); err != nil {
+		return err
+	}
+	if err := removeGeneratedBinaryArtifacts(root); err != nil {
+		return err
+	}
+	if err := scrubPromptContaminationFromGeneratedMarkdown(root); err != nil {
+		return err
+	}
+	return nil
+}
+
+func unservedAlternateFrontendExists(root string) bool {
+	for _, dir := range []string{"frontend", "web"} {
+		if fileExists(filepath.Join(root, dir, "index.html")) && !mainServesFrontendDir(root, dir) {
+			return true
+		}
+	}
+	return false
+}
+
+func removeUnservedAlternateFrontendTrees(root string) error {
+	for _, dir := range []string{"frontend", "web"} {
+		path := filepath.Join(root, dir)
+		if !fileExists(filepath.Join(path, "index.html")) || mainServesFrontendDir(root, dir) {
+			continue
+		}
+		if err := os.RemoveAll(path); err != nil {
+			return fmt.Errorf("remove unserved %s: %w", dir, err)
+		}
+	}
+	return nil
+}
+
+func mainServesFrontendDir(root, dir string) bool {
+	data, err := os.ReadFile(filepath.Join(root, "main.go"))
+	if err != nil {
+		return false
+	}
+	content := string(data)
+	return strings.Contains(content, dir) ||
+		strings.Contains(content, "static") ||
+		strings.Contains(content, "FileServer")
+}
+
+func removeGeneratedBinaryArtifacts(root string) error {
+	return filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == root {
+			return nil
+		}
+		if entry.IsDir() {
+			switch entry.Name() {
+			case ".git", ".arun", "node_modules":
+				return filepath.SkipDir
+			default:
+				return nil
+			}
+		}
+		if isGeneratedBinaryArtifact(path) {
+			if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("remove generated binary %s: %w", filepath.Base(path), err)
+			}
+		}
+		return nil
+	})
+}
+
+func isGeneratedBinaryArtifact(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) < 4 {
+		return false
+	}
+	if bytes.HasPrefix(data, []byte{0x7f, 'E', 'L', 'F'}) || bytes.HasPrefix(data, []byte{'M', 'Z'}) {
+		return true
+	}
+	return bytes.HasPrefix(data, []byte{0xfe, 0xed, 0xfa, 0xcf}) ||
+		bytes.HasPrefix(data, []byte{0xcf, 0xfa, 0xed, 0xfe}) ||
+		bytes.HasPrefix(data, []byte{0xfe, 0xed, 0xfa, 0xce}) ||
+		bytes.HasPrefix(data, []byte{0xce, 0xfa, 0xed, 0xfe})
+}
+
+func scrubPromptContaminationFromGeneratedMarkdown(root string) error {
+	return filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == root {
+			return nil
+		}
+		if entry.IsDir() {
+			switch entry.Name() {
+			case ".git", ".arun", "node_modules":
+				return filepath.SkipDir
+			default:
+				return nil
+			}
+		}
+		if strings.ToLower(filepath.Ext(path)) != ".md" {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		content := string(data)
+		cut := promptContaminationCutIndex(content)
+		if cut < 0 {
+			return nil
+		}
+		cleaned := strings.TrimRight(content[:cut], " \t\r\n")
+		if cleaned != "" {
+			cleaned += "\n"
+		}
+		if err := os.WriteFile(path, []byte(cleaned), 0o600); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+func promptContaminationCutIndex(content string) int {
+	markers := []string{
+		"\n## Scenario",
+		"\n## Scenario coverage",
+		"\nParent task:",
+		"\nOperating mode:",
+		"\nQuality bar:",
+		"\nExpected output:",
+	}
+	best := -1
+	for _, marker := range markers {
+		if idx := strings.Index(content, marker); idx >= 0 && (best < 0 || idx < best) {
+			best = idx
+		}
+	}
+	for _, marker := range []string{"## Scenario", "Parent task:", "Operating mode:", "Quality bar:", "Expected output:"} {
+		if strings.HasPrefix(content, marker) {
+			return 0
+		}
+	}
+	return best
 }
 
 func recoverGoCI(ctx context.Context, root string) (string, error) {
