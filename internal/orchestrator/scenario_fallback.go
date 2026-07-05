@@ -29,7 +29,7 @@ import (
 )
 
 func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask *Subtask, runSandbox sandbox.Sandbox, runtimeErr error) (SubtaskResult, bool) {
-	if subtask.AgentName == "frontend" && (shouldRecoverFrontendScaffold(runSandbox.RootDir(), subtask.Description) || unservedAlternateFrontendExists(runSandbox.RootDir()) || unservedRootFrontendAssetsExist(runSandbox.RootDir())) {
+	if subtask.AgentName == "frontend" && (shouldRecoverFrontendScaffold(runSandbox.RootDir(), subtask.Description) || missingReferencedFrontendAssetsExist(runSandbox.RootDir()) || unservedAlternateFrontendExists(runSandbox.RootDir()) || unservedRootFrontendAssetsExist(runSandbox.RootDir())) {
 		out, err := recoverFrontendStaticApp(runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
 	}
@@ -2247,6 +2247,34 @@ func frontendProjectEvidenceExists(root string) bool {
 		fileExists(filepath.Join(root, "index.html")) ||
 		fileExists(filepath.Join(root, "frontend", "index.html")) ||
 		fileExists(filepath.Join(root, "web", "index.html"))
+}
+
+func missingReferencedFrontendAssetsExist(root string) bool {
+	for _, rel := range []string{
+		filepath.Join("client", "index.html"),
+		filepath.Join("frontend", "index.html"),
+		filepath.Join("web", "index.html"),
+		"index.html",
+	} {
+		indexPath := filepath.Join(root, rel)
+		if !fileExists(indexPath) {
+			continue
+		}
+		assets, err := referencedRootFrontendAssets(indexPath)
+		if err != nil {
+			continue
+		}
+		dir := filepath.Dir(rel)
+		if dir == "." {
+			dir = ""
+		}
+		for _, asset := range assets {
+			if !fileExists(filepath.Join(root, dir, asset)) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func shouldRecoverFrontendScaffold(root, description string) bool {

@@ -1646,6 +1646,91 @@ func TestHealthzHandler(t *testing.T) {
 	}
 }
 
+func TestRecoverBuiltInSubtask_FrontendValidationRecoversMissingReferencedAssets(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "client"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "server"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"go.mod": "module github.com/hakobune8/arun-test\n\ngo 1.22\n",
+		filepath.Join("client", "index.html"): `<!doctype html>
+<title>Gravity Invader</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>`,
+		filepath.Join("server", "main.go"): `package main
+
+import (
+	"net/http"
+	"path"
+)
+
+func rootHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		if assetPath, ok := staticAssetPath(r.URL.Path); ok {
+			http.ServeFile(w, r, assetPath)
+			return
+		}
+		http.NotFound(w, r)
+		return
+	}
+	http.ServeFile(w, r, path.Join("client", "index.html"))
+}
+
+func staticAssetPath(urlPath string) (string, bool) {
+	switch urlPath {
+	case "/styles.css":
+		return path.Join("client", "styles.css"), true
+	default:
+		return "", false
+	}
+}
+
+func main() {}
+`,
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-missing-assets-step"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"frontend": &recordingAgent{name: "frontend"}},
+		&runtime.Config{},
+	)
+
+	result, ok := o.recoverBuiltInSubtask(context.Background(), &Subtask{
+		ID:          "sprint-1-frontend",
+		AgentName:   "frontend",
+		Description: "Sprint 1 coding: create or connect a minimal user-facing frontend/static experience.",
+		QualityGate: qualityGateForSubtask(&Subtask{
+			AgentName:   "frontend",
+			Description: "Add a browser game UI.",
+		}),
+	}, runSandbox, errors.New("validation failed after 3 retries: tests"))
+	if !ok || !result.Success {
+		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
+	}
+	for _, file := range []string{filepath.Join("client", "styles.css"), filepath.Join("client", "src", "main.js"), "package.json"} {
+		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
+			t.Fatalf("%s not recovered: %v", file, err)
+		}
+	}
+	if result.QualityGate == nil || !result.QualityGate.Passed {
+		t.Fatalf("quality gate = %+v, want passed", result.QualityGate)
+	}
+}
+
 func TestRecoverBuiltInSubtask_FrontendValidationRecoversUnservedRootAssets(t *testing.T) {
 	t.Parallel()
 
