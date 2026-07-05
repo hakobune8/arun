@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [v1.5.22] - 2026-07-05
+
+### Fixed
+- Failed generated frontend quality gates when root `index.html` references
+  local CSS or JavaScript that the Go entrypoint does not serve, preventing
+  completed runs from producing broken browser UIs.
+- Repaired deterministic frontend recovery so it updates the generated Go
+  entrypoint when needed, making fallback apps serve `/`, `/healthz`,
+  `/styles.css`, and `/src/*.js`.
+- Replaced raw multi-agent execution summaries in generated pull request bodies
+  with concise structured summaries for reviewer readability.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.22.
+
 ## [v1.5.21] - 2026-07-05
 
 ### Fixed
