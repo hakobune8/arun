@@ -2425,7 +2425,7 @@ func TestArtifactTemplates_DefaultEnglishAndJapanese(t *testing.T) {
 		Summary: "Done",
 	}
 	issue := orchestrationIssueBody(record)
-	if !strings.Contains(issue, "## Task") || !strings.Contains(issue, "Implement feature") {
+	if !strings.Contains(issue, "## Request Summary") || !strings.Contains(issue, "Implement feature") {
 		t.Fatalf("english issue body = %q", issue)
 	}
 	pr := orchestrationPRBody(record)
@@ -2435,12 +2435,48 @@ func TestArtifactTemplates_DefaultEnglishAndJapanese(t *testing.T) {
 
 	record.OutputLanguage = "ja"
 	issue = orchestrationIssueBody(record)
-	if !strings.Contains(issue, "## タスク") || !strings.Contains(issue, "ARUN Orchestrate により作成されました") {
+	if !strings.Contains(issue, "## 要求要約") || !strings.Contains(issue, "ARUN Orchestrate により作成されました") {
 		t.Fatalf("japanese issue body = %q", issue)
 	}
 	pr = orchestrationPRBody(record)
 	if !strings.Contains(pr, "## 概要") || !strings.Contains(pr, "Done") {
 		t.Fatalf("japanese PR body = %q", pr)
+	}
+}
+
+func TestArtifactTemplates_IssueBodyUsesShortTaskSummary(t *testing.T) {
+	record := &orchestrationRecord{
+		ID:             "run-0123456789abcdef",
+		BaseBranch:     "main",
+		OutputLanguage: "ja",
+		Agents:         []string{"analyst", "frontend", "qa"},
+		Strategy:       "sequential",
+		Task: "新規性のあるインベーダーゲームを作りたい。\n\n" +
+			"hakobune8/arun-test の main 上で implementation-heavy agile scrum workflow を実行してください。\n\n" +
+			"Operating mode: 新規または sandbox repository 向けの build-first。\n\n" +
+			"Quality bar:\n- Product concept は 1 つだけを source of truth にしてください。\n\n" +
+			"Expected output:\n- Concrete file changes。",
+		GitHub: &orchestrationGitHubState{
+			Repo:          "hakobune8/arun-test",
+			BranchName:    "arun/run-0123456789abcdef",
+			IssueTemplate: "default",
+			PRBase:        "main",
+		},
+	}
+
+	body := orchestrationIssueBody(record)
+	for _, blocked := range []string{"Operating mode:", "Quality bar:", "Expected output:", "Product concept は 1 つだけ"} {
+		if strings.Contains(body, blocked) {
+			t.Fatalf("issue body still contains %q:\n%s", blocked, body)
+		}
+	}
+	for _, want := range []string{"## 要求要約", "新規性のあるインベーダーゲームを作りたい。", "詳細な親タスク全文"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("issue body missing %q:\n%s", want, body)
+		}
+	}
+	if len([]byte(body)) > 1400 {
+		t.Fatalf("issue body too long: %d bytes\n%s", len([]byte(body)), body)
 	}
 }
 

@@ -3322,6 +3322,7 @@ type artifactTemplateData struct {
 	Strategy     string
 	Agents       string
 	Task         string
+	TaskSummary  string
 	Summary      string
 	IssueURL     string
 }
@@ -4404,6 +4405,7 @@ func renderArtifactBody(record *orchestrationRecord, artifact string) string {
 		Strategy:     record.Strategy,
 		Agents:       strings.Join(record.Agents, ", "),
 		Task:         record.Task,
+		TaskSummary:  conciseTaskSummary(record.Task, artifactLanguage(record)),
 		Summary:      record.Summary,
 		IssueURL:     "",
 	}
@@ -4448,6 +4450,46 @@ func concisePullRequestSummary(record *orchestrationRecord, language string) str
 		return summary
 	}
 	return truncateMarkdownBytes(summary, githubPullRequestSummaryMaxBytes, notice)
+}
+
+func conciseTaskSummary(task, language string) string {
+	task = scrubPromptContaminationFromText(task)
+	task = strings.TrimSpace(task)
+	if task == "" {
+		if language == "ja" {
+			return "- ARUN orchestration run の実行要求。"
+		}
+		return "- ARUN orchestration run request."
+	}
+	var lines []string
+	for _, line := range strings.Split(task, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			if len(lines) > 0 {
+				break
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "Operating mode:") ||
+			strings.HasPrefix(line, "Quality bar:") ||
+			strings.HasPrefix(line, "Expected output:") ||
+			strings.Contains(line, "target baseline:") {
+			break
+		}
+		lines = append(lines, line)
+		if len(lines) >= 3 {
+			break
+		}
+	}
+	summary := strings.TrimSpace(strings.Join(lines, "\n"))
+	if summary == "" {
+		summary = strings.Split(task, "\n")[0]
+	}
+	notice := "\n\n要求要約は短縮されています。詳細は run artifacts と生成 docs を確認してください。"
+	if language != "ja" {
+		notice = "\n\nRequest summary shortened. See run artifacts and generated docs for full details."
+	}
+	return truncateMarkdownBytes(summary, 900, notice)
 }
 
 func looksLikeRawExecutionSummary(summary string) bool {
@@ -4552,7 +4594,9 @@ func defaultArtifactTemplate(artifact, language string) string {
 				"- Target branch: `{{.TargetBranch}}`\n" +
 				"- Strategy: `{{.Strategy}}`\n" +
 				"- Agents: `{{.Agents}}`\n\n" +
-				"## タスク\n\n{{.Task}}\n"
+				"## 要求要約\n\n" +
+				"{{.TaskSummary}}\n\n" +
+				"詳細な親タスク全文は ARUN run artifacts と生成された repository docs を確認してください。\n"
 		}
 		return "Created by ARUN Orchestrate.\n\n" +
 			"- Run: `{{.RunID}}`\n" +
@@ -4561,7 +4605,9 @@ func defaultArtifactTemplate(artifact, language string) string {
 			"- Target branch: `{{.TargetBranch}}`\n" +
 			"- Strategy: `{{.Strategy}}`\n" +
 			"- Agents: `{{.Agents}}`\n\n" +
-			"## Task\n\n{{.Task}}\n"
+			"## Request Summary\n\n" +
+			"{{.TaskSummary}}\n\n" +
+			"See the ARUN run artifacts and generated repository docs for the full parent task context.\n"
 	}
 	if language == "ja" {
 		return "ARUN Orchestrate により作成されました。\n\n" +

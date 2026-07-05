@@ -2622,6 +2622,26 @@ func TestInferModulePath_ExtractsGitHubURLWithoutRegex(t *testing.T) {
 	}
 }
 
+func TestInferModulePath_UsesGitRemoteBeforeWorkspaceName(t *testing.T) {
+	t.Parallel()
+	if !commandAvailable("git") {
+		t.Skip("git unavailable")
+	}
+
+	repo := t.TempDir()
+	if err := runCmd(context.Background(), repo, "git", "init"); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+	if err := runCmd(context.Background(), repo, "git", "remote", "add", "origin", "git@github.com:hakobune8/arun-test.git"); err != nil {
+		t.Fatalf("git remote add: %v", err)
+	}
+
+	got := inferModulePath("create a Go service with /healthz", repo)
+	if got != "github.com/hakobune8/arun-test" {
+		t.Fatalf("inferModulePath() = %q", got)
+	}
+}
+
 func TestStrategy_Constants(t *testing.T) {
 	t.Parallel()
 
