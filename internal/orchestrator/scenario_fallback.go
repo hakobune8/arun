@@ -243,7 +243,7 @@ func recoveredFallbackQualityGate(subtask *Subtask, root string, status QualityG
 
 func staticFrontendFallbackArtifactsPresent(root, agentName string) bool {
 	switch agentName {
-	case "frontend", "docs":
+	case "frontend":
 		return staticFrontendProjectExists(root) &&
 			fileExists(filepath.Join(root, "README.md")) &&
 			fileExists(filepath.Join(root, "docs", "smoke-test.md")) &&
@@ -1203,6 +1203,9 @@ func cleanupGeneratedArtifactHygiene(root string) error {
 	if err := removeGeneratedBinaryArtifacts(root); err != nil {
 		return err
 	}
+	if err := removeGeneratedDocsWithInvalidRepositoryClaims(root); err != nil {
+		return err
+	}
 	if err := scrubPromptContaminationFromGeneratedMarkdown(root); err != nil {
 		return err
 	}
@@ -1327,7 +1330,7 @@ func removeIncompleteHelmCharts(root string) error {
 			continue
 		}
 		chartDir := filepath.Join(chartsDir, entry.Name())
-		if !fileExists(filepath.Join(chartDir, "Chart.yaml")) || helmChartComplete(chartDir) {
+		if helmChartComplete(chartDir) {
 			continue
 		}
 		if err := os.RemoveAll(chartDir); err != nil {
@@ -1335,6 +1338,99 @@ func removeIncompleteHelmCharts(root string) error {
 		}
 	}
 	return nil
+}
+
+func removeGeneratedDocsWithInvalidRepositoryClaims(root string) error {
+	for _, rel := range generatedReportDocCandidates(root) {
+		path := filepath.Join(root, rel)
+		data, err := os.ReadFile(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if !markdownHasInvalidRepositoryClaims(root, string(data)) {
+			continue
+		}
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("remove inconsistent generated doc %s: %w", rel, err)
+		}
+	}
+	return nil
+}
+
+func generatedReportDocCandidates(root string) []string {
+	var candidates []string
+	docsDir := filepath.Join(root, "docs")
+	entries, err := os.ReadDir(docsDir)
+	if err != nil {
+		return candidates
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".md") {
+			continue
+		}
+		name := strings.ToLower(entry.Name())
+		if strings.HasPrefix(name, "sprint") || strings.Contains(name, "report") || strings.Contains(name, "review") {
+			candidates = append(candidates, filepath.Join("docs", entry.Name()))
+		}
+	}
+	return candidates
+}
+
+func markdownHasInvalidRepositoryClaims(root, content string) bool {
+	if fileExists(filepath.Join(root, "main.go")) && !mainGoContainsRoute(root, "/health") {
+		lower := strings.ToLower(content)
+		if (strings.Contains(lower, "/health endpoint") || strings.Contains(content, "/health エンドポイント")) &&
+			!strings.Contains(lower, "/healthz") {
+			return true
+		}
+	}
+	for _, dir := range []string{"cmd", "web", "frontend", "internal"} {
+		if fileExists(filepath.Join(root, dir)) {
+			continue
+		}
+		if mentionsRepositoryDir(content, dir) {
+			return true
+		}
+	}
+	return false
+}
+
+func mainGoContainsRoute(root, route string) bool {
+	data, err := os.ReadFile(filepath.Join(root, "main.go"))
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(data), fmt.Sprintf("%q", route))
+}
+
+func mentionsRepositoryDir(content, dir string) bool {
+	needle := dir + "/"
+	idx := strings.Index(content, needle)
+	for idx >= 0 {
+		if idx == 0 || !isRepositoryPathWordByte(content[idx-1]) {
+			return true
+		}
+		nextStart := idx + len(needle)
+		if nextStart >= len(content) {
+			return true
+		}
+		next := strings.Index(content[nextStart:], needle)
+		if next < 0 {
+			return false
+		}
+		idx = nextStart + next
+	}
+	return false
+}
+
+func isRepositoryPathWordByte(b byte) bool {
+	return b == '_' || b == '-' || b == '.' || b == '/' ||
+		('0' <= b && b <= '9') ||
+		('A' <= b && b <= 'Z') ||
+		('a' <= b && b <= 'z')
 }
 
 func helmChartComplete(chartDir string) bool {

@@ -1093,10 +1093,14 @@ func TestCleanupGeneratedArtifactHygieneRemovesUnservedAlternateUIAndIncompleteC
 	if err := os.MkdirAll(filepath.Join(repo, "charts", "invader-game"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(repo, "charts", "orphan-chart", "templates"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	files := map[string]string{
 		"index.html":                       "<!doctype html><title>One-Button Invaders</title>",
 		filepath.Join("web", "index.html"): "<!doctype html><title>Gravity Invaders</title>",
-		filepath.Join("charts", "invader-game", "Chart.yaml"): "apiVersion: v2\nname: invader-game\ntype: application\nversion: 0.1.0\n",
+		filepath.Join("charts", "invader-game", "Chart.yaml"):                "apiVersion: v2\nname: invader-game\ntype: application\nversion: 0.1.0\n",
+		filepath.Join("charts", "orphan-chart", "templates", "service.yaml"): "apiVersion: v1\nkind: Service\n",
 		"main.go": `package main
 
 import "net/http"
@@ -1131,6 +1135,7 @@ func main() {
 	for _, removed := range []string{
 		filepath.Join("web", "index.html"),
 		filepath.Join("charts", "invader-game", "Chart.yaml"),
+		filepath.Join("charts", "orphan-chart", "templates", "service.yaml"),
 	} {
 		if _, err := os.Stat(filepath.Join(repo, removed)); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("%s still exists or unexpected error: %v", removed, err)
@@ -1157,6 +1162,151 @@ func TestDocsQualityGateFailsForDeferredRemediationNotes(t *testing.T) {
 	}))
 	if status.Passed {
 		t.Fatalf("quality gate passed with deferred remediation notes: %+v", status)
+	}
+}
+
+func TestDocsQualityGateFailsForMissingEndpointAndLayoutClaims(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"main.go": `package main
+
+import "net/http"
+
+func main() {
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {})
+}
+`,
+		filepath.Join("docs", "sprint-report.md"): "Backend: `cmd/`, Frontend: `web/`, and the /health endpoint are ready.\n",
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "docs",
+		Description: "Sprint 3 documentation for generated product.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed with missing endpoint/layout claims: %+v", status)
+	}
+}
+
+func TestDocsQualityGateAllowsExistingEndpointAndLayoutClaims(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	for _, dir := range []string{"cmd", "web", "docs"} {
+		if err := os.Mkdir(filepath.Join(repo, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	files := map[string]string{
+		"main.go": `package main
+
+import "net/http"
+
+func main() {
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {})
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {})
+}
+`,
+		filepath.Join("docs", "sprint-report.md"): "Backend: `cmd/`, Frontend: `web/`, and the /health endpoint are ready.\n",
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "docs",
+		Description: "Sprint 3 documentation for generated product.",
+	}))
+	if !status.Passed {
+		t.Fatalf("quality gate failed with matching endpoint/layout claims: %+v", status)
+	}
+}
+
+func TestCleanupGeneratedArtifactHygieneRemovesGeneratedDocsWithInvalidClaims(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"main.go": `package main
+
+import "net/http"
+
+func main() {
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {})
+}
+`,
+		filepath.Join("docs", "sprint-3-report.md"): "Backend: `cmd/`, Frontend: `web/`, and the /health endpoint are ready.\n",
+		filepath.Join("docs", "product-brief.md"):   "The product brief is still useful and should remain.\n",
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	if err := cleanupGeneratedArtifactHygiene(repo); err != nil {
+		t.Fatalf("cleanupGeneratedArtifactHygiene() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "docs", "sprint-3-report.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("sprint report stat err = %v, want not exist", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "docs", "product-brief.md")); err != nil {
+		t.Fatalf("product brief removed unexpectedly: %v", err)
+	}
+}
+
+func TestRecoverBuiltInSubtask_DocsQualityGateRecoveryRemovesInvalidReport(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if _, err := recoverFrontendStaticApp(repo, "新規性のあるインベーダーゲームを作成する"); err != nil {
+		t.Fatalf("recoverFrontendStaticApp() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "docs", "sprint-3-report.md"), []byte("Backend: `cmd/`, Frontend: `web/`, and the /health endpoint are ready.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-docs-recovery"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"docs": &recordingAgent{name: "docs"}},
+		&runtime.Config{},
+	)
+	subtask := &Subtask{
+		ID:          "sprint-3-docs",
+		AgentName:   "docs",
+		Description: "Sprint 3 documentation for generated product.",
+	}
+	applyDefaultQualityGate(subtask)
+
+	failedStatus := validateQualityGate(context.Background(), repo, subtask.QualityGate)
+	if failedStatus.Passed {
+		t.Fatalf("pre-recovery quality gate passed unexpectedly: %+v", failedStatus)
+	}
+	result, ok := o.recoverNoOpBuiltInSubtaskWithStatus(context.Background(), subtask, runSandbox, failedStatus)
+	if !ok || !result.Success {
+		t.Fatalf("recoverNoOpBuiltInSubtaskWithStatus() = (%+v, %v), want success", result, ok)
+	}
+	if result.QualityGate == nil || !result.QualityGate.Passed {
+		t.Fatalf("quality gate = %+v, want passed after cleanup recovery", result.QualityGate)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "docs", "sprint-3-report.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("invalid sprint report stat err = %v, want not exist", err)
 	}
 }
 
@@ -1643,6 +1793,25 @@ func TestHelmQualityGateFailsForEmptyChart(t *testing.T) {
 	}))
 	if status.Passed {
 		t.Fatalf("quality gate passed for empty chart: %+v", status)
+	}
+}
+
+func TestHelmQualityGateFailsForOrphanChartTemplates(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "charts", "orphan", "templates"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "charts", "orphan", "templates", "service.yaml"), []byte("apiVersion: v1\nkind: Service\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "helm",
+		Description: "Add Helm chart for Kubernetes deployment.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed for orphan chart templates: %+v", status)
 	}
 }
 
