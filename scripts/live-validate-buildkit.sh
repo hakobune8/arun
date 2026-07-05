@@ -155,7 +155,7 @@ else
 fi
 
 kubectl -n "$RELEASE_NAMESPACE" rollout status "deploy/${RELEASE_NAME}" --timeout=180s
-POD="$(kubectl -n "$RELEASE_NAMESPACE" get pods -l "app.kubernetes.io/name=${RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"
+POD="$(kubectl -n "$RELEASE_NAMESPACE" get pods -l "app.kubernetes.io/instance=${RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"
 kubectl -n "$RELEASE_NAMESPACE" exec "$POD" -- curl -fsS http://127.0.0.1:8080/api/health | jq .
 kubectl -n "$RELEASE_NAMESPACE" exec "$POD" -- arun version
 kubectl -n "$RELEASE_NAMESPACE" exec "$POD" -- sh -lc 'command -v npm && npm --version && command -v helm && helm version --short && command -v go && go version'

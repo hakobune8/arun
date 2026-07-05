@@ -37,7 +37,7 @@ require_command kubectl
 require_command curl
 require_command jq
 
-POD="$(kubectl -n "$RELEASE_NAMESPACE" get pods -l "app.kubernetes.io/name=${RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"
+POD="$(kubectl -n "$RELEASE_NAMESPACE" get pods -l "app.kubernetes.io/instance=${RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"
 if [[ -z "$POD" ]]; then
   echo "no ${RELEASE_NAMESPACE}/${RELEASE_NAME} pod found" >&2
   exit 1
