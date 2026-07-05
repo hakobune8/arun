@@ -33,12 +33,18 @@ func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask *Subta
 		out, err := recoverFrontendStaticApp(runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
 	}
-	if staticFrontendProjectExists(runSandbox.RootDir()) {
+	if frontendProjectEvidenceExists(runSandbox.RootDir()) {
 		switch subtask.AgentName {
 		case "docs":
+			if !staticFrontendProjectExists(runSandbox.RootDir()) {
+				break
+			}
 			out, err := recoverFrontendDocs(runSandbox.RootDir(), subtask.Description)
 			return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
 		case "qa":
+			if !staticFrontendProjectExists(runSandbox.RootDir()) {
+				break
+			}
 			out, err := recoverFrontendQA(runSandbox.RootDir(), subtask.Description)
 			return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
 		case "release-manager":
@@ -132,7 +138,7 @@ func (o *Orchestrator) recoverNoOpBuiltInSubtaskWithStatus(ctx context.Context, 
 		}
 		return SubtaskResult{}, false
 	case "release-manager":
-		if staticFrontendProjectExists(runSandbox.RootDir()) {
+		if frontendProjectEvidenceExists(runSandbox.RootDir()) {
 			out, err := recoverFrontendRelease(runSandbox.RootDir(), subtask.Description)
 			return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 		}
@@ -2212,6 +2218,14 @@ func staticFrontendProjectExists(root string) bool {
 			fileExists(filepath.Join(root, "client", "src", "main.js"))) ||
 			(fileExists(filepath.Join(root, "index.html")) &&
 				fileExists(filepath.Join(root, "src", "main.js"))))
+}
+
+func frontendProjectEvidenceExists(root string) bool {
+	return staticFrontendProjectExists(root) ||
+		fileExists(filepath.Join(root, "client", "index.html")) ||
+		fileExists(filepath.Join(root, "index.html")) ||
+		fileExists(filepath.Join(root, "frontend", "index.html")) ||
+		fileExists(filepath.Join(root, "web", "index.html"))
 }
 
 func shouldRecoverFrontendScaffold(root, description string) bool {
