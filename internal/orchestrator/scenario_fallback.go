@@ -29,7 +29,7 @@ import (
 )
 
 func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask *Subtask, runSandbox sandbox.Sandbox, runtimeErr error) (SubtaskResult, bool) {
-	if subtask.AgentName == "frontend" && (shouldRecoverFrontendScaffold(runSandbox.RootDir(), subtask.Description) || unservedAlternateFrontendExists(runSandbox.RootDir())) {
+	if subtask.AgentName == "frontend" && (shouldRecoverFrontendScaffold(runSandbox.RootDir(), subtask.Description) || unservedAlternateFrontendExists(runSandbox.RootDir()) || unservedRootFrontendAssetsExist(runSandbox.RootDir())) {
 		out, err := recoverFrontendStaticApp(runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
 	}
@@ -284,40 +284,7 @@ func recoverGoBackend(ctx context.Context, root, description string) (string, er
 			return "", fmt.Errorf("write go.mod: %w", err)
 		}
 	}
-	main := `package main
-
-import (
-	"encoding/json"
-	"log"
-	"net/http"
-	"os"
-)
-
-func rootHandler(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	if _, err := os.Stat("index.html"); err == nil {
-		http.ServeFile(w, r, "index.html")
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("arun-test service\n"))
-}
-
-func healthzHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-}
-
-func main() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", rootHandler)
-	mux.HandleFunc("/healthz", healthzHandler)
-	log.Fatal(http.ListenAndServe(":8080", mux))
-}
-`
+	main := frontendServingGoMain()
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte(main), 0o600); err != nil {
 		return "", fmt.Errorf("write main.go: %w", err)
 	}
@@ -388,6 +355,38 @@ func TestRootHandlerServesStaticIndexWhenPresent(t *testing.T) {
 		t.Fatalf("body = %q, want static index", rec.Body.String())
 	}
 }
+
+func TestRootHandlerServesFrontendAssets(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "styles.css"), []byte("body { color: white; }"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "src", "main.js"), []byte("console.log('ok');"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(previous) }()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, target := range []string{"/styles.css", "/src/main.js"} {
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		rec := httptest.NewRecorder()
+
+		rootHandler(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status code = %d, want %d", target, rec.Code, http.StatusOK)
+		}
+	}
+}
 `
 	if err := os.WriteFile(filepath.Join(root, "main_test.go"), []byte(test), 0o600); err != nil {
 		return "", fmt.Errorf("write main_test.go: %w", err)
@@ -407,6 +406,61 @@ func TestRootHandlerServesStaticIndexWhenPresent(t *testing.T) {
 		return "", err
 	}
 	return "Created minimal Go net/http service with / and /healthz.", nil
+}
+
+func frontendServingGoMain() string {
+	return `package main
+
+import (
+	"encoding/json"
+	"log"
+	"net/http"
+	"os"
+	"path"
+	"strings"
+)
+
+func rootHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		if assetPath, ok := staticAssetPath(r.URL.Path); ok {
+			http.ServeFile(w, r, assetPath)
+			return
+		}
+		http.NotFound(w, r)
+		return
+	}
+	if _, err := os.Stat("index.html"); err == nil {
+		http.ServeFile(w, r, "index.html")
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("arun-test service\n"))
+}
+
+func staticAssetPath(urlPath string) (string, bool) {
+	clean := path.Clean("/" + urlPath)
+	switch {
+	case clean == "/styles.css":
+		return "styles.css", true
+	case strings.HasPrefix(clean, "/src/") && strings.HasSuffix(clean, ".js"):
+		return strings.TrimPrefix(clean, "/"), true
+	default:
+		return "", false
+	}
+}
+
+func healthzHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func main() {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", rootHandler)
+	mux.HandleFunc("/healthz", healthzHandler)
+	log.Fatal(http.ListenAndServe(":8080", mux))
+}
+`
 }
 
 func shouldResetCanonicalGoFallback(root, description string) bool {
@@ -769,6 +823,9 @@ tick();
 			return "", fmt.Errorf("write %s: %w", name, err)
 		}
 	}
+	if err := ensureGoServesRootFrontendAssets(root); err != nil {
+		return "", err
+	}
 	if err := cleanupGeneratedArtifactHygiene(root); err != nil {
 		return "", err
 	}
@@ -825,6 +882,29 @@ func recoverFrontendRelease(root, description string) (string, error) {
 		return "", err
 	}
 	return "Added CHANGELOG.md for the static frontend scaffold release.", nil
+}
+
+func ensureGoServesRootFrontendAssets(root string) error {
+	if !unservedRootFrontendAssetsExist(root) {
+		return nil
+	}
+	data, err := os.ReadFile(filepath.Join(root, "main.go"))
+	if err != nil {
+		return err
+	}
+	content := string(data)
+	if !strings.Contains(content, `http.ServeFile(w, r, "index.html")`) {
+		return nil
+	}
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte(frontendServingGoMain()), 0o600); err != nil {
+		return fmt.Errorf("write main.go static asset serving recovery: %w", err)
+	}
+	if commandAvailable("gofmt") {
+		if err := runCmd(context.Background(), root, "gofmt", "-w", "main.go"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func recoverGoQA(ctx context.Context, root, description string) (string, error) {
@@ -1146,6 +1226,76 @@ func removeUnservedAlternateFrontendTrees(root string) error {
 		}
 	}
 	return nil
+}
+
+func unservedRootFrontendAssetsExist(root string) bool {
+	if !fileExists(filepath.Join(root, "index.html")) || !fileExists(filepath.Join(root, "main.go")) {
+		return false
+	}
+	assets, err := referencedRootFrontendAssets(filepath.Join(root, "index.html"))
+	if err != nil || len(assets) == 0 {
+		return false
+	}
+	data, err := os.ReadFile(filepath.Join(root, "main.go"))
+	if err != nil {
+		return false
+	}
+	content := string(data)
+	for _, asset := range assets {
+		if !fileExists(filepath.Join(root, asset)) {
+			continue
+		}
+		if !mainServesStaticAsset(content, asset) {
+			return true
+		}
+	}
+	return false
+}
+
+func referencedRootFrontendAssets(indexPath string) ([]string, error) {
+	data, err := os.ReadFile(indexPath)
+	if err != nil {
+		return nil, err
+	}
+	content := string(data)
+	var assets []string
+	for _, attr := range []string{"href=\"", "src=\""} {
+		remaining := content
+		for {
+			start := strings.Index(remaining, attr)
+			if start < 0 {
+				break
+			}
+			remaining = remaining[start+len(attr):]
+			end := strings.Index(remaining, "\"")
+			if end < 0 {
+				break
+			}
+			ref := strings.TrimPrefix(remaining[:end], "./")
+			remaining = remaining[end+1:]
+			if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") || strings.HasPrefix(ref, "//") || strings.HasPrefix(ref, "/") {
+				continue
+			}
+			clean := filepath.Clean(ref)
+			if strings.HasPrefix(clean, "..") {
+				continue
+			}
+			lower := strings.ToLower(clean)
+			if strings.HasSuffix(lower, ".css") || strings.HasSuffix(lower, ".js") {
+				assets = append(assets, clean)
+			}
+		}
+	}
+	return assets, nil
+}
+
+func mainServesStaticAsset(content, asset string) bool {
+	return strings.Contains(content, "FileServer") ||
+		strings.Contains(content, "http.Dir") ||
+		strings.Contains(content, "StripPrefix") ||
+		strings.Contains(content, "staticAssetPath") ||
+		strings.Contains(content, "static") ||
+		strings.Contains(content, asset)
 }
 
 func mainServesFrontendDir(root, dir string) bool {
