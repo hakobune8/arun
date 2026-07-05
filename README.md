@@ -15,6 +15,10 @@
 
 ARUN is not another coding agent — it is the operating system layer for autonomous coding agents. It provides a runtime, lifecycle, execution model, tool system, memory abstraction, and safety model. It uses [LiteLLM](https://github.com/BerriAI/litellm) as the LLM gateway, providing a unified interface to various LLM backends.
 
+ARUN is model-agnostic. For repeatable open-weight validation, the current
+recommended validation model is Qwen3.6-35B-A3B; see
+[Configuration](docs/configuration.md#validation-model-guidance).
+
 Designed for Kubernetes deployment. Manage runs, review diffs, and
 search across agents through the [Web UI](docs/api.md).
 
