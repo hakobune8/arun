@@ -2086,6 +2086,34 @@ func TestHelmQualityGateFailsWithoutChart(t *testing.T) {
 	}
 }
 
+func TestArtifactContractQualityGateFailsWhenGeneratedAppLacksContract(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "client"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "client", "index.html"), []byte("<!doctype html><title>App</title>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "docs", "product-brief.md"), []byte("# Product Brief: App\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "qa",
+		Description: "Sprint QA: validate generated app artifacts.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed without artifact contract: %+v", status)
+	}
+	if !strings.Contains(qualityGateError(status), "docs/artifact-contract.md") {
+		t.Fatalf("quality gate error = %q, want artifact contract", qualityGateError(status))
+	}
+}
+
 func TestHelmQualityGateFailsForEmptyChart(t *testing.T) {
 	t.Parallel()
 
@@ -2558,6 +2586,20 @@ Target baseline:
 	for _, want := range []string{"Recovery Plan", "net/http", "/healthz", "go test ./..."} {
 		if !strings.Contains(string(body), want) {
 			t.Fatalf("planning artifact missing %q:\n%s", want, body)
+		}
+	}
+	for _, file := range []string{filepath.Join("docs", "product-brief.md"), filepath.Join("docs", "artifact-contract.md")} {
+		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
+			t.Fatalf("%s not created: %v", file, err)
+		}
+	}
+	contract, err := os.ReadFile(filepath.Join(repo, "docs", "artifact-contract.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Primary route", "Frontend", "Backend", "Validation"} {
+		if !strings.Contains(string(contract), want) {
+			t.Fatalf("artifact contract missing %q:\n%s", want, contract)
 		}
 	}
 	if result.QualityGate == nil || !result.QualityGate.Passed {

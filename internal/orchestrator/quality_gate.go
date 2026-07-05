@@ -41,6 +41,8 @@ const frontendValidationCommand = `sh -c 'if [ -f main.go ] && { [ -f index.html
 
 const productCoherenceValidationCommand = `sh -c 'brief=docs/product-brief.md; html=client/index.html; [ -f "$html" ] || html=index.html; if [ -f "$brief" ] && [ -f README.md ] && [ -f "$html" ]; then readme_title=$(sed -n "s/^# *//p" README.md | head -n1); brief_title=$(sed -n "s/^# \\(Product Brief: \\)\\{0,1\\}//p" "$brief" | head -n1 | sed -E "s/[[:space:]]+[—-].*$//"); html_title=$(sed -n "s/.*<title>\\([^<]*\\)<\\/title>.*/\\1/p" "$html" | head -n1 | sed -E "s/[[:space:]]+[—-].*$//"); norm(){ printf "%s" "$1" | tr "[:upper:]" "[:lower:]" | sed -E "s/product brief: //g; s/[^a-z0-9]+//g"; }; rt=$(norm "$readme_title"); bt=$(norm "$brief_title"); ht=$(norm "$html_title"); if [ -n "$rt" ] && [ -n "$bt" ] && [ "$rt" != "$bt" ]; then echo "README title $readme_title does not match product brief $brief_title"; exit 1; fi; if [ -n "$ht" ] && [ -n "$bt" ] && [ "$ht" != "$bt" ]; then echo "HTML title $html_title does not match product brief $brief_title"; exit 1; fi; fi'`
 
+const artifactContractValidationCommand = `sh -c 'contract=docs/artifact-contract.md; if [ -f docs/product-brief.md ] || [ -f "$contract" ]; then test -f "$contract" || { echo "docs/artifact-contract.md is required for generated app artifacts"; exit 1; }; for section in "Primary route" "Frontend" "Backend" "Validation"; do grep -qi "$section" "$contract" || { echo "artifact contract missing $section section"; exit 1; }; done; fi'`
+
 const qaEvidenceCommand = `sh -c 'test -f docs/testing.md || test -f docs/smoke-test.md || test -f README.md || find test tests e2e cypress playwright -type f -print -quit 2>/dev/null | grep -q .'`
 
 const qaValidationCommand = `sh -c 'if [ -f package.json ]; then PM=npm; [ -f pnpm-lock.yaml ] && PM=pnpm; [ -f yarn.lock ] && PM=yarn; [ -f bun.lockb ] && PM=bun; if ! command -v node >/dev/null 2>&1 || ! command -v "$PM" >/dev/null 2>&1; then test -f docs/smoke-test.md || test -f docs/testing.md || test -f README.md; exit; fi; ran=0; for script in lint typecheck test build; do if node -e "const p=require(\"./package.json\"); process.exit(p.scripts&&p.scripts[process.argv[1]]?0:1)" "$script"; then ran=1; case "$PM:$script" in yarn:*) yarn "$script";; pnpm:*) pnpm "$script";; bun:*) bun run "$script";; *) npm run "$script";; esac; fi; done; test "$ran" = 1 || test -f docs/smoke-test.md || test -f README.md; elif [ -f go.mod ]; then if command -v go >/dev/null 2>&1; then go test ./...; else main=server/main.go; [ -f "$main" ] || main=main.go; test -f "$main" && grep -q "/healthz" "$main"; fi; else test -f docs/testing.md || test -f docs/smoke-test.md || test -f README.md; fi'`
@@ -77,6 +79,14 @@ type QualityGateCheckResult struct {
 
 func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 	switch subtask.AgentName {
+	case "analyst":
+		if strings.Contains(strings.ToLower(subtask.Description), "product planning") {
+			return &QualityGate{
+				RequiredFiles:      []string{filepath.Join("docs", "product-brief.md"), filepath.Join("docs", "artifact-contract.md")},
+				ValidationCommands: []string{artifactContractValidationCommand},
+			}
+		}
+		return nil
 	case "go-backend":
 		if !isCanonicalGoServiceTask(subtask.Description) {
 			return nil
@@ -95,6 +105,7 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 				frontendProjectPresenceCommand,
 				frontendValidationCommand,
 				productCoherenceValidationCommand,
+				artifactContractValidationCommand,
 			},
 		}
 	case "ci-fixer":
@@ -112,12 +123,12 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 	case "docs":
 		if !isCanonicalGoServiceTask(subtask.Description) {
 			return &QualityGate{
-				ValidationCommands: []string{docsValidationCommand, productCoherenceValidationCommand},
+				ValidationCommands: []string{docsValidationCommand, productCoherenceValidationCommand, artifactContractValidationCommand},
 			}
 		}
 		return &QualityGate{
 			RequiredFiles:      []string{"README.md"},
-			ValidationCommands: []string{docsValidationCommand, productCoherenceValidationCommand},
+			ValidationCommands: []string{docsValidationCommand, productCoherenceValidationCommand, artifactContractValidationCommand},
 			ContentChecks: []QualityContentCheck{{
 				File:     "README.md",
 				Contains: []string{"/healthz", "go test", "go run"},
@@ -153,6 +164,7 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 				qaEvidenceCommand,
 				qaValidationCommand,
 				productCoherenceValidationCommand,
+				artifactContractValidationCommand,
 			},
 		}
 	case "docker":

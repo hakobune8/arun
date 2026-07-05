@@ -171,6 +171,16 @@ func recoverScrumPlanning(root string, subtask *Subtask) (string, error) {
 	if err := os.MkdirAll(docsDir, 0o755); err != nil {
 		return "", err
 	}
+	title := inferFrontendProductTitle(subtask.Description, root)
+	if strings.TrimSpace(title) == "" {
+		title = "ARUN Sprint App"
+	}
+	if err := os.WriteFile(filepath.Join(root, "docs", "product-brief.md"), []byte(frontendProductBrief(title, subtask.Description)), 0o600); err != nil {
+		return "", fmt.Errorf("write docs/product-brief.md: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "docs", "artifact-contract.md"), []byte(artifactContractDoc(title, inferModulePath(subtask.Description, root))), 0o600); err != nil {
+		return "", fmt.Errorf("write docs/artifact-contract.md: %w", err)
+	}
 	safeID := strings.TrimSpace(subtask.ID)
 	if safeID == "" {
 		safeID = "planning"
@@ -184,6 +194,9 @@ func recoverScrumPlanning(root string, subtask *Subtask) (string, error) {
 			"## Scope\n\n"+
 			"%s\n\n"+
 			"## Implementation Direction\n\n"+
+			"- Treat `docs/product-brief.md` as the product source of truth.\n"+
+			"- Treat `docs/artifact-contract.md` as the connection contract for routes,\n"+
+			"  frontend assets, backend entrypoints, module path, and validation commands.\n"+
 			"- Start with the smallest reviewable Go `net/http` service increment.\n"+
 			"- Keep `/healthz` available and covered by tests.\n"+
 			"- Add or preserve a lightweight frontend/static response only when it helps the\n"+
@@ -199,7 +212,7 @@ func recoverScrumPlanning(root string, subtask *Subtask) (string, error) {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		return "", fmt.Errorf("write planning artifact: %w", err)
 	}
-	return fmt.Sprintf("Recovered analyst planning by writing %s", filepath.ToSlash(filepath.Join("docs", "sprint-planning", safeID+".md"))), nil
+	return fmt.Sprintf("Recovered analyst planning, product brief, and artifact contract by writing %s", filepath.ToSlash(filepath.Join("docs", "sprint-planning", safeID+".md"))), nil
 }
 
 func fallbackRecoveryContext() (context.Context, context.CancelFunc) {
@@ -856,10 +869,11 @@ tick();
 		filepath.Join("client", "styles.css"):     stylesCSS,
 		filepath.Join("client", "src", "main.js"): mainJS,
 		"README.md": frontendReadme(title, description),
-		filepath.Join("docs", "product-brief.md"): frontendProductBrief(title, description),
-		filepath.Join("docs", "smoke-test.md"):    frontendSmokeTest(description),
-		filepath.Join("docs", "testing.md"):       frontendTestingDoc(description),
-		"CHANGELOG.md":                            frontendChangelog(description),
+		filepath.Join("docs", "product-brief.md"):     frontendProductBrief(title, description),
+		filepath.Join("docs", "artifact-contract.md"): artifactContractDoc(title, inferModulePath(description, root)),
+		filepath.Join("docs", "smoke-test.md"):        frontendSmokeTest(description),
+		filepath.Join("docs", "testing.md"):           frontendTestingDoc(description),
+		"CHANGELOG.md":                                frontendChangelog(description),
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o600); err != nil {
@@ -892,10 +906,11 @@ func recoverFrontendDocs(root, description string) (string, error) {
 	}
 	files := map[string]string{
 		"README.md": frontendReadme(title, description),
-		filepath.Join("docs", "product-brief.md"): frontendProductBrief(title, description),
-		filepath.Join("docs", "smoke-test.md"):    frontendSmokeTest(description),
-		filepath.Join("docs", "testing.md"):       frontendTestingDoc(description),
-		"CHANGELOG.md":                            frontendChangelog(description),
+		filepath.Join("docs", "product-brief.md"):     frontendProductBrief(title, description),
+		filepath.Join("docs", "artifact-contract.md"): artifactContractDoc(title, inferModulePath(description, root)),
+		filepath.Join("docs", "smoke-test.md"):        frontendSmokeTest(description),
+		filepath.Join("docs", "testing.md"):           frontendTestingDoc(description),
+		"CHANGELOG.md":                                frontendChangelog(description),
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o600); err != nil {
@@ -1175,6 +1190,51 @@ func frontendProductBrief(title, _ string) string {
 		"- Multiplayer.",
 		"- External score services.",
 		"- Complex level progression.",
+		"",
+	}, "\n")
+}
+
+func artifactContractDoc(title, modulePath string) string {
+	if strings.TrimSpace(title) == "" {
+		title = "ARUN Sprint App"
+	}
+	if strings.TrimSpace(modulePath) == "" {
+		modulePath = "github.com/hakobune8/arun-test"
+	}
+	return strings.Join([]string{
+		"# Artifact Contract: " + title,
+		"",
+		"This contract is the implementation source of truth for how generated artifacts connect. Product intent lives in `docs/product-brief.md`; this file defines the route, file, module, and validation expectations that backend, frontend, QA, Docker, Helm, and documentation work must preserve.",
+		"",
+		"## Primary route",
+		"",
+		"- `/` serves the primary browser experience.",
+		"- `/healthz` returns a JSON health response.",
+		"",
+		"## Frontend",
+		"",
+		"- Directory: `client/`.",
+		"- Entrypoint: `client/index.html`.",
+		"- Required local assets: `client/styles.css` and `client/src/main.js`.",
+		"- HTML must not reference local CSS or JavaScript files that are absent from the repository.",
+		"",
+		"## Backend",
+		"",
+		"- Language: Go.",
+		"- Module path: `" + modulePath + "`.",
+		"- Entrypoint: `server/main.go`.",
+		"- The Go server must serve `/` from `client/index.html` and must serve every local CSS or JavaScript file referenced by that HTML.",
+		"",
+		"## Deployment",
+		"",
+		"- Docker and Kubernetes artifacts must package the same backend and frontend paths defined above.",
+		"- Helm chart templates must expose the application service and health checks without introducing a separate product path.",
+		"",
+		"## Validation",
+		"",
+		"- `go test ./...` passes when Go tooling is available.",
+		"- Frontend smoke validation confirms `/` returns HTML and that referenced local CSS/JS assets exist and are served.",
+		"- QA must treat any mismatch between this contract and repository artifacts as release-blocking.",
 		"",
 	}, "\n")
 }
