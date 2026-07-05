@@ -262,6 +262,8 @@ release that changes `charts/arun/**`, update both `version` and
 `appVersion` in `charts/arun/Chart.yaml` intentionally so chart-releaser can
 publish a new immutable chart release.
 
+- [v1.5.23 release notes](docs/release-v1.5.23.md) — Generated artifact
+  hygiene for alternate UI trees and incomplete charts
 - [v1.5.22 release notes](docs/release-v1.5.22.md) — Generated static asset
   serving recovery and concise PR summaries
 - [v1.5.21 release notes](docs/release-v1.5.21.md) — Frontend artifact

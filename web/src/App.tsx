@@ -842,7 +842,7 @@ function App() {
             </div>
             <div className="hidden min-w-0 text-left sm:block">
               <div className="text-sm font-semibold tracking-wide text-ink">ARUN</div>
-              <div className="text-[11px] text-soft">v1.5.22 workspace</div>
+              <div className="text-[11px] text-soft">v1.5.23 workspace</div>
             </div>
           </button>
           <nav className="hidden gap-1 md:flex">
