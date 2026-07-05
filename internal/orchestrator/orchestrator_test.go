@@ -751,6 +751,60 @@ func TestExecuteSubtask_FrontendFailsNoOp(t *testing.T) {
 	}
 }
 
+func TestExecuteSubtask_FrontendFixAllowsNoOpWhenGatePasses(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("ARUN_HOME", filepath.Join(t.TempDir(), "arun-home"))
+	if err := os.MkdirAll(filepath.Join(repo, "client"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "server"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join("client", "index.html"): `<!doctype html><html><head><title>App</title><link rel="stylesheet" href="style.css"></head><body><script src="app.js"></script></body></html>`,
+		filepath.Join("client", "style.css"):  `body { margin: 0; }`,
+		filepath.Join("client", "app.js"):     `console.log("ready");`,
+		filepath.Join("server", "main.go"): `package main
+
+import "net/http"
+
+func main() {
+	http.Handle("/", http.FileServer(http.Dir("client")))
+}
+`,
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"frontend": &recordingAgent{name: "frontend"}},
+		&runtime.Config{},
+	)
+
+	subtask := &Subtask{
+		ID:          "sprint-1-frontend-fix",
+		Description: "Sprint 1 remediation: address QA findings that require frontend or static asset changes.",
+		AgentName:   "frontend",
+	}
+	applyDefaultQualityGate(subtask)
+
+	result := o.executeSubtask(context.Background(), subtask, "")
+	if !result.Success {
+		t.Fatalf("executeSubtask() failed for no-op frontend fix: %+v", result)
+	}
+	if result.QualityGate == nil || !result.QualityGate.Passed {
+		t.Fatalf("quality gate = %+v, want passed", result.QualityGate)
+	}
+	if !strings.Contains(result.Output, "No frontend changes were required") {
+		t.Fatalf("output = %q, want no-op success note", result.Output)
+	}
+}
+
 func TestExecuteSubtask_FrontendRecoversEmptyRepositoryNoOp(t *testing.T) {
 	repo := t.TempDir()
 	t.Setenv("ARUN_HOME", filepath.Join(t.TempDir(), "arun-home"))

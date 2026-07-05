@@ -55,6 +55,7 @@ isolated namespace instead of replacing the live `arun` release:
 RELEASE_NAMESPACE=arun-validate \
 RELEASE_NAME=arun-validate \
 MIRROR_RELEASE_VALUES=1 \
+USE_GH_AUTH_TOKEN=1 \
 scripts/live-validate-buildkit.sh
 ```
 
@@ -64,6 +65,11 @@ the namespace differs, and installs or upgrades the target release with the
 short-lived validation image. This keeps production traffic on the released
 image while the validation namespace uses the same LiteLLM, GitHub, OAuth, and
 runtime settings.
+
+`USE_GH_AUTH_TOKEN=1` copies the local `gh auth token` into the validation
+namespace Secret as `GITHUB_TOKEN`. Use this for non-WebUI validation runs that
+must create Issues, push branches, and create PRs without a browser OAuth
+session. Alternatively set `VALIDATION_GITHUB_TOKEN` explicitly.
 
 Set `RUN_EVALS=1` to also run the built-in orchestration evals:
 

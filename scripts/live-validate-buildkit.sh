@@ -24,6 +24,8 @@ PLATFORM="${PLATFORM:-linux/amd64}"
 RUN_EVALS="${RUN_EVALS:-0}"
 MIRROR_RELEASE_VALUES="${MIRROR_RELEASE_VALUES:-0}"
 MIRROR_SECRET_NAME="${MIRROR_SECRET_NAME:-arun-runtime}"
+USE_GH_AUTH_TOKEN="${USE_GH_AUTH_TOKEN:-0}"
+VALIDATION_GITHUB_TOKEN="${VALIDATION_GITHUB_TOKEN:-}"
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -37,6 +39,10 @@ require_command helm
 require_command buildctl
 require_command curl
 require_command jq
+if [[ "$USE_GH_AUTH_TOKEN" == "1" && -z "$VALIDATION_GITHUB_TOKEN" ]]; then
+  require_command gh
+  VALIDATION_GITHUB_TOKEN="$(gh auth token)"
+fi
 
 PREVIOUS_IMAGE="$(kubectl -n "$RELEASE_NAMESPACE" get deploy "$RELEASE_NAME" -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
 values_file="$(mktemp)"
@@ -139,6 +145,11 @@ if [[ "$MIRROR_RELEASE_VALUES" == "1" ]]; then
     kubectl -n "$SOURCE_RELEASE_NAMESPACE" get secret "$MIRROR_SECRET_NAME" -o json |
       jq --arg ns "$RELEASE_NAMESPACE" 'del(.metadata.uid,.metadata.resourceVersion,.metadata.creationTimestamp,.metadata.managedFields,.metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"]) | .metadata.namespace=$ns' |
       kubectl apply -f -
+  fi
+  if [[ -n "$VALIDATION_GITHUB_TOKEN" ]]; then
+    token_b64="$(printf '%s' "$VALIDATION_GITHUB_TOKEN" | base64 | tr -d '\n')"
+    kubectl -n "$RELEASE_NAMESPACE" create secret generic "$MIRROR_SECRET_NAME" --dry-run=client -o yaml | kubectl apply -f -
+    kubectl -n "$RELEASE_NAMESPACE" patch secret "$MIRROR_SECRET_NAME" --type merge -p "{\"data\":{\"GITHUB_TOKEN\":\"${token_b64}\"}}" >/dev/null
   fi
   helm -n "$RELEASE_NAMESPACE" upgrade --install "$RELEASE_NAME" ./charts/arun \
     --create-namespace \

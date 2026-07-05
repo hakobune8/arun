@@ -888,6 +888,16 @@ func (o *Orchestrator) executeSubtask(ctx context.Context, subtask *Subtask, sha
 	_ = runCmd(ctx, runSandbox.RootDir(), "git", "add", "-N", ".") //nolint:errcheck // best-effort diff visibility for new files
 	diff := gitDiff(ctx, runSandbox.RootDir())
 	if subtask.AgentName == "frontend" && strings.TrimSpace(diff) == "" {
+		gateStatus := validateQualityGate(ctx, runSandbox.RootDir(), subtask.QualityGate)
+		if frontendNoOpAllowed(subtask) && gateStatus.Passed {
+			return SubtaskResult{
+				SubtaskID:   subtask.ID,
+				Success:     true,
+				Output:      fmt.Sprintf("No frontend changes were required for %s; existing artifacts satisfy the quality gate.", subtask.ID),
+				Diff:        firstNonEmpty(diff, sharedCtx),
+				QualityGate: &gateStatus,
+			}
+		}
 		if result, ok := o.recoverNoOpBuiltInSubtask(ctx, subtask, runSandbox); ok {
 			return result
 		}
@@ -920,6 +930,18 @@ func (o *Orchestrator) executeSubtask(ctx context.Context, subtask *Subtask, sha
 		Diff:        firstNonEmpty(diff, sharedCtx),
 		QualityGate: &gateStatus,
 	}
+}
+
+func frontendNoOpAllowed(subtask *Subtask) bool {
+	if subtask == nil {
+		return false
+	}
+	id := strings.ToLower(strings.TrimSpace(subtask.ID))
+	if strings.HasSuffix(id, "-fix") || strings.Contains(id, "remediation") {
+		return true
+	}
+	desc := strings.ToLower(subtask.Description)
+	return strings.Contains(desc, "remediation") || strings.Contains(desc, "address qa findings")
 }
 
 func firstNonEmpty(values ...string) string {
