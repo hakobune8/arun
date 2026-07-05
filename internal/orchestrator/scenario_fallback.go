@@ -117,6 +117,9 @@ func (o *Orchestrator) recoverNoOpBuiltInSubtaskWithStatus(ctx context.Context, 
 	defer cancel()
 
 	switch subtask.AgentName {
+	case "analyst":
+		out, err := recoverScrumPlanning(runSandbox.RootDir(), subtask)
+		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 	case "frontend":
 		out, err := recoverFrontendStaticApp(runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil

@@ -2102,15 +2102,94 @@ func TestArtifactContractQualityGateFailsWhenGeneratedAppLacksContract(t *testin
 	if err := os.WriteFile(filepath.Join(repo, "docs", "product-brief.md"), []byte("# Product Brief: App\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
-		AgentName:   "qa",
-		Description: "Sprint QA: validate generated app artifacts.",
-	}))
+	status := validateQualityGate(context.Background(), repo, &QualityGate{
+		ValidationCommands: []string{artifactContractValidationCommand},
+	})
 	if status.Passed {
 		t.Fatalf("quality gate passed without artifact contract: %+v", status)
 	}
 	if !strings.Contains(qualityGateError(status), "docs/artifact-contract.md") {
 		t.Fatalf("quality gate error = %q, want artifact contract", qualityGateError(status))
+	}
+}
+
+func TestArtifactContractQualityGateAcceptsJapaneseContractSections(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	contract := `# 実装契約
+
+## 提供ルート
+- GET / は client/index.html を返す。
+
+## バックエンド
+- server/main.go に Go HTTP エントリポイントを置く。
+
+## フロントエンド
+- client/index.html, client/style.css, client/app.js を使う。
+
+## バリデーション
+- go test ./...
+`
+	if err := os.WriteFile(filepath.Join(repo, "docs", "product-brief.md"), []byte("# Product Brief: App\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "docs", "artifact-contract.md"), []byte(contract), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	status := validateQualityGate(context.Background(), repo, &QualityGate{
+		ValidationCommands: []string{artifactContractValidationCommand},
+	})
+	if !status.Passed {
+		t.Fatalf("quality gate failed for Japanese artifact contract: %s", qualityGateError(status))
+	}
+}
+
+func TestRecoverBuiltInSubtask_AnalystQualityGateFailureCreatesPlanningArtifacts(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "docs", "artifact-contract.md"), []byte("# 実装契約\n\n## バリデーション\n- go test ./...\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-planning-step"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"analyst": &recordingAgent{name: "analyst"}},
+		&runtime.Config{},
+	)
+	subtask := &Subtask{
+		ID:          "sprint-1-plan",
+		AgentName:   "analyst",
+		Description: "Sprint 1 product planning and design: create docs/product-brief.md and docs/artifact-contract.md for a Go net/http app with /healthz.",
+	}
+	applyDefaultQualityGate(subtask)
+	status := validateQualityGate(context.Background(), repo, subtask.QualityGate)
+	if status.Passed {
+		t.Fatalf("quality gate unexpectedly passed before recovery")
+	}
+
+	result, ok := o.recoverNoOpBuiltInSubtaskWithStatus(context.Background(), subtask, runSandbox, status)
+	if !ok || !result.Success {
+		t.Fatalf("recoverNoOpBuiltInSubtaskWithStatus() = (%+v, %v), want success", result, ok)
+	}
+	for _, file := range []string{filepath.Join("docs", "product-brief.md"), filepath.Join("docs", "artifact-contract.md")} {
+		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
+			t.Fatalf("%s not created: %v", file, err)
+		}
+	}
+	if result.QualityGate == nil || !result.QualityGate.Passed {
+		t.Fatalf("quality gate = %+v, want passed after recovery", result.QualityGate)
 	}
 }
 
