@@ -48,11 +48,78 @@ By default the script:
 - prints `arun version`,
 - confirms `npm`, `helm`, and `go` are available in the runtime image.
 
+For repeated or long-running validation, deploy the validation image into an
+isolated namespace instead of replacing the live `arun` release:
+
+```bash
+RELEASE_NAMESPACE=arun-validate \
+RELEASE_NAME=arun-validate \
+MIRROR_RELEASE_VALUES=1 \
+scripts/live-validate-buildkit.sh
+```
+
+With `MIRROR_RELEASE_VALUES=1`, the script reads Helm values from
+`arun/arun`, copies the `arun-runtime` Secret into the target namespace when
+the namespace differs, and installs or upgrades the target release with the
+short-lived validation image. This keeps production traffic on the released
+image while the validation namespace uses the same LiteLLM, GitHub, OAuth, and
+runtime settings.
+
 Set `RUN_EVALS=1` to also run the built-in orchestration evals:
 
 ```bash
 RUN_EVALS=1 scripts/live-validate-buildkit.sh
 ```
+
+## Non-WebUI Orchestration Smoke
+
+When the orchestration flow itself changes, repeat the full implementation-heavy
+scrum scenario without using the Web UI:
+
+```bash
+scripts/live-validate-orchestrate.sh
+```
+
+This script does not change the public Helm auth settings. Instead, it starts a
+temporary local-only ARUN server inside the current pod on port `18080` with
+auth disabled, port-forwards that port to localhost, fetches the selected
+scenario template, starts `/api/orchestrate`, and polls `/api/orchestrates/<id>`
+until the run completes or fails. The temporary server is stopped when the
+script exits.
+
+To run the same non-WebUI orchestration against the isolated namespace:
+
+```bash
+RELEASE_NAMESPACE=arun-validate \
+RELEASE_NAME=arun-validate \
+scripts/live-validate-orchestrate.sh
+```
+
+Default inputs match the ARUN sandbox verification path:
+
+- `TARGET_REPO=hakobune8/arun-test`
+- `BASE_BRANCH=main`
+- `TEMPLATE_ID=implementation-heavy-scrum`
+- `PARENT_TASK=新規性のあるインベーダーゲームを作りたい。`
+- `LLM_PRESET=staips`
+- `OUTPUT_LANGUAGE=ja`
+
+Useful overrides:
+
+```bash
+PARENT_TASK='別の検証タスク' \
+TARGET_REPO=hakobune8/arun-test \
+POLL_INTERVAL_SECONDS=60 \
+MAX_WAIT_SECONDS=14400 \
+scripts/live-validate-orchestrate.sh
+```
+
+The script relies on the deployment's existing runtime environment, including
+`GITHUB_TOKEN`, LiteLLM presets, and persistent `ARUN_HOME`, so it exercises the
+same server orchestration path as the Web UI without requiring a browser
+session. GitHub OAuth device flow is not required for this smoke path. Device
+flow is only needed if the validation must run with a user-scoped OAuth token
+while keeping the public authenticated API enabled.
 
 Useful overrides:
 
