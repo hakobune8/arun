@@ -148,7 +148,9 @@ if [[ "$MIRROR_RELEASE_VALUES" == "1" ]]; then
   fi
   if [[ -n "$VALIDATION_GITHUB_TOKEN" ]]; then
     token_b64="$(printf '%s' "$VALIDATION_GITHUB_TOKEN" | base64 | tr -d '\n')"
-    kubectl -n "$RELEASE_NAMESPACE" create secret generic "$MIRROR_SECRET_NAME" --dry-run=client -o yaml | kubectl apply -f -
+    if ! kubectl -n "$RELEASE_NAMESPACE" get secret "$MIRROR_SECRET_NAME" >/dev/null 2>&1; then
+      kubectl -n "$RELEASE_NAMESPACE" create secret generic "$MIRROR_SECRET_NAME" >/dev/null
+    fi
     kubectl -n "$RELEASE_NAMESPACE" patch secret "$MIRROR_SECRET_NAME" --type merge -p "{\"data\":{\"GITHUB_TOKEN\":\"${token_b64}\"}}" >/dev/null
   fi
   helm -n "$RELEASE_NAMESPACE" upgrade --install "$RELEASE_NAME" ./charts/arun \
