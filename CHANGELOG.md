@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [v1.5.23] - 2026-07-05
+
+### Fixed
+- Kept generated frontend validation from treating root `staticAssetPath`
+  handling as proof that alternate `web/` or `frontend/` UI trees are served.
+- Removed incomplete generated Helm charts during deterministic artifact
+  hygiene so stale `Chart.yaml`-only charts do not survive final checkpoints.
+- Added regression coverage for generated branches that contain a working root
+  app beside stale alternate UI concepts and incomplete deployment artifacts.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.23.
+
 ## [v1.5.22] - 2026-07-05
 
 ### Fixed
