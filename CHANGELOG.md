@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [v1.5.26] - 2026-07-05
+
+### Fixed
+- Removed duplicate generated product brief files under `docs/` when
+  case/separator variants such as `docs/PRODUCT_BRIEF.md` compete with the
+  canonical `docs/product-brief.md`, preventing follow-up runs from retaining
+  alternate product concepts.
+- Added regression coverage for generated branches where the implementation
+  matches `docs/product-brief.md` but a second docs-level product brief
+  describes a different mechanic and product name.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.26.
+
 ## [v1.5.25] - 2026-07-05
 
 ### Fixed
