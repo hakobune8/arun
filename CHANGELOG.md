@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [v1.5.29] - 2026-07-06
+
+### Fixed
+- Recovered generated frontend subtasks when `index.html` references local CSS
+  or JavaScript assets that were not created, preventing partial HTML output
+  from failing the first sprint and blocking all downstream subtasks.
+
+### Changed
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.29.
+
 ## [v1.5.28] - 2026-07-06
 
 ### Fixed
