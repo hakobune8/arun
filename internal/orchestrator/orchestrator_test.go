@@ -1050,6 +1050,160 @@ func main() {
 	}
 }
 
+func TestFrontendQualityGateFailsForMissingClientReferencedAssets(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "client"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join("client", "index.html"): `<link rel="stylesheet" href="style.css"><script src="game.js"></script>`,
+		filepath.Join("server", "main.go"): `package main
+
+import (
+	"net/http"
+	"path"
+)
+
+func staticAssetPath(urlPath string) (string, bool) {
+	clean := path.Clean("/" + urlPath)
+	switch clean {
+	case "/styles.css":
+		return "client/styles.css", true
+	default:
+		return "", false
+	}
+}
+
+func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			if assetPath, ok := staticAssetPath(r.URL.Path); ok {
+				http.ServeFile(w, r, assetPath)
+				return
+			}
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeFile(w, r, "client/index.html")
+	})
+}
+`,
+	}
+	for path, content := range files {
+		full := filepath.Join(repo, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "frontend",
+		Description: "Add a browser game UI.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed with missing client CSS/JS assets: %+v", status)
+	}
+}
+
+func TestFrontendQualityGateFailsWhenStaticAssetPathDoesNotServeClientRefs(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	files := map[string]string{
+		filepath.Join("client", "index.html"): `<link rel="stylesheet" href="style.css"><script src="game.js"></script>`,
+		filepath.Join("client", "style.css"):  `body { color: white; }`,
+		filepath.Join("client", "game.js"):    `console.log("ok");`,
+		filepath.Join("server", "main.go"): `package main
+
+import (
+	"net/http"
+	"path"
+)
+
+func staticAssetPath(urlPath string) (string, bool) {
+	clean := path.Clean("/" + urlPath)
+	switch clean {
+	case "/styles.css":
+		return "client/styles.css", true
+	default:
+		return "", false
+	}
+}
+
+func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			if assetPath, ok := staticAssetPath(r.URL.Path); ok {
+				http.ServeFile(w, r, assetPath)
+				return
+			}
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeFile(w, r, "client/index.html")
+	})
+}
+`,
+	}
+	for path, content := range files {
+		full := filepath.Join(repo, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "frontend",
+		Description: "Add a browser game UI.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed when staticAssetPath did not serve referenced client assets: %+v", status)
+	}
+}
+
+func TestFrontendQualityGateFailsForProductConceptDrift(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	files := map[string]string{
+		"README.md": "# Chrono Invaders\n\nTime reversal arcade game.\n",
+		filepath.Join("docs", "product-brief.md"): "# Gravity Invaders - Product Brief\n\nGravity mechanic.\n",
+		filepath.Join("client", "index.html"):     `<!doctype html><title>Gravity Invaders - 重力インベーダー</title><link rel="stylesheet" href="styles.css"><script src="src/main.js"></script>`,
+		filepath.Join("client", "styles.css"):     `body { color: white; }`,
+		filepath.Join("client", "src", "main.js"): `console.log("gravity invaders");`,
+		filepath.Join("server", "main.go"): `package main
+
+import "net/http"
+
+func main() {
+	http.Handle("/", http.FileServer(http.Dir("client")))
+}
+`,
+	}
+	for path, content := range files {
+		full := filepath.Join(repo, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "frontend",
+		Description: "Add a browser game UI.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed with product concept drift: %+v", status)
+	}
+}
+
 func TestUnservedRootFrontendAssetsExist(t *testing.T) {
 	t.Parallel()
 

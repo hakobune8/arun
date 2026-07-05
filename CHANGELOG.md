@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Fixed
+- Failed generated frontend quality gates when `client/index.html` references
+  missing local CSS or JavaScript assets, or when a Go `staticAssetPath`
+  handler does not actually serve the referenced asset names.
+- Failed generated frontend, docs, and QA gates when README, product brief, and
+  HTML title use different generated product names, catching product concept
+  drift before later sprint stages compound the inconsistency.
+- Allowed release-manager recovery to create `CHANGELOG.md` for partial
+  generated frontend artifacts so report-stage quality gates do not cascade
+  only because release notes were missing.
+
 ## [v1.5.27] - 2026-07-05
 
 ### Fixed
