@@ -1691,6 +1691,70 @@ func TestRecoverBuiltInSubtask_StaticFrontendQAAndRelease(t *testing.T) {
 	}
 }
 
+func TestRecoverBuiltInSubtask_FrontendRemovesUnservedAlternateUIAndArtifacts(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if _, err := recoverFrontendStaticApp(repo, "新規性のあるインベーダーゲームを作成する"); err != nil {
+		t.Fatalf("recoverFrontendStaticApp() error = %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(repo, "web"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join("web", "index.html"): "<!doctype html><title>Orbit Invaders</title><script src=\"script.js\"></script>",
+		"CHANGELOG.md":                     "# Changelog\n\n## v0.1.0\n\n- Initial app.\n\n## Scenario\n\nParent task:\nmake a game\n\nOperating mode: build-first\n\nQuality bar:\n- pass\n\nExpected output:\n- files\n",
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	binaryName := "20260704T235557-run-b7443127479f1e91-hakobune8-arun-test"
+	if err := os.WriteFile(filepath.Join(repo, binaryName), []byte{0x7f, 'E', 'L', 'F', 0x02, 0x01}, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-step-frontend-fix"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"frontend": &recordingAgent{name: "frontend"}},
+		&runtime.Config{},
+	)
+
+	result, ok := o.recoverBuiltInSubtask(context.Background(), &Subtask{
+		ID:          "step-frontend-fix",
+		AgentName:   "frontend",
+		Description: "Address frontend quality gate failure for an unserved alternate UI while preserving the Go backend.",
+		QualityGate: qualityGateForSubtask(&Subtask{
+			AgentName:   "frontend",
+			Description: "Add a browser game UI.",
+		}),
+	}, runSandbox, errors.New("validation failed after 3 retries: tests"))
+	if !ok || !result.Success {
+		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
+	}
+	if result.QualityGate == nil || !result.QualityGate.Passed {
+		t.Fatalf("quality gate = %+v, want passed", result.QualityGate)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "web")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("web dir stat err = %v, want not exist", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, binaryName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("binary artifact stat err = %v, want not exist", err)
+	}
+	changelog, err := os.ReadFile(filepath.Join(repo, "CHANGELOG.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(changelog), "Parent task:") || strings.Contains(string(changelog), "Quality bar:") {
+		t.Fatalf("CHANGELOG.md still contains prompt contamination:\n%s", changelog)
+	}
+}
+
 func TestRecoverBuiltInSubtask_PartialStaticFrontendQA(t *testing.T) {
 	t.Parallel()
 
