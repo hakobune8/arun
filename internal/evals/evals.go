@@ -153,7 +153,7 @@ func DefaultScenarios() []Scenario {
 			Task:           `Create a minimal Go net/http service in github.com/acme/eval-service with GET / returning text and GET /healthz returning {"status":"ok"}.`,
 			Agents:         []string{"go-backend", "docs", "ci-fixer", "reviewer"},
 			ExpectedAgents: []string{"go-backend", "docs", "ci-fixer", "reviewer"},
-			RequiredFiles:  []string{"go.mod", "main.go", "main_test.go", filepath.Join(".github", "workflows", "go.yml"), "README.md", "REVIEW.md"},
+			RequiredFiles:  []string{"go.mod", filepath.Join("server", "main.go"), filepath.Join("server", "main_test.go"), filepath.Join(".github", "workflows", "go.yml"), "README.md", "REVIEW.md"},
 			FunctionalArea: []string{"planning", "fallback-execution", "quality-gates", "required-artifacts", "ci-workflow", "documentation"},
 		},
 		{

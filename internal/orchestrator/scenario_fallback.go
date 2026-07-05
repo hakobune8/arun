@@ -284,9 +284,13 @@ func recoverGoBackend(ctx context.Context, root, description string) (string, er
 			return "", fmt.Errorf("write go.mod: %w", err)
 		}
 	}
+	serverDir := generatedAppServerDir(root, description)
+	if err := os.MkdirAll(filepath.Join(root, serverDir), 0o755); err != nil {
+		return "", fmt.Errorf("create %s: %w", serverDir, err)
+	}
 	main := frontendServingGoMain()
-	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte(main), 0o600); err != nil {
-		return "", fmt.Errorf("write main.go: %w", err)
+	if err := os.WriteFile(filepath.Join(root, serverDir, "main.go"), []byte(main), 0o600); err != nil {
+		return "", fmt.Errorf("write %s/main.go: %w", serverDir, err)
 	}
 	test := `package main
 
@@ -331,7 +335,10 @@ func TestRootHandler(t *testing.T) {
 
 func TestRootHandlerServesStaticIndexWhenPresent(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<!doctype html><title>Game</title>"), 0o600); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, "client"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "client", "index.html"), []byte("<!doctype html><title>Game</title>"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	previous, err := os.Getwd()
@@ -358,13 +365,13 @@ func TestRootHandlerServesStaticIndexWhenPresent(t *testing.T) {
 
 func TestRootHandlerServesFrontendAssets(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, "src"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "client", "src"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "styles.css"), []byte("body { color: white; }"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "client", "styles.css"), []byte("body { color: white; }"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "src", "main.js"), []byte("console.log('ok');"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "client", "src", "main.js"), []byte("console.log('ok');"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	previous, err := os.Getwd()
@@ -388,11 +395,11 @@ func TestRootHandlerServesFrontendAssets(t *testing.T) {
 	}
 }
 `
-	if err := os.WriteFile(filepath.Join(root, "main_test.go"), []byte(test), 0o600); err != nil {
-		return "", fmt.Errorf("write main_test.go: %w", err)
+	if err := os.WriteFile(filepath.Join(root, serverDir, "main_test.go"), []byte(test), 0o600); err != nil {
+		return "", fmt.Errorf("write %s/main_test.go: %w", serverDir, err)
 	}
 	if commandAvailable("gofmt") {
-		if err := runCmd(ctx, root, "gofmt", "-w", "main.go", "main_test.go"); err != nil {
+		if err := runCmd(ctx, root, "gofmt", "-w", filepath.Join(serverDir, "main.go"), filepath.Join(serverDir, "main_test.go")); err != nil {
 			return "", err
 		}
 	}
@@ -405,7 +412,7 @@ func TestRootHandlerServesFrontendAssets(t *testing.T) {
 	if err := runShell(ctx, root, "go vet ./..."); err != nil {
 		return "", err
 	}
-	return "Created minimal Go net/http service with / and /healthz.", nil
+	return fmt.Sprintf("Created minimal Go net/http service with / and /healthz under %s.", filepath.ToSlash(serverDir)), nil
 }
 
 func frontendServingGoMain() string {
@@ -420,6 +427,8 @@ import (
 	"strings"
 )
 
+const staticDir = "client"
+
 func rootHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		if assetPath, ok := staticAssetPath(r.URL.Path); ok {
@@ -429,8 +438,8 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := os.Stat("index.html"); err == nil {
-		http.ServeFile(w, r, "index.html")
+	if _, err := os.Stat(path.Join(staticDir, "index.html")); err == nil {
+		http.ServeFile(w, r, path.Join(staticDir, "index.html"))
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -441,9 +450,9 @@ func staticAssetPath(urlPath string) (string, bool) {
 	clean := path.Clean("/" + urlPath)
 	switch {
 	case clean == "/styles.css":
-		return "styles.css", true
+		return path.Join(staticDir, "styles.css"), true
 	case strings.HasPrefix(clean, "/src/") && strings.HasSuffix(clean, ".js"):
-		return strings.TrimPrefix(clean, "/"), true
+		return path.Join(staticDir, strings.TrimPrefix(clean, "/")), true
 	default:
 		return "", false
 	}
@@ -475,6 +484,34 @@ func shouldResetCanonicalGoFallback(root, description string) bool {
 	return repositoryHasNoCommits(root)
 }
 
+func generatedAppServerDir(root, description string) string {
+	return "server"
+}
+
+func generatedGoEntrypointExists(root string) bool {
+	if fileExists(filepath.Join(root, "main.go")) {
+		return true
+	}
+	if fileExists(filepath.Join(root, "server", "main.go")) {
+		return true
+	}
+	found := false
+	_ = filepath.WalkDir(filepath.Join(root, "cmd"), func(path string, entry os.DirEntry, err error) error {
+		if err != nil || found {
+			return filepath.SkipDir
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if entry.Name() == "main.go" {
+			found = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found
+}
+
 func repositoryHasNoCommits(root string) bool {
 	cmd := exec.Command("git", "rev-parse", "--verify", "HEAD")
 	cmd.Dir = root
@@ -503,8 +540,8 @@ func removeGeneratedGoFiles(root string) error {
 }
 
 func recoverFrontendStaticApp(root, description string) (string, error) {
-	if err := os.MkdirAll(filepath.Join(root, "src"), 0o755); err != nil {
-		return "", fmt.Errorf("create src dir: %w", err)
+	if err := os.MkdirAll(filepath.Join(root, "client", "src"), 0o755); err != nil {
+		return "", fmt.Errorf("create client src dir: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o755); err != nil {
 		return "", fmt.Errorf("create docs dir: %w", err)
@@ -527,8 +564,8 @@ func recoverFrontendStaticApp(root, description string) (string, error) {
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --check src/main.js",
-    "build": "node --check src/main.js"
+    "test": "node --check client/src/main.js",
+    "build": "node --check client/src/main.js"
   }
 }
 `, sanitizePackageName(projectName))
@@ -808,11 +845,11 @@ restart();
 tick();
 `
 	files := map[string]string{
-		"package.json":                  packageJSON,
-		"index.html":                    indexHTML,
-		"styles.css":                    stylesCSS,
-		filepath.Join("src", "main.js"): mainJS,
-		"README.md":                     frontendReadme(title, description),
+		"package.json":                            packageJSON,
+		filepath.Join("client", "index.html"):     indexHTML,
+		filepath.Join("client", "styles.css"):     stylesCSS,
+		filepath.Join("client", "src", "main.js"): mainJS,
+		"README.md": frontendReadme(title, description),
 		filepath.Join("docs", "product-brief.md"): frontendProductBrief(title, description),
 		filepath.Join("docs", "smoke-test.md"):    frontendSmokeTest(description),
 		filepath.Join("docs", "testing.md"):       frontendTestingDoc(description),
@@ -821,6 +858,13 @@ tick();
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o600); err != nil {
 			return "", fmt.Errorf("write %s: %w", name, err)
+		}
+	}
+	if !generatedGoEntrypointExists(root) {
+		ctx, cancel := fallbackRecoveryContext()
+		defer cancel()
+		if _, err := recoverGoBackend(ctx, root, description); err != nil {
+			return "", err
 		}
 	}
 	if err := ensureGoServesRootFrontendAssets(root); err != nil {
@@ -908,7 +952,7 @@ func ensureGoServesRootFrontendAssets(root string) error {
 }
 
 func recoverGoQA(ctx context.Context, root, description string) (string, error) {
-	if !fileExists(filepath.Join(root, "go.mod")) || !fileExists(filepath.Join(root, "main.go")) {
+	if !fileExists(filepath.Join(root, "go.mod")) || !generatedGoEntrypointExists(root) {
 		if _, err := recoverGoBackend(ctx, root, description); err != nil {
 			return "", err
 		}
@@ -933,7 +977,7 @@ func recoverGoQA(ctx context.Context, root, description string) (string, error) 
 		"## Smoke check",
 		"",
 		"```sh",
-		"go run .",
+		"go run ./server",
 		"curl http://127.0.0.1:8080/healthz",
 		"```",
 		"",
@@ -953,7 +997,7 @@ func recoverGoQA(ctx context.Context, root, description string) (string, error) 
 		"",
 		"1. Run `go test ./...`.",
 		"2. Run `go vet ./...`.",
-		"3. Start the service with `go run .`.",
+		"3. Start the service with `go run ./server`.",
 		"4. Request `http://127.0.0.1:8080/healthz` and confirm the JSON status is `ok`.",
 		"5. Request `/` and confirm the service returns a successful response.",
 		"",
@@ -1017,6 +1061,9 @@ func repairDockerfileGoSumAssumption(root string) error {
 }
 
 func inferFrontendProductTitle(description, root string) string {
+	if title := readHTMLTitle(filepath.Join(root, "client", "index.html")); title != "" && !isDeploymentTopicTitle(title) {
+		return title
+	}
 	if title := readHTMLTitle(filepath.Join(root, "index.html")); title != "" && !isDeploymentTopicTitle(title) {
 		return title
 	}
@@ -1065,6 +1112,13 @@ func frontendReadme(title, description string) string {
 		"",
 		"This repository started empty. ARUN generated a minimal static browser game with a gravity-lane mechanic so an implementation-heavy scrum workflow can produce reviewable code, documentation, and validation artifacts without GitHub API calls.",
 		"",
+		"## Repository layout",
+		"",
+		"- `server/` contains the Go HTTP entrypoint.",
+		"- `client/` contains the browser UI served from `/`.",
+		"- `charts/` and `k8s/` contain deployment artifacts when present.",
+		"- `docs/` contains product and validation notes.",
+		"",
 		"## Features",
 		"",
 		"- Keyboard controls with ArrowLeft, ArrowRight, and Space.",
@@ -1075,7 +1129,7 @@ func frontendReadme(title, description string) string {
 		"",
 		"## Run",
 		"",
-		"Open `index.html` in a browser, or serve the directory with any static file server.",
+		"Run the Go server with `go run ./server` and open `http://127.0.0.1:8080/`, or open `client/index.html` directly for a static browser review.",
 		"",
 		"## Validate",
 		"",
@@ -1105,10 +1159,10 @@ func frontendProductBrief(title, _ string) string {
 		"## Acceptance Criteria",
 		"",
 		"- The visible title, README H1, and this product brief use the same product name.",
-		"- The primary route `/` serves the browser game when run through the Go server.",
+		"- The primary route `/` serves the browser game from `client/` when run through the Go server in `server/`.",
 		"- Space changes the gravity lane between Floor and Ceiling.",
 		"- A score is awarded only when the defender is aligned with the invader and on the same lane.",
-		"- The Docker runtime image includes the static assets required for `/` to serve the same UI as local `go run .`.",
+		"- The Docker runtime image includes the client assets required for `/` to serve the same UI as local `go run ./server`.",
 		"",
 		"## Non-Goals",
 		"",
@@ -1123,7 +1177,7 @@ func frontendSmokeTest(description string) string {
 	return strings.Join([]string{
 		"# Smoke Test",
 		"",
-		"1. Open `index.html` in a browser.",
+		"1. Start the Go server with `go run ./server` and open `/`, or open `client/index.html` in a browser.",
 		"2. Confirm the arena, score display, lives display, gravity display, target lane display, and restart button render without layout overlap.",
 		"3. Press ArrowLeft and ArrowRight and confirm the defender moves horizontally.",
 		"4. Press Space and confirm the gravity display flips between Floor and Ceiling.",
@@ -1153,7 +1207,7 @@ func frontendTestingDoc(description string) string {
 		"npm run build",
 		"```",
 		"",
-		"The generated scaffold keeps both commands dependency-free by using syntax checks for `src/main.js`.",
+		"The generated scaffold keeps both commands dependency-free by using syntax checks for `client/src/main.js`.",
 		"",
 		"## Manual smoke check",
 		"",
@@ -1194,6 +1248,9 @@ func frontendChangelog(description string) string {
 }
 
 func cleanupGeneratedArtifactHygiene(root string) error {
+	if err := migrateGeneratedRootAppLayout(root); err != nil {
+		return err
+	}
 	if err := removeUnservedAlternateFrontendTrees(root); err != nil {
 		return err
 	}
@@ -1262,6 +1319,84 @@ func unservedRootFrontendAssetsExist(root string) bool {
 		}
 	}
 	return false
+}
+
+func migrateGeneratedRootAppLayout(root string) error {
+	if !fileExists(filepath.Join(root, "index.html")) ||
+		!fileExists(filepath.Join(root, "styles.css")) ||
+		!fileExists(filepath.Join(root, "src", "main.js")) {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Join(root, "client", "src"), 0o755); err != nil {
+		return err
+	}
+	moves := map[string]string{
+		"index.html":                    filepath.Join("client", "index.html"),
+		"styles.css":                    filepath.Join("client", "styles.css"),
+		filepath.Join("src", "main.js"): filepath.Join("client", "src", "main.js"),
+	}
+	for from, to := range moves {
+		fromPath := filepath.Join(root, from)
+		toPath := filepath.Join(root, to)
+		if !fileExists(fromPath) || fileExists(toPath) {
+			continue
+		}
+		if err := os.Rename(fromPath, toPath); err != nil {
+			return fmt.Errorf("move generated frontend asset %s to %s: %w", from, to, err)
+		}
+	}
+	_ = os.Remove(filepath.Join(root, "src"))
+	if err := rewriteGeneratedPackageJSONForStaticLayout(root); err != nil {
+		return err
+	}
+	if fileExists(filepath.Join(root, "main.go")) {
+		serverDir := generatedAppServerDir(root, "")
+		if err := os.MkdirAll(filepath.Join(root, serverDir), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(root, serverDir, "main.go"), []byte(frontendServingGoMain()), 0o600); err != nil {
+			return fmt.Errorf("write migrated %s/main.go: %w", serverDir, err)
+		}
+		if fileExists(filepath.Join(root, "main_test.go")) {
+			data, err := os.ReadFile(filepath.Join(root, "main_test.go"))
+			if err != nil {
+				return err
+			}
+			updated := strings.ReplaceAll(string(data), `filepath.Join(dir, "index.html")`, `filepath.Join(dir, "client", "index.html")`)
+			updated = strings.ReplaceAll(updated, `filepath.Join(dir, "styles.css")`, `filepath.Join(dir, "client", "styles.css")`)
+			updated = strings.ReplaceAll(updated, `filepath.Join(dir, "src", "main.js")`, `filepath.Join(dir, "client", "src", "main.js")`)
+			updated = strings.ReplaceAll(updated, `os.Mkdir(filepath.Join(dir, "src"), 0o755)`, `os.MkdirAll(filepath.Join(dir, "client", "src"), 0o755)`)
+			if err := os.WriteFile(filepath.Join(root, serverDir, "main_test.go"), []byte(updated), 0o600); err != nil {
+				return fmt.Errorf("write migrated %s/main_test.go: %w", serverDir, err)
+			}
+			if err := os.Remove(filepath.Join(root, "main_test.go")); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+		}
+		if err := os.Remove(filepath.Join(root, "main.go")); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if commandAvailable("gofmt") {
+			_ = runCmd(context.Background(), root, "gofmt", "-w", filepath.Join(serverDir, "main.go"), filepath.Join(serverDir, "main_test.go"))
+		}
+	}
+	return nil
+}
+
+func rewriteGeneratedPackageJSONForStaticLayout(root string) error {
+	path := filepath.Join(root, "package.json")
+	if !fileExists(path) {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	updated := strings.ReplaceAll(string(data), "node --check src/main.js", "node --check client/src/main.js")
+	if updated == string(data) {
+		return nil
+	}
+	return os.WriteFile(path, []byte(updated), 0o600)
 }
 
 func referencedRootFrontendAssets(indexPath string) ([]string, error) {
@@ -1587,8 +1722,12 @@ func promptContaminationCutIndex(content string) int {
 }
 
 func recoverGoCI(ctx context.Context, root string) (string, error) {
-	if !fileExists(filepath.Join(root, "go.mod")) || !fileExists(filepath.Join(root, "main.go")) {
+	if !fileExists(filepath.Join(root, "go.mod")) || !generatedGoEntrypointExists(root) {
 		return "", fmt.Errorf("go service files are required before CI recovery")
+	}
+	testDir := "server"
+	if fileExists(filepath.Join(root, "main.go")) && !fileExists(filepath.Join(root, "server", "main.go")) {
+		testDir = "."
 	}
 	test := `package main
 
@@ -1628,8 +1767,8 @@ func TestRootHandler(t *testing.T) {
 	}
 }
 `
-	if err := os.WriteFile(filepath.Join(root, "main_test.go"), []byte(test), 0o600); err != nil {
-		return "", fmt.Errorf("write main_test.go: %w", err)
+	if err := os.WriteFile(filepath.Join(root, testDir, "main_test.go"), []byte(test), 0o600); err != nil {
+		return "", fmt.Errorf("write %s/main_test.go: %w", testDir, err)
 	}
 	workflowDir := filepath.Join(root, ".github", "workflows")
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
@@ -1656,7 +1795,7 @@ jobs:
 		return "", fmt.Errorf("write workflow: %w", err)
 	}
 	if commandAvailable("gofmt") {
-		if err := runCmd(ctx, root, "gofmt", "-w", "main_test.go"); err != nil {
+		if err := runCmd(ctx, root, "gofmt", "-w", filepath.Join(testDir, "main_test.go")); err != nil {
 			return "", err
 		}
 	}
@@ -1673,24 +1812,26 @@ jobs:
 }
 
 func recoverDockerfile(ctx context.Context, root, description string) (string, error) {
-	if !fileExists(filepath.Join(root, "go.mod")) || !fileExists(filepath.Join(root, "main.go")) {
+	if !fileExists(filepath.Join(root, "go.mod")) || !generatedGoEntrypointExists(root) {
 		if _, err := recoverGoBackend(ctx, root, description); err != nil {
 			return "", err
 		}
 	}
 	staticAssetCopies := ""
 	if staticFrontendProjectExists(root) {
-		staticAssetCopies = `COPY --from=build /src/index.html /app/index.html
-COPY --from=build /src/styles.css /app/styles.css
-COPY --from=build /src/src /app/src
+		staticAssetCopies = `COPY --from=build /src/client /app/client
 `
+	}
+	buildTarget := "."
+	if fileExists(filepath.Join(root, "server", "main.go")) {
+		buildTarget = "./server"
 	}
 	dockerfile := fmt.Sprintf(`FROM golang:1.22-alpine AS build
 WORKDIR /src
 COPY go.mod ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/app .
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/app %s
 
 FROM alpine:3.20
 RUN addgroup -S app && adduser -S app -G app
@@ -1701,7 +1842,7 @@ USER app
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
 ENTRYPOINT ["/app/app"]
-`, staticAssetCopies)
+`, buildTarget, staticAssetCopies)
 	dockerignore := `.git
 run.log
 run_state.json
@@ -1737,7 +1878,7 @@ node_modules
 		"curl http://127.0.0.1:8080/ | grep '<title>'",
 		"```",
 		"",
-		"The runtime image copies the static browser assets into `/app`, so the container serves the same primary UI from `/` that local `go run .` serves.",
+		"The runtime image copies `client/` into `/app/client`, so the container serves the same primary UI from `/` that local `go run ./server` serves.",
 		"",
 	}, "\n")
 	if err := os.WriteFile(filepath.Join(docsDir, "container-run.md"), []byte(containerDocs), 0o600); err != nil {
@@ -1871,7 +2012,7 @@ func recoverDocs(root, description string) (string, error) {
 		"## Run",
 		"",
 		"```sh",
-		"go run .",
+		"go run ./server",
 		"```",
 		"",
 		"The service listens on `:8080`.",
@@ -2017,7 +2158,11 @@ func readmeCoversScenario(root string) bool {
 }
 
 func ciCoversScenario(root string) bool {
-	testData, err := os.ReadFile(filepath.Join(root, "main_test.go"))
+	testPath := filepath.Join(root, "server", "main_test.go")
+	if !fileExists(testPath) {
+		testPath = filepath.Join(root, "main_test.go")
+	}
+	testData, err := os.ReadFile(testPath)
 	if err != nil {
 		return false
 	}
@@ -2063,8 +2208,10 @@ func repositoryIsEffectivelyEmpty(root string) bool {
 
 func staticFrontendProjectExists(root string) bool {
 	return fileExists(filepath.Join(root, "package.json")) &&
-		fileExists(filepath.Join(root, "index.html")) &&
-		fileExists(filepath.Join(root, "src", "main.js"))
+		((fileExists(filepath.Join(root, "client", "index.html")) &&
+			fileExists(filepath.Join(root, "client", "src", "main.js"))) ||
+			(fileExists(filepath.Join(root, "index.html")) &&
+				fileExists(filepath.Join(root, "src", "main.js"))))
 }
 
 func shouldRecoverFrontendScaffold(root, description string) bool {
@@ -2075,7 +2222,9 @@ func shouldRecoverFrontendScaffold(root, description string) bool {
 		return false
 	}
 	return !fileExists(filepath.Join(root, "package.json")) &&
+		!fileExists(filepath.Join(root, "client", "index.html")) &&
 		!fileExists(filepath.Join(root, "index.html")) &&
+		!fileExists(filepath.Join(root, "client", "src", "main.js")) &&
 		!fileExists(filepath.Join(root, "src", "main.js"))
 }
 
