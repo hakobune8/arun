@@ -1711,7 +1711,7 @@ func TestRecoverBuiltInSubtask_FrontendRemovesUnservedAlternateUIAndArtifacts(t 
 		}
 	}
 	binaryName := "20260704T235557-run-b7443127479f1e91-hakobune8-arun-test"
-	if err := os.WriteFile(filepath.Join(repo, binaryName), []byte{0x7f, 'E', 'L', 'F', 0x02, 0x01}, 0o700); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, binaryName), []byte{0x7f, 'E', 'L', 'F', 0x02, 0x01}, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	runSandbox := sandbox.NewLocalSandbox(repo)
