@@ -1182,6 +1182,64 @@ func main() {
 	}
 }
 
+func TestFrontendQualityGateFailsForMissingAbsoluteClientReferencedAssets(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	files := map[string]string{
+		filepath.Join("client", "index.html"): `<!doctype html><link rel="stylesheet" href="/style.css"><script src="/app.js"></script>`,
+		filepath.Join("server", "main.go"): `package main
+
+import (
+	"net/http"
+	"path"
+)
+
+func staticAssetPath(urlPath string) (string, bool) {
+	clean := path.Clean("/" + urlPath)
+	switch clean {
+	case "/styles.css":
+		return "client/styles.css", true
+	case "/src/main.js":
+		return "client/src/main.js", true
+	default:
+		return "", false
+	}
+}
+
+func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			if assetPath, ok := staticAssetPath(r.URL.Path); ok {
+				http.ServeFile(w, r, assetPath)
+				return
+			}
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeFile(w, r, "client/index.html")
+	})
+}
+`,
+	}
+	for path, content := range files {
+		full := filepath.Join(repo, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "frontend",
+		Description: "Add a browser game UI.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed with missing absolute client CSS/JS assets: %+v", status)
+	}
+}
+
 func TestFrontendQualityGateFailsWhenStaticAssetPathDoesNotServeClientRefs(t *testing.T) {
 	t.Parallel()
 
@@ -2045,7 +2103,7 @@ func TestRecoverDockerfileCopiesStaticFrontendAssetsWithoutPackageJSON(t *testin
 	}
 	files := map[string]string{
 		filepath.Join("server", "go.mod"):         "module github.com/hakobune8/arun-test/server\n\ngo 1.22\n",
-		filepath.Join("server", "main.go"):        "package main\n\nimport \"net/http\"\n\nfunc main() { http.HandleFunc(\"/healthz\", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(\"ok\")) }); http.ListenAndServe(\":8080\", nil) }\n",
+		filepath.Join("server", "main.go"):        frontendServingGoMain(),
 		filepath.Join("client", "index.html"):     `<!doctype html><link rel="stylesheet" href="styles.css"><script src="src/main.js"></script>`,
 		filepath.Join("client", "styles.css"):     "body { margin: 0; }\n",
 		filepath.Join("client", "src", "main.js"): "console.log('game')\n",
@@ -2074,6 +2132,52 @@ func TestRecoverDockerfileCopiesStaticFrontendAssetsWithoutPackageJSON(t *testin
 	}))
 	if !status.Passed {
 		t.Fatalf("quality gate failed: %+v", status)
+	}
+}
+
+func TestRecoverDockerfileRepairsMissingAbsoluteFrontendAssets(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	files := map[string]string{
+		filepath.Join("server", "go.mod"):     "module github.com/hakobune8/arun-test/server\n\ngo 1.22\n",
+		filepath.Join("server", "main.go"):    "package main\n\nimport \"net/http\"\n\nfunc main() { http.HandleFunc(\"/healthz\", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(\"ok\")) }); http.ListenAndServe(\":8080\", nil) }\n",
+		filepath.Join("client", "index.html"): `<!doctype html><link rel="stylesheet" href="/style.css"><script src="/app.js"></script>`,
+	}
+	for path, content := range files {
+		full := filepath.Join(repo, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	if _, err := recoverDockerfile(context.Background(), repo, "Add Dockerfile for a Go server that serves the static frontend from /"); err != nil {
+		t.Fatalf("recoverDockerfile() error = %v", err)
+	}
+	for _, file := range []string{
+		filepath.Join("client", "styles.css"),
+		filepath.Join("client", "src", "main.js"),
+		"Dockerfile",
+	} {
+		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
+			t.Fatalf("%s not created: %v", file, err)
+		}
+	}
+	dockerfile, err := os.ReadFile(filepath.Join(repo, "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(dockerfile), "COPY client /app/client") {
+		t.Fatalf("Dockerfile does not copy repaired client assets:\n%s", dockerfile)
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "docker",
+		Description: "Add Dockerfile for a Go server that serves static frontend assets.",
+	}))
+	if !status.Passed {
+		t.Fatalf("quality gate failed after recovery: %+v", status)
 	}
 }
 

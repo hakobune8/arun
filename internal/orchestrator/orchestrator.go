@@ -537,10 +537,11 @@ func builtInAgentInfo(name, fallbackDescription string) AgentMetadata {
 		info.RecommendedAfter = []string{"security", "dependency-updater"}
 		info.ArchitectureGuidance = []string{
 			"Inspect the existing Dockerfile, compose files, build context, entrypoint, exposed ports, and CI image-build flow before editing container files.",
+			"Put the primary Dockerfile at repository root and use the repository root as build context, even when the Go module lives under server/.",
 			"Prefer multi-stage builds, non-root runtime users, minimal copied context, deterministic package installation, and explicit health checks when the application supports them.",
 			"Keep secrets out of image layers, build args, labels, logs, and compose files.",
 		}
-		info.OutputExpectations = []string{"Container changes touch Dockerfile, .dockerignore, compose, or related build configuration instead of reporting no-op success.", "docker build is run when available; otherwise static Dockerfile checks and unavailable-tool notes are reported.", "Security and runtime notes cover user, ports, health checks, secret handling, image size, and rollback considerations."}
+		info.OutputExpectations = []string{"Container changes touch root Dockerfile, .dockerignore, compose, or related build configuration instead of reporting no-op success.", "docker build is run from the repository root when available; otherwise static Dockerfile checks and unavailable-tool notes are reported.", "Security and runtime notes cover user, ports, health checks, secret handling, image size, and rollback considerations."}
 	case "helm":
 		info.Description = "Helm ops agent for charts, templates, values, schema, chart linting, and release-safe packaging"
 		info.Domains = []string{"helm", "charts", "templates", "values", "kubernetes-packaging"}

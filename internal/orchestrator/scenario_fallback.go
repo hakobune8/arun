@@ -1561,9 +1561,10 @@ func referencedRootFrontendAssets(indexPath string) ([]string, error) {
 			}
 			ref := strings.TrimPrefix(remaining[:end], "./")
 			remaining = remaining[end+1:]
-			if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") || strings.HasPrefix(ref, "//") || strings.HasPrefix(ref, "/") {
+			if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") || strings.HasPrefix(ref, "//") {
 				continue
 			}
+			ref = strings.TrimPrefix(ref, "/")
 			clean := filepath.Clean(ref)
 			if strings.HasPrefix(clean, "..") {
 				continue
@@ -1956,6 +1957,14 @@ jobs:
 
 func recoverDockerfile(ctx context.Context, root, description string) (string, error) {
 	if !generatedGoModuleExists(root) || !generatedGoEntrypointExists(root) {
+		if _, err := recoverGoBackend(ctx, root, description); err != nil {
+			return "", err
+		}
+	}
+	if missingReferencedFrontendAssetsExist(root) {
+		if _, err := recoverFrontendStaticApp(root, description); err != nil {
+			return "", err
+		}
 		if _, err := recoverGoBackend(ctx, root, description); err != nil {
 			return "", err
 		}
