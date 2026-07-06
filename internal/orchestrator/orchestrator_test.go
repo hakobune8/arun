@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -1334,6 +1335,9 @@ func main() {
 
 func TestFrontendQualityGateFailsWhenServerWorkingDirCannotServeClientAssets(t *testing.T) {
 	t.Parallel()
+	if goruntime.GOOS == "windows" {
+		t.Skip("runtime server smoke is skipped on Windows to avoid leaked process directory locks")
+	}
 
 	repo := t.TempDir()
 	files := map[string]string{
@@ -3028,7 +3032,9 @@ func TestRecoverFrontendReleaseDiscardsImplementationChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(restored) != string(original) {
+	restored = bytes.ReplaceAll(restored, []byte("\r\n"), []byte("\n"))
+	original = bytes.ReplaceAll(original, []byte("\r\n"), []byte("\n"))
+	if !bytes.Equal(restored, original) {
 		t.Fatalf("client/index.html was not restored:\n%s", restored)
 	}
 	changelog, err := os.ReadFile(filepath.Join(repo, "CHANGELOG.md"))
