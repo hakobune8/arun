@@ -378,14 +378,37 @@ deployments can require GitHub OAuth sessions by setting
 
 ```
 GET /api/auth/session
+POST /api/auth/device/start
+POST /api/auth/device/poll
 GET /auth/login
 GET /auth/callback
 GET /auth/logout
 ```
 
 When authentication is enabled, work-triggering APIs require a valid signed
-session cookie. Repository cloning and GitHub API operations still use the
-server-side GitHub token or GitHub App installation credentials.
+session cookie. Browser login and device flow request `read:user repo workflow`
+by default so user-scoped sessions can publish Issues, branches, PRs, and
+generated GitHub Actions workflow files.
+
+Device flow is intended for browserless clients. Start it with:
+
+```http
+POST /api/auth/device/start
+```
+
+The response includes `userCode`, `verificationUri`, `expiresIn`, and
+`interval`. After the user approves the code on GitHub, poll with:
+
+```http
+POST /api/auth/device/poll
+Content-Type: application/json
+
+{"deviceCode":"..."}
+```
+
+`202 Accepted` means authorization is still pending. `200 OK` sets the same
+`arun_session` cookie used by the Web UI. The access token is stored inside the
+signed session and is never returned in the JSON response.
 
 Issue-sourced orchestrations can require human approval before closing their
 source Issue:

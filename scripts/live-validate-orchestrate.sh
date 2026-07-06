@@ -25,6 +25,7 @@ PR_TITLE="${PR_TITLE:-${ISSUE_TITLE}}"
 POLL_INTERVAL_SECONDS="${POLL_INTERVAL_SECONDS:-30}"
 MAX_WAIT_SECONDS="${MAX_WAIT_SECONDS:-14400}"
 KEEP_VALIDATION_API="${KEEP_VALIDATION_API:-0}"
+KEEP_VALIDATION_API_ON_ERROR="${KEEP_VALIDATION_API_ON_ERROR:-1}"
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -50,8 +51,9 @@ cleanup_local() {
   fi
 }
 
+SCRIPT_STATUS=0
 cleanup_remote() {
-  if [[ "$KEEP_VALIDATION_API" == "1" ]]; then
+  if [[ "$KEEP_VALIDATION_API" == "1" ]] || [[ "$SCRIPT_STATUS" != "0" && "$KEEP_VALIDATION_API_ON_ERROR" == "1" ]]; then
     return
   fi
   kubectl -n "$RELEASE_NAMESPACE" exec "$POD" -- sh -lc '
@@ -62,7 +64,7 @@ cleanup_remote() {
   ' >/dev/null 2>&1 || true
 }
 
-trap 'cleanup_local; cleanup_remote' EXIT
+trap 'SCRIPT_STATUS=$?; cleanup_local; cleanup_remote' EXIT
 
 kubectl -n "$RELEASE_NAMESPACE" exec "$POD" -- sh -lc '
   if [ -f /tmp/arun-live-validate-api.pid ]; then
@@ -96,7 +98,7 @@ fi
 templates_file="$(mktemp)"
 payload_file="$(mktemp)"
 record_file="$(mktemp)"
-trap 'rm -f "$templates_file" "$payload_file" "$record_file"; cleanup_local; cleanup_remote' EXIT
+trap 'SCRIPT_STATUS=$?; rm -f "$templates_file" "$payload_file" "$record_file"; cleanup_local; cleanup_remote' EXIT
 
 curl -fsS -X POST "${API_BASE}/api/orchestrate/templates" \
   -H 'Content-Type: application/json' \
@@ -169,7 +171,19 @@ echo "started ${RUN_ID}"
 
 deadline=$(( $(date +%s) + MAX_WAIT_SECONDS ))
 while true; do
-  record="$(curl -fsS "${API_BASE}/api/orchestrates/${RUN_ID}")"
+  record=""
+  for attempt in 1 2 3; do
+    if record="$(curl -fsS "${API_BASE}/api/orchestrates/${RUN_ID}")"; then
+      break
+    fi
+    echo "poll failed for ${RUN_ID}; retry ${attempt}/3" >&2
+    sleep 5
+  done
+  if [[ -z "$record" ]]; then
+    echo "failed to poll ${RUN_ID}; validation API left running for manual resume" >&2
+    KEEP_VALIDATION_API=1
+    exit 1
+  fi
   status="$(printf '%s' "$record" | jq -r '.status')"
   completed="$(printf '%s' "$record" | jq '[.subtasks[]? | select(.status == "completed")] | length')"
   failed="$(printf '%s' "$record" | jq '[.subtasks[]? | select(.status == "failed")] | length')"

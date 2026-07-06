@@ -41,6 +41,10 @@ const frontendPackageValidationCommand = `sh -c 'pkgdir=; [ -f client/package.js
 
 const frontendPackageLayoutValidationCommand = `sh -c 'if [ -f server/go.mod ] && [ -f client/index.html ]; then test -f client/package.json || { echo "client/package.json is required for separated generated frontend assets"; exit 1; }; test ! -f package.json || { echo "root package.json conflicts with separated client/package.json layout"; exit 1; }; fi'`
 
+const frontendAssetHygieneValidationCommand = `sh -c 'if [ -f client/index.html ] && [ -f docs/artifact-contract.md ]; then tmp=$(mktemp); trap "rm -f $tmp" EXIT; grep -Eo "(href|src)=\"[^\"]+\\.(css|js)([#?][^\"]*)?\"" client/index.html | sed -E "s/^(href|src)=\"([^\"#?]+).*/\\2/" | sed -E "s#^\\./##; s#^/##; s#^client/##" >"$tmp"; find client -type f \( -name "*.css" -o -name "*.js" \) -not -path "*/node_modules/*" -print | while read -r asset; do rel=${asset#client/}; grep -Fxq "$rel" "$tmp" && continue; grep -Fq "$asset" docs/artifact-contract.md && continue; grep -Fq "$rel" docs/artifact-contract.md && continue; echo "$asset is not referenced by client/index.html or documented in docs/artifact-contract.md"; exit 1; done; fi'`
+
+const generatedArtifactHygieneValidationCommand = `sh -c 'empty=$(find client server charts k8s .github/workflows docs -type f -empty ! -name ".gitkeep" -print -quit 2>/dev/null || true); test -z "$empty" || { echo "$empty is an empty generated artifact"; exit 1; }; if [ -f charts/Chart.yaml ] && find charts -mindepth 2 -name Chart.yaml -print -quit 2>/dev/null | grep -q .; then echo "charts/Chart.yaml conflicts with chart subdirectories"; exit 1; fi; if [ -d .github/workflows ]; then names=$(for f in .github/workflows/*.yml .github/workflows/*.yaml; do [ -f "$f" ] || continue; sed -n "s/^name:[[:space:]]*//p" "$f" | head -n1; done); dup=$(printf "%s\n" "$names" | sed "/^$/d" | sort | uniq -d | head -n1); test -z "$dup" || { echo "duplicate GitHub Actions workflow name: $dup"; exit 1; }; fi'`
+
 const frontendValidationCommand = `sh -c 'if [ -f main.go ] && { [ -f index.html ] || [ -d src ] || [ -d client ]; }; then echo "Go entrypoint and browser assets are mixed at repository root; use server/ and client/"; exit 1; fi; server_main=$(find server cmd -path "*/main.go" -print -quit 2>/dev/null); [ -z "$server_main" ] && [ -f main.go ] && server_main=main.go; for entry in frontend/index.html web/index.html client/index.html index.html; do if [ -f "$entry" ]; then dir=${entry%/*}; [ "$dir" = "$entry" ] && dir=.; if [ "$entry" != "index.html" ]; then test -n "$server_main" && grep -Eq "$dir|FileServer|http\\.Dir|StripPrefix|staticAssetPath" "$server_main" || { echo "$entry exists but is not served by the Go entrypoint"; exit 1; }; fi; for ref in $(grep -Eo "(href|src)=\"[^\"]+\\.(css|js)([#?][^\"]*)?\"" "$entry" | sed -E "s/^(href|src)=\"([^\"#?]+).*/\\2/" | sed -E "s#^\\./##"); do case "$ref" in http://*|https://*|//*) continue;; esac; clean=$(printf "%s" "$ref" | sed -E "s/[#?].*$//"); clean=${clean#/}; asset="$dir/$clean"; [ "$dir" = "." ] && asset="$clean"; test -f "$asset" || { echo "$entry references $clean but $asset is missing"; exit 1; }; if [ -n "$server_main" ]; then server_content=$(cat "$server_main"); if printf "%s" "$server_content" | grep -Eq "FileServer|http\\.Dir|StripPrefix"; then :; elif printf "%s" "$server_content" | grep -q "staticAssetPath"; then base=${clean##*/}; case "$clean" in src/*) printf "%s" "$server_content" | grep -Eq "/src/|$base" || { echo "$entry references $clean but Go staticAssetPath does not serve it"; exit 1; };; *) printf "%s" "$server_content" | grep -q "$base" || { echo "$entry references $clean but Go staticAssetPath does not serve it"; exit 1; };; esac; else printf "%s" "$server_content" | grep -Eq "$asset|$dir|client|static" || { echo "$entry references $clean but Go entrypoint does not serve static assets"; exit 1; }; fi; fi; done; fi; done'`
 
 const servedFrontendRuntimeValidationCommand = `sh -c 'if [ "$(go env GOOS 2>/dev/null || echo unknown)" != "windows" ] && [ -f server/go.mod ] && [ -f server/main.go ] && [ -f client/index.html ] && command -v go >/dev/null 2>&1 && command -v curl >/dev/null 2>&1; then tmp=$(mktemp -d); port=$((20000 + ($$ % 20000))); pid=""; cleanup(){ if [ -n "$pid" ]; then kill "$pid" >/dev/null 2>&1 || true; wait "$pid" 2>/dev/null || true; fi; rm -rf "$tmp"; }; trap cleanup EXIT; (cd server && go build -o "$tmp/app" .); (cd server && PORT="$port" "$tmp/app" >"$tmp/server.log" 2>&1) & pid=$!; ready=0; i=0; while [ "$i" -lt 10 ]; do if curl -fsS "http://127.0.0.1:$port/" >/dev/null 2>&1; then ready=1; break; fi; i=$((i+1)); sleep 1; done; test "$ready" = 1 || { cat "$tmp/server.log" 2>/dev/null || true; exit 1; }; for ref in $(grep -Eo "(href|src)=\"[^\"]+\\.(css|js)([#?][^\"]*)?\"" client/index.html | sed -E "s/^(href|src)=\"([^\"#?]+).*/\\2/" | sed -E "s#^\\./##"); do case "$ref" in http://*|https://*|//*) continue;; esac; clean=$(printf "%s" "$ref" | sed -E "s/[#?].*$//"); clean=${clean#/}; curl -fsS "http://127.0.0.1:$port/$clean" >/dev/null || { echo "server runtime does not serve /$clean from client/index.html"; exit 1; }; done; fi'`
@@ -53,7 +57,7 @@ const qaEvidenceCommand = `sh -c 'test -f docs/testing.md || test -f docs/smoke-
 
 const qaValidationCommand = `sh -c 'moddir=; [ -f server/go.mod ] && moddir=server; [ -z "$moddir" ] && [ -f go.mod ] && moddir=.; if [ -n "$moddir" ]; then if command -v go >/dev/null 2>&1; then (cd "$moddir" && pkgs=$(go list ./...) && test -n "$pkgs" && go test ./...); else main=server/main.go; [ "$moddir" = "." ] && main=main.go; test -f "$main" && grep -q "/healthz" "$main"; fi; elif [ ! -f client/package.json ] && [ ! -f package.json ]; then test -f docs/testing.md || test -f docs/smoke-test.md || test -f README.md; fi'`
 
-const docsValidationCommand = `sh -c 'if [ -f docs/remediation_notes.md ] && grep -Eiq "human-led sprint|コード実装は行わず|計画段階|implementation is deferred|no code changes" docs/remediation_notes.md; then echo "documentation defers required implementation"; exit 1; fi; if [ -f main.go ] && ! grep -q "\"/health\"" main.go && grep -R --include="*.md" -E "/health endpoint|/health エンドポイント" README.md docs 2>/dev/null | grep -vq "/healthz"; then echo "documentation mentions /health but main.go does not serve it"; exit 1; fi; for dir in cmd web frontend internal; do if [ ! -d "$dir" ] && grep -R --include="*.md" -E "(^|[^[:alnum:]_./-])$dir/" README.md docs 2>/dev/null; then echo "documentation mentions missing $dir/ layout"; exit 1; fi; done'`
+const docsValidationCommand = `sh -c 'if grep -R --include="*.md" -Eiq "human-led sprint|コード実装は行わず|コード実装は含まれません|計画段階|implementation is deferred|no code changes|plan-only" docs 2>/dev/null; then echo "documentation defers required implementation"; exit 1; fi; if [ ! -f .github/workflows/ci.yml ] && grep -R --include="*.md" -F ".github/workflows/ci.yml" README.md docs 2>/dev/null; then echo "documentation mentions missing .github/workflows/ci.yml"; exit 1; fi; if [ -f main.go ] && ! grep -q "\"/health\"" main.go && grep -R --include="*.md" -E "/health endpoint|/health エンドポイント" README.md docs 2>/dev/null | grep -vq "/healthz"; then echo "documentation mentions /health but main.go does not serve it"; exit 1; fi; for dir in cmd web frontend internal; do if [ ! -d "$dir" ] && grep -R --include="*.md" -E "(^|[^[:alnum:]_./-])$dir/" README.md docs 2>/dev/null; then echo "documentation mentions missing $dir/ layout"; exit 1; fi; done'`
 
 const reportOnlyValidationCommand = `sh -c 'if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then changed=$(git diff --name-only -- client server Dockerfile charts k8s .github 2>/dev/null | head -n1); test -z "$changed" || { echo "report-only subtask modified implementation or deployment file: $changed"; exit 1; }; fi'`
 
@@ -74,6 +78,8 @@ const helmValidationCommand = `sh -c 'set -e; if [ -d charts ]; then for dir in 
 const kubernetesValidationCommand = `sh -c 'manifest=$(find . \( -name "*.yaml" -o -name "*.yml" \) -not -path "./.git/*" -exec grep -El "^(apiVersion|kind):" {} + | head -n1); test -n "$manifest"; if command -v kubectl >/dev/null 2>&1; then kubectl apply --dry-run=client -f "$manifest" >/dev/null; fi'`
 
 const opsValidationCommand = `sh -c 'test -f Dockerfile || find . \( -path "*/Chart.yaml" -o -name "*.yaml" -o -name "*.yml" \) -not -path "./.git/*" -print -quit | grep -q .'`
+
+const ciWorkflowValidationCommand = `sh -c 'workflow=$(find .github/workflows -maxdepth 1 -type f \( -name "*.yml" -o -name "*.yaml" \) -print -quit 2>/dev/null); test -n "$workflow" || { echo "GitHub Actions workflow is required for CI work"; exit 1; }; content=$(cat .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null); printf "%s" "$content" | grep -Eq "go test|go vet|go build" || { echo "CI workflow must run Go validation"; exit 1; }; if [ -f client/package.json ]; then printf "%s" "$content" | grep -Eq "npm --prefix client (test|run test)|working-directory:[[:space:]]*client" || { echo "CI workflow must run client validation"; exit 1; }; printf "%s" "$content" | grep -Eq "npm --prefix client run build|npm run build" || { echo "CI workflow must run client build validation"; exit 1; }; fi'`
 
 // QualityGateStatus reports the result of validating a subtask's gate.
 type QualityGateStatus struct {
@@ -105,7 +111,7 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 		}
 		return &QualityGate{
 			RequiredFiles:      []string{filepath.Join("server", "go.mod"), filepath.Join("server", "main.go")},
-			ValidationCommands: []string{goModuleLayoutValidationCommand, goTestValidationCommand, goVetValidationCommand},
+			ValidationCommands: []string{generatedArtifactHygieneValidationCommand, goModuleLayoutValidationCommand, goTestValidationCommand, goVetValidationCommand},
 			ContentChecks: []QualityContentCheck{{
 				File:     filepath.Join("server", "main.go"),
 				Contains: []string{"net/http", "/healthz", `"status"`},
@@ -116,6 +122,8 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 			ValidationCommands: []string{
 				frontendProjectPresenceCommand,
 				frontendValidationCommand,
+				frontendAssetHygieneValidationCommand,
+				generatedArtifactHygieneValidationCommand,
 				frontendPackageLayoutValidationCommand,
 				frontendPackageValidationCommand,
 				servedFrontendRuntimeValidationCommand,
@@ -178,6 +186,8 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 			ValidationCommands: []string{
 				goModuleLayoutValidationCommand,
 				qaEvidenceCommand,
+				frontendAssetHygieneValidationCommand,
+				generatedArtifactHygieneValidationCommand,
 				frontendPackageLayoutValidationCommand,
 				frontendPackageValidationCommand,
 				qaValidationCommand,
@@ -196,19 +206,31 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 		}
 	case "helm":
 		return &QualityGate{
-			ValidationCommands: []string{helmValidationCommand},
+			ValidationCommands: []string{generatedArtifactHygieneValidationCommand, helmValidationCommand},
 		}
 	case "kubernetes":
 		return &QualityGate{
-			ValidationCommands: []string{kubernetesValidationCommand},
+			ValidationCommands: []string{generatedArtifactHygieneValidationCommand, kubernetesValidationCommand},
 		}
 	case "devops":
-		return &QualityGate{
-			ValidationCommands: []string{opsValidationCommand},
+		commands := []string{generatedArtifactHygieneValidationCommand, opsValidationCommand}
+		if requiresCIWorkflow(subtask.Description) {
+			commands = append(commands, ciWorkflowValidationCommand)
 		}
+		return &QualityGate{ValidationCommands: commands}
 	default:
 		return nil
 	}
+}
+
+func requiresCIWorkflow(description string) bool {
+	desc := strings.ToLower(description)
+	for _, term := range []string{"github actions", "continuous", "ci", "workflow"} {
+		if strings.Contains(desc, term) {
+			return true
+		}
+	}
+	return false
 }
 
 func applyDefaultQualityGate(subtask *Subtask) {

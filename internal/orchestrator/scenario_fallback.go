@@ -29,7 +29,7 @@ import (
 )
 
 func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask *Subtask, runSandbox sandbox.Sandbox, runtimeErr error) (SubtaskResult, bool) {
-	if subtask.AgentName == "frontend" && (shouldRecoverFrontendScaffold(runSandbox.RootDir(), subtask.Description) || missingReferencedFrontendAssetsExist(runSandbox.RootDir()) || unservedAlternateFrontendExists(runSandbox.RootDir()) || unservedRootFrontendAssetsExist(runSandbox.RootDir())) {
+	if subtask.AgentName == "frontend" && (shouldRecoverFrontendScaffold(runSandbox.RootDir(), subtask.Description) || missingReferencedFrontendAssetsExist(runSandbox.RootDir()) || unreferencedGeneratedFrontendAssetsExist(runSandbox.RootDir()) || unservedClientFrontendAssetsExist(runSandbox.RootDir()) || unservedAlternateFrontendExists(runSandbox.RootDir()) || unservedRootFrontendAssetsExist(runSandbox.RootDir())) {
 		out, err := recoverFrontendAndServingBackend(ctx, runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
 	}
@@ -59,6 +59,12 @@ func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask *Subta
 	case "docker":
 		out, err := recoverDockerfile(recoveryCtx, runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
+	case "devops":
+		if requiresCIWorkflow(subtask.Description) {
+			out, err := recoverGoCI(recoveryCtx, runSandbox.RootDir())
+			return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
+		}
+		return SubtaskResult{}, false
 	case "helm":
 		out, err := recoverHelmChart(recoveryCtx, runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
@@ -99,6 +105,14 @@ func (o *Orchestrator) recoverNoOpBuiltInSubtask(ctx context.Context, subtask *S
 	if subtask.AgentName == "frontend" && repositoryIsEffectivelyEmpty(runSandbox.RootDir()) {
 		applyDefaultQualityGate(subtask)
 		status := validateQualityGate(ctx, runSandbox.RootDir(), subtask.QualityGate)
+		return o.recoverNoOpBuiltInSubtaskWithStatus(ctx, subtask, runSandbox, status)
+	}
+	if subtask.AgentName == "devops" && requiresCIWorkflow(subtask.Description) {
+		applyDefaultQualityGate(subtask)
+		status := validateQualityGate(ctx, runSandbox.RootDir(), subtask.QualityGate)
+		if status.Passed {
+			return SubtaskResult{}, false
+		}
 		return o.recoverNoOpBuiltInSubtaskWithStatus(ctx, subtask, runSandbox, status)
 	}
 	if !isCanonicalGoServiceTask(subtask.Description) {
@@ -155,6 +169,12 @@ func (o *Orchestrator) recoverNoOpBuiltInSubtaskWithStatus(ctx context.Context, 
 	case "docker":
 		out, err := recoverDockerfile(recoveryCtx, runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
+	case "devops":
+		if requiresCIWorkflow(subtask.Description) {
+			out, err := recoverGoCI(recoveryCtx, runSandbox.RootDir())
+			return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
+		}
+		return SubtaskResult{}, false
 	case "helm":
 		out, err := recoverHelmChart(recoveryCtx, runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
@@ -170,6 +190,11 @@ func recoverFrontendAndServingBackend(_ context.Context, root, description strin
 	out, err := recoverFrontendStaticApp(root, description)
 	if err != nil {
 		return "", err
+	}
+	if removed, err := removeUnreferencedGeneratedFrontendAssets(root); err != nil {
+		return "", err
+	} else if removed > 0 {
+		out = strings.TrimSpace(out + fmt.Sprintf("\nRemoved %d unreferenced generated frontend asset(s).", removed))
 	}
 	if generatedGoModuleExists(root) || generatedGoEntrypointExists(root) {
 		recoveryCtx, cancel := fallbackRecoveryContext()
@@ -1466,6 +1491,15 @@ func cleanupGeneratedArtifactHygiene(root string) error {
 	if err := removeIncompleteHelmCharts(root); err != nil {
 		return err
 	}
+	if err := removeStrayRootHelmMetadata(root); err != nil {
+		return err
+	}
+	if err := removeEmptyGeneratedArtifactFiles(root); err != nil {
+		return err
+	}
+	if err := removeDuplicateGeneratedCIWorkflows(root); err != nil {
+		return err
+	}
 	if err := removeGeneratedBinaryArtifacts(root); err != nil {
 		return err
 	}
@@ -1506,6 +1540,103 @@ func removeUnservedAlternateFrontendTrees(root string) error {
 	return nil
 }
 
+func removeEmptyGeneratedArtifactFiles(root string) error {
+	for _, dir := range []string{"charts", "k8s", filepath.Join(".github", "workflows"), "docs"} {
+		base := filepath.Join(root, dir)
+		if _, err := os.Stat(base); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return err
+		}
+		var dirs []string
+		if err := filepath.WalkDir(base, func(path string, entry os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() {
+				dirs = append(dirs, path)
+				return nil
+			}
+			if entry.Name() == ".gitkeep" {
+				return nil
+			}
+			info, err := entry.Info()
+			if err != nil {
+				return err
+			}
+			if info.Size() == 0 {
+				if err := os.Remove(path); err != nil {
+					return fmt.Errorf("remove empty generated artifact %s: %w", path, err)
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		for i := len(dirs) - 1; i >= 0; i-- {
+			if dirs[i] == base {
+				continue
+			}
+			_ = os.Remove(dirs[i])
+		}
+	}
+	return nil
+}
+
+func removeDuplicateGeneratedCIWorkflows(root string) error {
+	workflowDir := filepath.Join(root, ".github", "workflows")
+	ciPath := filepath.Join(workflowDir, "ci.yml")
+	goPath := filepath.Join(workflowDir, "go.yml")
+	if !fileExists(ciPath) || !fileExists(goPath) {
+		return nil
+	}
+	ciName, err := workflowName(ciPath)
+	if err != nil {
+		return err
+	}
+	goName, err := workflowName(goPath)
+	if err != nil {
+		return err
+	}
+	if ciName == "" || ciName != goName {
+		return nil
+	}
+	data, err := os.ReadFile(goPath)
+	if err != nil {
+		return err
+	}
+	content := strings.ToLower(string(data))
+	if !strings.Contains(content, "go test ./...") || !strings.Contains(content, "go vet ./...") {
+		return nil
+	}
+	if fileExists(filepath.Join(root, "client", "package.json")) &&
+		(!strings.Contains(content, "npm --prefix client test") || !strings.Contains(content, "npm --prefix client run build")) {
+		return nil
+	}
+	if err := os.Remove(ciPath); err != nil {
+		return fmt.Errorf("remove duplicate generated CI workflow: %w", err)
+	}
+	return nil
+}
+
+func workflowName(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "name:") {
+			continue
+		}
+		name := strings.TrimSpace(strings.TrimPrefix(line, "name:"))
+		name = strings.Trim(name, `"'`)
+		return name, nil
+	}
+	return "", nil
+}
+
 func unservedRootFrontendAssetsExist(root string) bool {
 	if !fileExists(filepath.Join(root, "index.html")) || !fileExists(filepath.Join(root, "main.go")) {
 		return false
@@ -1528,6 +1659,49 @@ func unservedRootFrontendAssetsExist(root string) bool {
 		}
 	}
 	return false
+}
+
+func unservedClientFrontendAssetsExist(root string) bool {
+	indexPath := filepath.Join(root, "client", "index.html")
+	mainPath := filepath.Join(root, "server", "main.go")
+	if !fileExists(indexPath) || !fileExists(mainPath) {
+		return false
+	}
+	assets, err := referencedRootFrontendAssets(indexPath)
+	if err != nil || len(assets) == 0 {
+		return false
+	}
+	data, err := os.ReadFile(mainPath)
+	if err != nil {
+		return false
+	}
+	content := string(data)
+	for _, asset := range assets {
+		if !fileExists(filepath.Join(root, "client", filepath.FromSlash(asset))) {
+			continue
+		}
+		if !mainServesClientAsset(content, asset) {
+			return true
+		}
+	}
+	return false
+}
+
+func mainServesClientAsset(content, asset string) bool {
+	if strings.Contains(content, "FileServer") ||
+		strings.Contains(content, "http.Dir") ||
+		strings.Contains(content, "StripPrefix") {
+		return true
+	}
+	if strings.Contains(content, "staticAssetPath") {
+		base := filepath.Base(asset)
+		if strings.HasPrefix(filepath.ToSlash(asset), "src/") {
+			return strings.Contains(content, "/src/") || strings.Contains(content, base)
+		}
+		return strings.Contains(content, base)
+	}
+	return strings.Contains(content, filepath.ToSlash(filepath.Join("client", asset))) ||
+		strings.Contains(content, asset)
 }
 
 func migrateGeneratedRootAppLayout(root string) error {
@@ -1674,6 +1848,79 @@ func referencedRootFrontendAssets(indexPath string) ([]string, error) {
 	return assets, nil
 }
 
+func unreferencedGeneratedFrontendAssetsExist(root string) bool {
+	assets, err := unreferencedGeneratedFrontendAssets(root)
+	return err == nil && len(assets) > 0
+}
+
+func removeUnreferencedGeneratedFrontendAssets(root string) (int, error) {
+	assets, err := unreferencedGeneratedFrontendAssets(root)
+	if err != nil {
+		return 0, err
+	}
+	removed := 0
+	for _, rel := range assets {
+		if err := os.Remove(filepath.Join(root, rel)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return removed, fmt.Errorf("remove unreferenced frontend asset %s: %w", rel, err)
+		}
+		removed++
+	}
+	return removed, nil
+}
+
+func unreferencedGeneratedFrontendAssets(root string) ([]string, error) {
+	indexPath := filepath.Join(root, "client", "index.html")
+	if !fileExists(indexPath) || !fileExists(filepath.Join(root, "docs", "artifact-contract.md")) {
+		return nil, nil
+	}
+	refs, err := referencedRootFrontendAssets(indexPath)
+	if err != nil {
+		return nil, err
+	}
+	referenced := make(map[string]bool, len(refs))
+	for _, ref := range refs {
+		referenced[filepath.ToSlash(filepath.Clean(ref))] = true
+	}
+	contractData, err := os.ReadFile(filepath.Join(root, "docs", "artifact-contract.md"))
+	if err != nil {
+		return nil, err
+	}
+	contract := string(contractData)
+	var unreferenced []string
+	err = filepath.WalkDir(filepath.Join(root, "client"), func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			switch entry.Name() {
+			case "node_modules", "dist", "build", ".vite":
+				return filepath.SkipDir
+			default:
+				return nil
+			}
+		}
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		if ext != ".css" && ext != ".js" {
+			return nil
+		}
+		rel, err := filepath.Rel(filepath.Join(root, "client"), path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		repoRel := filepath.ToSlash(filepath.Join("client", rel))
+		if referenced[rel] || strings.Contains(contract, rel) || strings.Contains(contract, repoRel) {
+			return nil
+		}
+		unreferenced = append(unreferenced, repoRel)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return unreferenced, nil
+}
+
 func mainServesStaticAsset(content, asset string) bool {
 	return strings.Contains(content, "FileServer") ||
 		strings.Contains(content, "http.Dir") ||
@@ -1715,6 +1962,24 @@ func removeIncompleteHelmCharts(root string) error {
 		if err := os.RemoveAll(chartDir); err != nil {
 			return fmt.Errorf("remove incomplete Helm chart %s: %w", entry.Name(), err)
 		}
+	}
+	return nil
+}
+
+func removeStrayRootHelmMetadata(root string) error {
+	rootChart := filepath.Join(root, "charts", "Chart.yaml")
+	if !fileExists(rootChart) {
+		return nil
+	}
+	nested, err := filepath.Glob(filepath.Join(root, "charts", "*", "Chart.yaml"))
+	if err != nil {
+		return err
+	}
+	if len(nested) == 0 {
+		return nil
+	}
+	if err := os.Remove(rootChart); err != nil {
+		return fmt.Errorf("remove stray root Helm metadata: %w", err)
 	}
 	return nil
 }
@@ -1791,7 +2056,7 @@ func generatedReportDocCandidates(root string) []string {
 			continue
 		}
 		name := strings.ToLower(entry.Name())
-		if strings.HasPrefix(name, "sprint") || strings.Contains(name, "report") || strings.Contains(name, "review") {
+		if strings.HasPrefix(name, "sprint") || strings.Contains(name, "report") || strings.Contains(name, "review") || strings.Contains(name, "remediation") {
 			candidates = append(candidates, filepath.Join("docs", entry.Name()))
 		}
 	}
@@ -1799,8 +2064,32 @@ func generatedReportDocCandidates(root string) []string {
 }
 
 func markdownHasInvalidRepositoryClaims(root, content string) bool {
+	lower := strings.ToLower(content)
+	for _, phrase := range []string{
+		"human-led sprint",
+		"implementation is deferred",
+		"no code changes",
+		"plan-only",
+	} {
+		if strings.Contains(lower, phrase) {
+			return true
+		}
+	}
+	for _, phrase := range []string{"コード実装は行わず", "コード実装は含まれません", "計画段階"} {
+		if strings.Contains(content, phrase) {
+			return true
+		}
+	}
+	for _, rel := range []string{
+		filepath.Join(".github", "workflows", "ci.yml"),
+		filepath.Join("values.schema.json"),
+	} {
+		relSlash := filepath.ToSlash(rel)
+		if strings.Contains(content, relSlash) && !fileExists(filepath.Join(root, rel)) {
+			return true
+		}
+	}
 	if fileExists(filepath.Join(root, "main.go")) && !mainGoContainsRoute(root, "/health") {
-		lower := strings.ToLower(content)
 		if (strings.Contains(lower, "/health endpoint") || strings.Contains(content, "/health エンドポイント")) &&
 			!strings.Contains(lower, "/healthz") {
 			return true
@@ -2012,25 +2301,34 @@ func TestRootHandler(t *testing.T) {
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 		return "", fmt.Errorf("create workflow dir: %w", err)
 	}
-	workflow := `name: Go
+	var clientSteps string
+	if fileExists(filepath.Join(root, "client", "package.json")) {
+		clientSteps = `      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm --prefix client test
+      - run: npm --prefix client run build
+`
+	}
+	workflow := `name: CI
 
 on:
   push:
   pull_request:
 
 jobs:
-  test:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-	      - uses: actions/setup-go@v5
-	        with:
-	          go-version: "1.22"
-	      - run: go test ./...
-	        working-directory: server
-	      - run: go vet ./...
-	        working-directory: server
-`
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - run: go test ./...
+        working-directory: ` + testDir + `
+      - run: go vet ./...
+        working-directory: ` + testDir + `
+` + clientSteps
 	if err := os.WriteFile(filepath.Join(workflowDir, "go.yml"), []byte(workflow), 0o600); err != nil {
 		return "", fmt.Errorf("write workflow: %w", err)
 	}

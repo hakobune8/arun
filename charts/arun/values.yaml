@@ -7,7 +7,7 @@ replicaCount: 1
 # Container image
 image:
   repository: ghcr.io/hakobune8/arun
-  tag: "v1.5.30"
+  tag: "v1.5.31"
   pullPolicy: IfNotPresent
 
 podSecurityContext:
@@ -90,8 +90,10 @@ auth:
   github:
     clientId: ""
     callbackUrl: ""
+    scope: "read:user repo workflow"
     authorizeUrl: "https://github.com/login/oauth/authorize"
     tokenUrl: "https://github.com/login/oauth/access_token"
+    deviceCodeUrl: "https://github.com/login/device/code"
     userUrl: "https://api.github.com/user"
 
 llm:

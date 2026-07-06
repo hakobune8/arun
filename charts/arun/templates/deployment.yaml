@@ -112,10 +112,14 @@ spec:
               value: "{{ .Values.auth.github.clientId }}"
             - name: GITHUB_OAUTH_CALLBACK_URL
               value: "{{ .Values.auth.github.callbackUrl }}"
+            - name: GITHUB_OAUTH_SCOPE
+              value: "{{ .Values.auth.github.scope }}"
             - name: GITHUB_OAUTH_AUTHORIZE_URL
               value: "{{ .Values.auth.github.authorizeUrl }}"
             - name: GITHUB_OAUTH_TOKEN_URL
               value: "{{ .Values.auth.github.tokenUrl }}"
+            - name: GITHUB_OAUTH_DEVICE_CODE_URL
+              value: "{{ .Values.auth.github.deviceCodeUrl }}"
             - name: GITHUB_OAUTH_USER_URL
               value: "{{ .Values.auth.github.userUrl }}"
             - name: GITHUB_OAUTH_CLIENT_SECRET

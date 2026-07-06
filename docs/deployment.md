@@ -112,12 +112,20 @@ helm upgrade --install arun ./charts/arun \
   --set secrets.existingSecret=arun-secrets \
   --set auth.required=true \
   --set auth.github.clientId=<oauth-client-id> \
+  --set auth.github.scope="read:user repo workflow" \
   --set auth.github.callbackUrl=https://arun.hakobune8.com/auth/callback
 ```
 
 When authentication is enabled, the Web UI shows the signed-in GitHub identity
 and work-triggering APIs require a valid signed session. Session cookies are
 always marked `Secure`, so GitHub login should be served over HTTPS.
+
+For browserless authorization, enable **Device flow** on the same GitHub OAuth
+App. ARUN exposes `POST /api/auth/device/start` to request a user code and
+verification URL, then `POST /api/auth/device/poll` to exchange the approved
+device code for a signed ARUN session cookie. Device flow does not require the
+OAuth client secret, but ARUN still requires `ARUN_SESSION_SECRET` so it can
+sign the resulting session.
 
 ### LLM Presets
 
