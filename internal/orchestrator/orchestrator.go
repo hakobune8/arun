@@ -968,9 +968,9 @@ func subtaskProfile(agentName string) profile.Profile {
 	case "go-backend":
 		prof.Role = "Go backend coding agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git", "test"}
-		prof.Commands.Test = "go test ./..."
-		prof.Commands.Lint = "go vet ./..."
-		prof.Commands.Build = "go build ./..."
+		prof.Commands.Test = goTestValidationCommand
+		prof.Commands.Lint = goVetValidationCommand
+		prof.Commands.Build = goBuildValidationCommand
 	case "frontend":
 		prof.Role = "Frontend application agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git", "test"}
@@ -994,8 +994,8 @@ func subtaskProfile(agentName string) profile.Profile {
 	case "ci-fixer":
 		prof.Role = "CI configuration fix agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git", "test"}
-		prof.Commands.Test = "go test ./..."
-		prof.Commands.Lint = "go vet ./..."
+		prof.Commands.Test = goTestValidationCommand
+		prof.Commands.Lint = goVetValidationCommand
 	case "docs":
 		prof.Role = "Documentation agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git"}
@@ -1011,8 +1011,8 @@ func subtaskProfile(agentName string) profile.Profile {
 	case "security":
 		prof.Role = "Security review and remediation agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git", "test"}
-		prof.Commands.Test = "go test ./..."
-		prof.Commands.Lint = "go vet ./..."
+		prof.Commands.Test = goTestValidationCommand
+		prof.Commands.Lint = goVetValidationCommand
 	case "release-manager":
 		prof.Role = "Release preparation agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git"}
@@ -1023,8 +1023,8 @@ func subtaskProfile(agentName string) profile.Profile {
 	case "dependency-updater":
 		prof.Role = "Dependency update agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git", "test"}
-		prof.Commands.Test = "go test ./..."
-		prof.Commands.Lint = "go vet ./..."
+		prof.Commands.Test = goTestValidationCommand
+		prof.Commands.Lint = goVetValidationCommand
 	case "qa":
 		prof.Role = "QA and verification agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git", "test"}

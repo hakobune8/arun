@@ -288,7 +288,7 @@ func TestApplyDefaultQualityGate_SpecializedBuiltIns(t *testing.T) {
 		{"security", "SECURITY.md"},
 		{"frontend", ""},
 		{"release-manager", "CHANGELOG.md"},
-		{"dependency-updater", "go.mod"},
+		{"dependency-updater", filepath.Join("server", "go.mod")},
 		{"qa", ""},
 		{"docker", "Dockerfile"},
 		{"helm", ""},
@@ -336,6 +336,25 @@ func TestSubtaskProfile_ReportOnlyAgentsDoNotRequireGoValidation(t *testing.T) {
 				t.Fatalf("%s tools = %+v, want write_file for planning/report artifacts", agent, prof.Tools.Allow)
 			}
 		})
+	}
+}
+
+func TestSubtaskProfile_GoAgentsUseRepoAwareValidation(t *testing.T) {
+	t.Parallel()
+
+	for _, agent := range []string{"go-backend", "ci-fixer", "security", "dependency-updater"} {
+		t.Run(agent, func(t *testing.T) {
+			prof := subtaskProfile(agent)
+			if prof.Commands.Test != goTestValidationCommand {
+				t.Fatalf("%s test command = %q, want repo-aware go test command", agent, prof.Commands.Test)
+			}
+			if prof.Commands.Lint != goVetValidationCommand {
+				t.Fatalf("%s lint command = %q, want repo-aware go vet command", agent, prof.Commands.Lint)
+			}
+		})
+	}
+	if prof := subtaskProfile("go-backend"); prof.Commands.Build != goBuildValidationCommand {
+		t.Fatalf("go-backend build command = %q, want repo-aware go build command", prof.Commands.Build)
 	}
 }
 

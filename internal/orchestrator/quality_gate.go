@@ -55,6 +55,8 @@ const goTestValidationCommand = `sh -c 'moddir=.; [ -f server/go.mod ] && moddir
 
 const goVetValidationCommand = `sh -c 'moddir=.; [ -f server/go.mod ] && moddir=server; if command -v go >/dev/null 2>&1; then if [ "$moddir" = "." ] && [ -f go.mod ]; then nested=$(find . -path "./.git" -prune -o -mindepth 2 -name go.mod -print | head -n1); test -z "$nested" || { echo "nested Go module $nested hides packages from root go vet ./..."; exit 1; }; fi; (cd "$moddir" && pkgs=$(go list ./...) && test -n "$pkgs" || { echo "go list ./... matched no packages in $moddir"; exit 1; }); (cd "$moddir" && go vet ./...); else main=server/main.go; [ "$moddir" = "." ] && main=main.go; test -f "$moddir/go.mod" && test -f "$main" && grep -q "net/http" "$main"; fi'`
 
+const goBuildValidationCommand = `sh -c 'moddir=.; [ -f server/go.mod ] && moddir=server; if command -v go >/dev/null 2>&1; then (cd "$moddir" && pkgs=$(go list ./...) && test -n "$pkgs" || { echo "go list ./... matched no packages in $moddir"; exit 1; }); (cd "$moddir" && go build ./...); else main=server/main.go; [ "$moddir" = "." ] && main=main.go; test -f "$moddir/go.mod" && test -f "$main"; fi'`
+
 const goModTidyValidationCommand = `sh -c 'moddir=.; [ -f server/go.mod ] && moddir=server; if command -v go >/dev/null 2>&1; then (cd "$moddir" && go mod tidy -diff); else test -f "$moddir/go.mod"; fi'`
 
 const dockerValidationCommand = `sh -c 'test -f Dockerfile && grep -Eiq "^FROM[[:space:]]" Dockerfile && if [ -d client ]; then grep -Eq "COPY --from=.*client[[:space:]]+/app/client|COPY[[:space:]]+client[[:space:]]+/app/client" Dockerfile; elif [ -f index.html ] || [ -d src ]; then grep -Eq "COPY --from=.*index.html[[:space:]]+/app/index.html|COPY[[:space:]]+index.html[[:space:]]+/app/index.html" Dockerfile && grep -Eq "COPY --from=.*src[[:space:]]+/app/src|COPY[[:space:]]+src[[:space:]]+/app/src" Dockerfile; fi && if [ "$(go env GOOS 2>/dev/null || echo unknown)" != "windows" ] && command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then docker build -t arun-validation .; fi'`
@@ -157,7 +159,7 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 		}
 	case "dependency-updater":
 		return &QualityGate{
-			RequiredFiles:      []string{"go.mod"},
+			RequiredFiles:      []string{filepath.Join("server", "go.mod")},
 			ValidationCommands: []string{goModTidyValidationCommand, goTestValidationCommand},
 		}
 	case "qa":
