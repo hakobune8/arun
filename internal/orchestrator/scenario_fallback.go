@@ -30,7 +30,7 @@ import (
 
 func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask *Subtask, runSandbox sandbox.Sandbox, runtimeErr error) (SubtaskResult, bool) {
 	if subtask.AgentName == "frontend" && (shouldRecoverFrontendScaffold(runSandbox.RootDir(), subtask.Description) || missingReferencedFrontendAssetsExist(runSandbox.RootDir()) || unservedAlternateFrontendExists(runSandbox.RootDir()) || unservedRootFrontendAssetsExist(runSandbox.RootDir())) {
-		out, err := recoverFrontendStaticApp(runSandbox.RootDir(), subtask.Description)
+		out, err := recoverFrontendAndServingBackend(ctx, runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
 	}
 	if frontendProjectEvidenceExists(runSandbox.RootDir()) {
@@ -121,7 +121,7 @@ func (o *Orchestrator) recoverNoOpBuiltInSubtaskWithStatus(ctx context.Context, 
 		out, err := recoverScrumPlanning(runSandbox.RootDir(), subtask)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 	case "frontend":
-		out, err := recoverFrontendStaticApp(runSandbox.RootDir(), subtask.Description)
+		out, err := recoverFrontendAndServingBackend(ctx, runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 	case "docs":
 		if staticFrontendProjectExists(runSandbox.RootDir()) {
@@ -164,6 +164,23 @@ func (o *Orchestrator) recoverNoOpBuiltInSubtaskWithStatus(ctx context.Context, 
 	default:
 		return SubtaskResult{}, false
 	}
+}
+
+func recoverFrontendAndServingBackend(_ context.Context, root, description string) (string, error) {
+	out, err := recoverFrontendStaticApp(root, description)
+	if err != nil {
+		return "", err
+	}
+	if generatedGoModuleExists(root) || generatedGoEntrypointExists(root) {
+		recoveryCtx, cancel := fallbackRecoveryContext()
+		defer cancel()
+		backendOut, err := recoverGoBackend(recoveryCtx, root, description)
+		if err != nil {
+			return "", err
+		}
+		out = strings.TrimSpace(out + "\n" + backendOut)
+	}
+	return out, nil
 }
 
 func recoverScrumPlanning(root string, subtask *Subtask) (string, error) {
@@ -388,6 +405,39 @@ func TestRootHandlerServesStaticIndexWhenPresent(t *testing.T) {
 	}
 }
 
+func TestRootHandlerServesStaticIndexFromServerWorkingDirectory(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "client"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "server"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "client", "index.html"), []byte("<!doctype html><title>Game</title>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(previous) }()
+	if err := os.Chdir(filepath.Join(dir, "server")); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	rootHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if !strings.Contains(rec.Body.String(), "<title>Game</title>") {
+		t.Fatalf("body = %q, want static index", rec.Body.String())
+	}
+}
+
 func TestRootHandlerServesFrontendAssets(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "client", "src"), 0o755); err != nil {
@@ -449,12 +499,21 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 )
 
-const staticDir = "client"
+func staticDir() string {
+	for _, dir := range []string{"client", filepath.Join("..", "client")} {
+		if _, err := os.Stat(filepath.Join(dir, "index.html")); err == nil {
+			return dir
+		}
+	}
+	return "client"
+}
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
+	dir := staticDir()
 	if r.URL.Path != "/" {
 		if assetPath, ok := staticAssetPath(r.URL.Path); ok {
 			http.ServeFile(w, r, assetPath)
@@ -463,8 +522,8 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := os.Stat(path.Join(staticDir, "index.html")); err == nil {
-		http.ServeFile(w, r, path.Join(staticDir, "index.html"))
+	if _, err := os.Stat(filepath.Join(dir, "index.html")); err == nil {
+		http.ServeFile(w, r, filepath.Join(dir, "index.html"))
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -472,12 +531,13 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func staticAssetPath(urlPath string) (string, bool) {
+	dir := staticDir()
 	clean := path.Clean("/" + urlPath)
 	switch {
 	case clean == "/styles.css":
-		return path.Join(staticDir, "styles.css"), true
+		return filepath.Join(dir, "styles.css"), true
 	case strings.HasPrefix(clean, "/src/") && strings.HasSuffix(clean, ".js"):
-		return path.Join(staticDir, strings.TrimPrefix(clean, "/")), true
+		return filepath.Join(dir, strings.TrimPrefix(clean, "/")), true
 	default:
 		return "", false
 	}
@@ -492,7 +552,11 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", rootHandler)
 	mux.HandleFunc("/healthz", healthzHandler)
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
 `
 }
@@ -1220,7 +1284,7 @@ func frontendReadme(title, description string) string {
 		"",
 		"## Run",
 		"",
-		"Run the Go server with `go run ./server` and open `http://127.0.0.1:8080/`, or open `client/index.html` directly for a static browser review.",
+		"Run the Go server with `cd server && go run .` and open `http://127.0.0.1:8080/`, or open `client/index.html` directly for a static browser review.",
 		"",
 		"## Validate",
 		"",
@@ -1253,7 +1317,7 @@ func frontendProductBrief(title, _ string) string {
 		"- The primary route `/` serves the browser game from `client/` when run through the Go server in `server/`.",
 		"- Space changes the gravity lane between Floor and Ceiling.",
 		"- A score is awarded only when the defender is aligned with the invader and on the same lane.",
-		"- The Docker runtime image includes the client assets required for `/` to serve the same UI as local `go run ./server`.",
+		"- The Docker runtime image includes the client assets required for `/` to serve the same UI as local `cd server && go run .`.",
 		"",
 		"## Non-Goals",
 		"",
@@ -1315,7 +1379,7 @@ func frontendSmokeTest(description string) string {
 	return strings.Join([]string{
 		"# Smoke Test",
 		"",
-		"1. Start the Go server with `go run ./server` and open `/`, or open `client/index.html` in a browser.",
+		"1. Start the Go server with `cd server && go run .` and open `/`, or open `client/index.html` in a browser.",
 		"2. Confirm the arena, score display, lives display, gravity display, target lane display, and restart button render without layout overlap.",
 		"3. Press ArrowLeft and ArrowRight and confirm the defender moves horizontally.",
 		"4. Press Space and confirm the gravity display flips between Floor and Ceiling.",
@@ -1972,6 +2036,18 @@ func recoverDockerfile(ctx context.Context, root, description string) (string, e
 	if err := repairGeneratedGoModuleLayout(root); err != nil {
 		return "", err
 	}
+	if staticFrontendProjectExists(root) {
+		if err := runShell(ctx, root, frontendValidationCommand); err != nil {
+			if _, recoverErr := recoverGoBackend(ctx, root, description); recoverErr != nil {
+				return "", recoverErr
+			}
+		}
+		if err := runShell(ctx, root, servedFrontendRuntimeValidationCommand); err != nil {
+			if _, recoverErr := recoverGoBackend(ctx, root, description); recoverErr != nil {
+				return "", recoverErr
+			}
+		}
+	}
 	staticAssetCopies := ""
 	if staticFrontendProjectExists(root) {
 		staticAssetCopies = `COPY client /app/client
@@ -2029,7 +2105,7 @@ node_modules
 		"curl http://127.0.0.1:8080/ | grep '<title>'",
 		"```",
 		"",
-		"The runtime image copies `client/` into `/app/client`, so the container serves the same primary UI from `/` that local `go run ./server` serves.",
+		"The runtime image copies `client/` into `/app/client`, so the container serves the same primary UI from `/` that local `cd server && go run .` serves.",
 		"",
 	}, "\n")
 	if err := os.WriteFile(filepath.Join(docsDir, "container-run.md"), []byte(containerDocs), 0o600); err != nil {

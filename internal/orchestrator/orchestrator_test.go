@@ -1298,6 +1298,80 @@ func main() {
 	}
 }
 
+func TestFrontendQualityGateFailsWhenServerWorkingDirCannotServeClientAssets(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	files := map[string]string{
+		filepath.Join("server", "go.mod"):         "module github.com/hakobune8/arun-test/server\n\ngo 1.22\n",
+		filepath.Join("client", "index.html"):     `<!doctype html><link rel="stylesheet" href="./styles.css"><script src="./src/main.js"></script>`,
+		filepath.Join("client", "styles.css"):     "body { color: white; }",
+		filepath.Join("client", "src", "main.js"): "console.log('ok');",
+		filepath.Join("server", "main.go"): `package main
+
+import (
+	"log"
+	"net/http"
+	"os"
+	"path"
+	"strings"
+)
+
+const staticDir = "client"
+
+func rootHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		if assetPath, ok := staticAssetPath(r.URL.Path); ok {
+			http.ServeFile(w, r, assetPath)
+			return
+		}
+		http.NotFound(w, r)
+		return
+	}
+	if _, err := os.Stat(path.Join(staticDir, "index.html")); err == nil {
+		http.ServeFile(w, r, path.Join(staticDir, "index.html"))
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func staticAssetPath(urlPath string) (string, bool) {
+	clean := path.Clean("/" + urlPath)
+	switch {
+	case clean == "/styles.css":
+		return path.Join(staticDir, "styles.css"), true
+	case strings.HasPrefix(clean, "/src/") && strings.HasSuffix(clean, ".js"):
+		return path.Join(staticDir, strings.TrimPrefix(clean, "/")), true
+	default:
+		return "", false
+	}
+}
+
+func main() {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", rootHandler)
+	log.Fatal(http.ListenAndServe(":8080", mux))
+}
+`,
+	}
+	for path, content := range files {
+		full := filepath.Join(repo, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "frontend",
+		Description: "Add a browser game UI.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed when cd server runtime cannot serve client assets: %+v", status)
+	}
+}
+
 func TestFrontendQualityGateFailsForProductConceptDrift(t *testing.T) {
 	t.Parallel()
 
@@ -1995,7 +2069,7 @@ func TestRecoverGoBackendServesExistingStaticIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(mainGo), `path.Join(staticDir, "index.html")`) {
+	if !strings.Contains(string(mainGo), `filepath.Join(dir, "index.html")`) {
 		t.Fatalf("server/main.go does not serve existing client/index.html:\n%s", mainGo)
 	}
 }
@@ -2580,6 +2654,42 @@ func TestRecoverGoBackend_CreatesValidService(t *testing.T) {
 		if !strings.Contains(string(mainData), want) {
 			t.Fatalf("server/main.go missing %q:\n%s", want, mainData)
 		}
+	}
+}
+
+func TestRecoverGoBackendServesClientFromServerWorkingDirectory(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "client", "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join("client", "index.html"):     `<!doctype html><link rel="stylesheet" href="./styles.css"><script src="./src/main.js"></script>`,
+		filepath.Join("client", "styles.css"):     "body { color: white; }",
+		filepath.Join("client", "src", "main.js"): "console.log('ok');",
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	if _, err := recoverGoBackend(context.Background(), repo, "https://github.com/hakobune8/arun-test.git create /healthz with net/http and serve client assets"); err != nil {
+		t.Fatalf("recoverGoBackend() error = %v", err)
+	}
+	mainData, err := os.ReadFile(filepath.Join(repo, "server", "main.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(mainData), `filepath.Join("..", "client")`) {
+		t.Fatalf("server/main.go does not resolve ../client when run from server directory:\n%s", mainData)
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "frontend",
+		Description: "Add a browser game UI.",
+	}))
+	if !status.Passed {
+		t.Fatalf("frontend quality gate failed after backend recovery: %+v", status)
 	}
 }
 
