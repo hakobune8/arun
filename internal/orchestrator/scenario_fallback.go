@@ -2297,11 +2297,12 @@ func repositoryIsEffectivelyEmpty(root string) bool {
 }
 
 func staticFrontendProjectExists(root string) bool {
-	return fileExists(filepath.Join(root, "package.json")) &&
-		((fileExists(filepath.Join(root, "client", "index.html")) &&
-			fileExists(filepath.Join(root, "client", "src", "main.js"))) ||
-			(fileExists(filepath.Join(root, "index.html")) &&
-				fileExists(filepath.Join(root, "src", "main.js"))))
+	return (fileExists(filepath.Join(root, "client", "index.html")) &&
+		(fileExists(filepath.Join(root, "client", "src", "main.js")) ||
+			fileExists(filepath.Join(root, "client", "styles.css")))) ||
+		(fileExists(filepath.Join(root, "index.html")) &&
+			(fileExists(filepath.Join(root, "src", "main.js")) ||
+				fileExists(filepath.Join(root, "styles.css"))))
 }
 
 func frontendProjectEvidenceExists(root string) bool {

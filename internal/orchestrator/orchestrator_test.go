@@ -2015,6 +2015,47 @@ func TestRecoverDockerfileCopiesStaticFrontendAssetsWhenPresent(t *testing.T) {
 	}
 }
 
+func TestRecoverDockerfileCopiesStaticFrontendAssetsWithoutPackageJSON(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "client", "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"go.mod":                                  "module github.com/hakobune8/arun-test\n\ngo 1.22\n",
+		filepath.Join("server", "main.go"):        "package main\n\nimport \"net/http\"\n\nfunc main() { http.HandleFunc(\"/healthz\", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(\"ok\")) }); http.ListenAndServe(\":8080\", nil) }\n",
+		filepath.Join("client", "index.html"):     `<!doctype html><link rel="stylesheet" href="styles.css"><script src="src/main.js"></script>`,
+		filepath.Join("client", "styles.css"):     "body { margin: 0; }\n",
+		filepath.Join("client", "src", "main.js"): "console.log('game')\n",
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "server"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	if _, err := recoverDockerfile(context.Background(), repo, "Add Dockerfile for a Go server that serves the static frontend from /"); err != nil {
+		t.Fatalf("recoverDockerfile() error = %v", err)
+	}
+	dockerfile, err := os.ReadFile(filepath.Join(repo, "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(dockerfile), "COPY --from=build /src/client /app/client") {
+		t.Fatalf("Dockerfile does not copy package-less static frontend assets:\n%s", dockerfile)
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "docker",
+		Description: "Add Dockerfile for a Go server that serves static frontend assets.",
+	}))
+	if !status.Passed {
+		t.Fatalf("quality gate failed: %+v", status)
+	}
+}
+
 func TestDockerQualityGateFailsWhenStaticAssetsAreMissingFromRuntimeImage(t *testing.T) {
 	t.Parallel()
 
