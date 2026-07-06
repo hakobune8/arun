@@ -306,6 +306,9 @@ func recoverGoBackend(ctx context.Context, root, description string) (string, er
 			return "", fmt.Errorf("write go.mod: %w", err)
 		}
 	}
+	if err := repairGeneratedGoModuleLayout(root); err != nil {
+		return "", err
+	}
 	serverDir := generatedAppServerDir(root, description)
 	if err := os.MkdirAll(filepath.Join(root, serverDir), 0o755); err != nil {
 		return "", fmt.Errorf("create %s: %w", serverDir, err)
@@ -559,6 +562,22 @@ func removeGeneratedGoFiles(root string) error {
 		}
 		return nil
 	})
+}
+
+func repairGeneratedGoModuleLayout(root string) error {
+	if !fileExists(filepath.Join(root, "go.mod")) {
+		return nil
+	}
+	for _, name := range []string{
+		filepath.Join("server", "go.mod"),
+		filepath.Join("server", "go.sum"),
+	} {
+		path := filepath.Join(root, name)
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("remove nested generated Go module %s: %w", name, err)
+		}
+	}
+	return nil
 }
 
 func recoverFrontendStaticApp(root, description string) (string, error) {
@@ -1317,6 +1336,9 @@ func frontendChangelog(description string) string {
 }
 
 func cleanupGeneratedArtifactHygiene(root string) error {
+	if err := repairGeneratedGoModuleLayout(root); err != nil {
+		return err
+	}
 	if err := migrateGeneratedRootAppLayout(root); err != nil {
 		return err
 	}

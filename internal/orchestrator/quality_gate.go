@@ -49,9 +49,11 @@ const qaValidationCommand = `sh -c 'if [ -f package.json ]; then PM=npm; [ -f pn
 
 const docsValidationCommand = `sh -c 'if [ -f docs/remediation_notes.md ] && grep -Eiq "human-led sprint|コード実装は行わず|計画段階|implementation is deferred|no code changes" docs/remediation_notes.md; then echo "documentation defers required implementation"; exit 1; fi; if [ -f main.go ] && ! grep -q "\"/health\"" main.go && grep -R --include="*.md" -E "/health endpoint|/health エンドポイント" README.md docs 2>/dev/null | grep -vq "/healthz"; then echo "documentation mentions /health but main.go does not serve it"; exit 1; fi; for dir in cmd web frontend internal; do if [ ! -d "$dir" ] && grep -R --include="*.md" -E "(^|[^[:alnum:]_./-])$dir/" README.md docs 2>/dev/null; then echo "documentation mentions missing $dir/ layout"; exit 1; fi; done'`
 
-const goTestValidationCommand = `sh -c 'if command -v go >/dev/null 2>&1; then go test ./...; else main=server/main.go; [ -f "$main" ] || main=main.go; test -f go.mod && test -f "$main" && grep -q "/healthz" "$main"; fi'`
+const goModuleLayoutValidationCommand = `sh -c 'if [ -f go.mod ]; then nested=$(find . -path "./.git" -prune -o -mindepth 2 -name go.mod -print | head -n1); test -z "$nested" || { echo "nested Go module $nested hides packages from root go test ./..."; exit 1; }; fi'`
 
-const goVetValidationCommand = `sh -c 'if command -v go >/dev/null 2>&1; then go vet ./...; else main=server/main.go; [ -f "$main" ] || main=main.go; test -f go.mod && test -f "$main" && grep -q "net/http" "$main"; fi'`
+const goTestValidationCommand = `sh -c 'if command -v go >/dev/null 2>&1; then if [ -f go.mod ]; then nested=$(find . -path "./.git" -prune -o -mindepth 2 -name go.mod -print | head -n1); test -z "$nested" || { echo "nested Go module $nested hides packages from root go test ./..."; exit 1; }; fi; pkgs=$(go list ./...); test -n "$pkgs" || { echo "go list ./... matched no packages"; exit 1; }; go test ./...; else main=server/main.go; [ -f "$main" ] || main=main.go; test -f go.mod && test -f "$main" && grep -q "/healthz" "$main"; fi'`
+
+const goVetValidationCommand = `sh -c 'if command -v go >/dev/null 2>&1; then if [ -f go.mod ]; then nested=$(find . -path "./.git" -prune -o -mindepth 2 -name go.mod -print | head -n1); test -z "$nested" || { echo "nested Go module $nested hides packages from root go vet ./..."; exit 1; }; fi; pkgs=$(go list ./...); test -n "$pkgs" || { echo "go list ./... matched no packages"; exit 1; }; go vet ./...; else main=server/main.go; [ -f "$main" ] || main=main.go; test -f go.mod && test -f "$main" && grep -q "net/http" "$main"; fi'`
 
 const goModTidyValidationCommand = `sh -c 'if command -v go >/dev/null 2>&1; then go mod tidy -diff; else test -f go.mod; fi'`
 
@@ -161,6 +163,7 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 	case "qa":
 		return &QualityGate{
 			ValidationCommands: []string{
+				goModuleLayoutValidationCommand,
 				qaEvidenceCommand,
 				qaValidationCommand,
 				productCoherenceValidationCommand,

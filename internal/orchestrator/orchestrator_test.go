@@ -2458,6 +2458,76 @@ func TestRecoverGoBackend_CreatesValidService(t *testing.T) {
 	}
 }
 
+func TestGoQualityGateRejectsNestedServerModule(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "server"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"go.mod":                          "module github.com/hakobune8/arun-test\n\ngo 1.22\n",
+		filepath.Join("server", "go.mod"): "module github.com/hakobune8/arun-test/server\n\ngo 1.22\n",
+		filepath.Join("server", "main.go"): `package main
+
+import "net/http"
+
+func main() {
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(` + "`" + `{"status":"ok"}` + "`" + `))
+	})
+	_ = http.ListenAndServe(":8080", nil)
+}
+`,
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "go-backend",
+		Description: "Create a minimal Go net/http server with /healthz.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed with nested server/go.mod: %+v", status)
+	}
+	if !strings.Contains(qualityGateError(status), "nested Go module") {
+		t.Fatalf("quality gate error = %q, want nested Go module", qualityGateError(status))
+	}
+}
+
+func TestRecoverGoBackendRemovesNestedServerModule(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "server"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"go.mod":                          "module github.com/hakobune8/arun-test\n\ngo 1.22\n",
+		filepath.Join("server", "go.mod"): "module github.com/hakobune8/arun-test/server\n\ngo 1.22\n",
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	if _, err := recoverGoBackend(context.Background(), repo, "Create a minimal Go net/http server with /healthz."); err != nil {
+		t.Fatalf("recoverGoBackend() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "server", "go.mod")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("server/go.mod still exists or stat failed unexpectedly: %v", err)
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "go-backend",
+		Description: "Create a minimal Go net/http server with /healthz.",
+	}))
+	if !status.Passed {
+		t.Fatalf("quality gate failed after recovery: %+v", status)
+	}
+}
+
 func TestRecoverGoBackend_AllowsMissingGoToolchain(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("PATH-limited POSIX shell validation is covered on Unix runners")
