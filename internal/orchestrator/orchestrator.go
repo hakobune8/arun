@@ -537,10 +537,11 @@ func builtInAgentInfo(name, fallbackDescription string) AgentMetadata {
 		info.RecommendedAfter = []string{"security", "dependency-updater"}
 		info.ArchitectureGuidance = []string{
 			"Inspect the existing Dockerfile, compose files, build context, entrypoint, exposed ports, and CI image-build flow before editing container files.",
+			"Put the primary Dockerfile at repository root and use the repository root as build context, even when the Go module lives under server/.",
 			"Prefer multi-stage builds, non-root runtime users, minimal copied context, deterministic package installation, and explicit health checks when the application supports them.",
 			"Keep secrets out of image layers, build args, labels, logs, and compose files.",
 		}
-		info.OutputExpectations = []string{"Container changes touch Dockerfile, .dockerignore, compose, or related build configuration instead of reporting no-op success.", "docker build is run when available; otherwise static Dockerfile checks and unavailable-tool notes are reported.", "Security and runtime notes cover user, ports, health checks, secret handling, image size, and rollback considerations."}
+		info.OutputExpectations = []string{"Container changes touch root Dockerfile, .dockerignore, compose, or related build configuration instead of reporting no-op success.", "docker build is run from the repository root when available; otherwise static Dockerfile checks and unavailable-tool notes are reported.", "Security and runtime notes cover user, ports, health checks, secret handling, image size, and rollback considerations."}
 	case "helm":
 		info.Description = "Helm ops agent for charts, templates, values, schema, chart linting, and release-safe packaging"
 		info.Domains = []string{"helm", "charts", "templates", "values", "kubernetes-packaging"}
@@ -888,6 +889,16 @@ func (o *Orchestrator) executeSubtask(ctx context.Context, subtask *Subtask, sha
 	_ = runCmd(ctx, runSandbox.RootDir(), "git", "add", "-N", ".") //nolint:errcheck // best-effort diff visibility for new files
 	diff := gitDiff(ctx, runSandbox.RootDir())
 	if subtask.AgentName == "frontend" && strings.TrimSpace(diff) == "" {
+		gateStatus := validateQualityGate(ctx, runSandbox.RootDir(), subtask.QualityGate)
+		if frontendNoOpAllowed(subtask) && gateStatus.Passed {
+			return SubtaskResult{
+				SubtaskID:   subtask.ID,
+				Success:     true,
+				Output:      fmt.Sprintf("No frontend changes were required for %s; existing artifacts satisfy the quality gate.", subtask.ID),
+				Diff:        firstNonEmpty(diff, sharedCtx),
+				QualityGate: &gateStatus,
+			}
+		}
 		if result, ok := o.recoverNoOpBuiltInSubtask(ctx, subtask, runSandbox); ok {
 			return result
 		}
@@ -922,6 +933,18 @@ func (o *Orchestrator) executeSubtask(ctx context.Context, subtask *Subtask, sha
 	}
 }
 
+func frontendNoOpAllowed(subtask *Subtask) bool {
+	if subtask == nil {
+		return false
+	}
+	id := strings.ToLower(strings.TrimSpace(subtask.ID))
+	if strings.HasSuffix(id, "-fix") || strings.Contains(id, "remediation") {
+		return true
+	}
+	desc := strings.ToLower(subtask.Description)
+	return strings.Contains(desc, "remediation") || strings.Contains(desc, "address qa findings")
+}
+
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if value != "" {
@@ -946,9 +969,9 @@ func subtaskProfile(agentName string) profile.Profile {
 	case "go-backend":
 		prof.Role = "Go backend coding agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git", "test"}
-		prof.Commands.Test = "go test ./..."
-		prof.Commands.Lint = "go vet ./..."
-		prof.Commands.Build = "go build ./..."
+		prof.Commands.Test = goTestValidationCommand
+		prof.Commands.Lint = goVetValidationCommand
+		prof.Commands.Build = goBuildValidationCommand
 	case "frontend":
 		prof.Role = "Frontend application agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git", "test"}
@@ -972,8 +995,8 @@ func subtaskProfile(agentName string) profile.Profile {
 	case "ci-fixer":
 		prof.Role = "CI configuration fix agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git", "test"}
-		prof.Commands.Test = "go test ./..."
-		prof.Commands.Lint = "go vet ./..."
+		prof.Commands.Test = goTestValidationCommand
+		prof.Commands.Lint = goVetValidationCommand
 	case "docs":
 		prof.Role = "Documentation agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git"}
@@ -989,8 +1012,8 @@ func subtaskProfile(agentName string) profile.Profile {
 	case "security":
 		prof.Role = "Security review and remediation agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git", "test"}
-		prof.Commands.Test = "go test ./..."
-		prof.Commands.Lint = "go vet ./..."
+		prof.Commands.Test = goTestValidationCommand
+		prof.Commands.Lint = goVetValidationCommand
 	case "release-manager":
 		prof.Role = "Release preparation agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git"}
@@ -1001,8 +1024,8 @@ func subtaskProfile(agentName string) profile.Profile {
 	case "dependency-updater":
 		prof.Role = "Dependency update agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git", "test"}
-		prof.Commands.Test = "go test ./..."
-		prof.Commands.Lint = "go vet ./..."
+		prof.Commands.Test = goTestValidationCommand
+		prof.Commands.Lint = goVetValidationCommand
 	case "qa":
 		prof.Role = "QA and verification agent"
 		prof.Tools.Allow = []string{"read_file", "write_file", "search", "shell", "git", "test"}

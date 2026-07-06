@@ -1513,6 +1513,66 @@ func TestCommitScrumSprintCheckpoint_CreatesThreeCheckpointCommits(t *testing.T)
 	}
 }
 
+func TestCommitScrumSprintCheckpoint_CommitsChangedSubtasksWithoutEmptyNoise(t *testing.T) {
+	repo := t.TempDir()
+	runGitTestCommand(t, repo, "init")
+	record := &orchestrationRecord{
+		ID:       "run-test",
+		RepoPath: repo,
+		Scenario: &scenarioTemplateSelection{ID: "implementation-heavy-scrum"},
+	}
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("# Product\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	backend := &orchestrator.SubtaskEvent{
+		Type:    orchestrator.SubtaskCompleted,
+		Subtask: orchestrator.Subtask{ID: "sprint-1-backend"},
+		Result:  &orchestrator.SubtaskResult{Success: true},
+	}
+	if err := commitScrumSprintCheckpoint(record, backend); err != nil {
+		t.Fatalf("commit backend checkpoint: %v", err)
+	}
+	count := strings.TrimSpace(runGitTestCommand(t, repo, "rev-list", "--count", "HEAD"))
+	if count != "1" {
+		t.Fatalf("commit count after changed backend = %s, want 1", count)
+	}
+	subject := strings.TrimSpace(runGitTestCommand(t, repo, "log", "-1", "--format=%s"))
+	if subject != "ARUN run-test sprint-1-backend" {
+		t.Fatalf("commit subject = %q, want subtask checkpoint", subject)
+	}
+
+	qa := &orchestrator.SubtaskEvent{
+		Type:    orchestrator.SubtaskCompleted,
+		Subtask: orchestrator.Subtask{ID: "sprint-1-qa"},
+		Result:  &orchestrator.SubtaskResult{Success: true},
+	}
+	if err := commitScrumSprintCheckpoint(record, qa); err != nil {
+		t.Fatalf("commit clean QA checkpoint: %v", err)
+	}
+	count = strings.TrimSpace(runGitTestCommand(t, repo, "rev-list", "--count", "HEAD"))
+	if count != "1" {
+		t.Fatalf("commit count after clean QA = %s, want 1", count)
+	}
+
+	report := &orchestrator.SubtaskEvent{
+		Type:    orchestrator.SubtaskCompleted,
+		Subtask: orchestrator.Subtask{ID: "sprint-1-report"},
+		Result:  &orchestrator.SubtaskResult{Success: true},
+	}
+	if err := commitScrumSprintCheckpoint(record, report); err != nil {
+		t.Fatalf("commit report checkpoint: %v", err)
+	}
+	count = strings.TrimSpace(runGitTestCommand(t, repo, "rev-list", "--count", "HEAD"))
+	if count != "2" {
+		t.Fatalf("commit count after clean report = %s, want 2", count)
+	}
+	subject = strings.TrimSpace(runGitTestCommand(t, repo, "log", "-1", "--format=%s"))
+	if subject != "ARUN run-test sprint 1 checkpoint" {
+		t.Fatalf("report commit subject = %q, want sprint checkpoint", subject)
+	}
+}
+
 func TestShouldPublishScrumSprintCheckpoint_OnlyAfterSuccessfulCompletion(t *testing.T) {
 	record := &orchestrationRecord{
 		ID:       "run-test",
@@ -2540,7 +2600,7 @@ func TestArtifactTemplates_PRBodyScrubsPromptContamination(t *testing.T) {
 			t.Fatalf("PR body still contains %q:\n%s", blocked, body)
 		}
 	}
-	for _, want := range []string{"状態: completed", "サブタスク: 2/2 completed, 0 failed", "Sprint checkpoint"} {
+	for _, want := range []string{"状態: completed", "サブタスク: 2/2 completed, 0 failed", "Subtask/sprint checkpoints"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("PR body missing %q:\n%s", want, body)
 		}

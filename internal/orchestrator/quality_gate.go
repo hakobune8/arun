@@ -35,23 +35,37 @@ type QualityContentCheck struct {
 	Contains []string `json:"contains"`
 }
 
-const frontendProjectPresenceCommand = `sh -c 'test -f package.json || test -f client/index.html || test -f index.html || find client src app pages components assets public styles -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" -o -name "*.vue" -o -name "*.svelte" -o -name "*.css" -o -name "*.html" \) -print -quit 2>/dev/null | grep -q .'`
+const frontendProjectPresenceCommand = `sh -c 'test -f client/package.json || test -f package.json || test -f client/index.html || test -f index.html || find client src app pages components assets public styles -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" -o -name "*.vue" -o -name "*.svelte" -o -name "*.css" -o -name "*.html" \) -print -quit 2>/dev/null | grep -q .'`
 
-const frontendValidationCommand = `sh -c 'if [ -f main.go ] && { [ -f index.html ] || [ -d src ] || [ -d client ]; }; then echo "Go entrypoint and browser assets are mixed at repository root; use server/ and client/"; exit 1; fi; server_main=$(find server cmd -path "*/main.go" -print -quit 2>/dev/null); [ -z "$server_main" ] && [ -f main.go ] && server_main=main.go; for entry in frontend/index.html web/index.html client/index.html index.html; do if [ -f "$entry" ]; then dir=${entry%/*}; [ "$dir" = "$entry" ] && dir=.; if [ "$entry" != "index.html" ]; then test -n "$server_main" && grep -Eq "$dir|FileServer|http\\.Dir|StripPrefix|staticAssetPath" "$server_main" || { echo "$entry exists but is not served by the Go entrypoint"; exit 1; }; fi; for ref in $(grep -Eo "(href|src)=\"[^\"]+\\.(css|js)([#?][^\"]*)?\"" "$entry" | sed -E "s/^(href|src)=\"([^\"#?]+).*/\\2/" | sed -E "s#^\\./##"); do case "$ref" in http://*|https://*|//*|/*) continue;; esac; clean=$(printf "%s" "$ref" | sed -E "s/[#?].*$//"); asset="$dir/$clean"; [ "$dir" = "." ] && asset="$clean"; test -f "$asset" || { echo "$entry references $clean but $asset is missing"; exit 1; }; if [ -n "$server_main" ]; then server_content=$(cat "$server_main"); if printf "%s" "$server_content" | grep -Eq "FileServer|http\\.Dir|StripPrefix"; then :; elif printf "%s" "$server_content" | grep -q "staticAssetPath"; then base=${clean##*/}; case "$clean" in src/*) printf "%s" "$server_content" | grep -Eq "/src/|$base" || { echo "$entry references $clean but Go staticAssetPath does not serve it"; exit 1; };; *) printf "%s" "$server_content" | grep -q "$base" || { echo "$entry references $clean but Go staticAssetPath does not serve it"; exit 1; };; esac; else printf "%s" "$server_content" | grep -Eq "$asset|$dir|client|static" || { echo "$entry references $clean but Go entrypoint does not serve static assets"; exit 1; }; fi; fi; done; fi; done; if [ -f package.json ]; then PM=npm; [ -f pnpm-lock.yaml ] && PM=pnpm; [ -f yarn.lock ] && PM=yarn; [ -f bun.lockb ] && PM=bun; if ! command -v node >/dev/null 2>&1 || ! command -v "$PM" >/dev/null 2>&1; then test -f docs/smoke-test.md || test -f docs/testing.md || test -f README.md || test -f client/src/main.js || test -f src/main.js || test -f client/index.html || test -f index.html; exit; fi; for script in lint typecheck test build; do if node -e "const p=require(\"./package.json\"); process.exit(p.scripts&&p.scripts[process.argv[1]]?0:1)" "$script"; then case "$PM:$script" in yarn:*) yarn "$script";; pnpm:*) pnpm "$script";; bun:*) bun run "$script";; *) npm run "$script";; esac; fi; done; fi'`
+const frontendPackageValidationCommand = `sh -c 'pkgdir=; [ -f client/package.json ] && pkgdir=client; [ -z "$pkgdir" ] && [ -f package.json ] && pkgdir=.; if [ -n "$pkgdir" ]; then PM=npm; [ -f "$pkgdir/pnpm-lock.yaml" ] && PM=pnpm; [ -f "$pkgdir/yarn.lock" ] && PM=yarn; [ -f "$pkgdir/bun.lockb" ] && PM=bun; if ! command -v node >/dev/null 2>&1 || ! command -v "$PM" >/dev/null 2>&1; then test -f docs/smoke-test.md || test -f docs/testing.md || test -f README.md || test -f client/src/main.js || test -f src/main.js || test -f client/index.html || test -f index.html; exit; fi; ran=0; for script in lint typecheck test build; do if (cd "$pkgdir" && node -e "const p=require(\"./package.json\"); process.exit(p.scripts&&p.scripts[process.argv[1]]?0:1)" "$script"); then ran=1; case "$PM:$script" in yarn:*) (cd "$pkgdir" && yarn "$script");; pnpm:*) (cd "$pkgdir" && pnpm "$script");; bun:*) (cd "$pkgdir" && bun run "$script");; *) (cd "$pkgdir" && npm run "$script");; esac; fi; done; test "$ran" = 1 || test -f docs/smoke-test.md || test -f README.md; fi'`
+
+const frontendPackageLayoutValidationCommand = `sh -c 'if [ -f server/go.mod ] && [ -f client/index.html ]; then test -f client/package.json || { echo "client/package.json is required for separated generated frontend assets"; exit 1; }; test ! -f package.json || { echo "root package.json conflicts with separated client/package.json layout"; exit 1; }; fi'`
+
+const frontendValidationCommand = `sh -c 'if [ -f main.go ] && { [ -f index.html ] || [ -d src ] || [ -d client ]; }; then echo "Go entrypoint and browser assets are mixed at repository root; use server/ and client/"; exit 1; fi; server_main=$(find server cmd -path "*/main.go" -print -quit 2>/dev/null); [ -z "$server_main" ] && [ -f main.go ] && server_main=main.go; for entry in frontend/index.html web/index.html client/index.html index.html; do if [ -f "$entry" ]; then dir=${entry%/*}; [ "$dir" = "$entry" ] && dir=.; if [ "$entry" != "index.html" ]; then test -n "$server_main" && grep -Eq "$dir|FileServer|http\\.Dir|StripPrefix|staticAssetPath" "$server_main" || { echo "$entry exists but is not served by the Go entrypoint"; exit 1; }; fi; for ref in $(grep -Eo "(href|src)=\"[^\"]+\\.(css|js)([#?][^\"]*)?\"" "$entry" | sed -E "s/^(href|src)=\"([^\"#?]+).*/\\2/" | sed -E "s#^\\./##"); do case "$ref" in http://*|https://*|//*) continue;; esac; clean=$(printf "%s" "$ref" | sed -E "s/[#?].*$//"); clean=${clean#/}; asset="$dir/$clean"; [ "$dir" = "." ] && asset="$clean"; test -f "$asset" || { echo "$entry references $clean but $asset is missing"; exit 1; }; if [ -n "$server_main" ]; then server_content=$(cat "$server_main"); if printf "%s" "$server_content" | grep -Eq "FileServer|http\\.Dir|StripPrefix"; then :; elif printf "%s" "$server_content" | grep -q "staticAssetPath"; then base=${clean##*/}; case "$clean" in src/*) printf "%s" "$server_content" | grep -Eq "/src/|$base" || { echo "$entry references $clean but Go staticAssetPath does not serve it"; exit 1; };; *) printf "%s" "$server_content" | grep -q "$base" || { echo "$entry references $clean but Go staticAssetPath does not serve it"; exit 1; };; esac; else printf "%s" "$server_content" | grep -Eq "$asset|$dir|client|static" || { echo "$entry references $clean but Go entrypoint does not serve static assets"; exit 1; }; fi; fi; done; fi; done'`
+
+const servedFrontendRuntimeValidationCommand = `sh -c 'if [ "$(go env GOOS 2>/dev/null || echo unknown)" != "windows" ] && [ -f server/go.mod ] && [ -f server/main.go ] && [ -f client/index.html ] && command -v go >/dev/null 2>&1 && command -v curl >/dev/null 2>&1; then tmp=$(mktemp -d); port=$((20000 + ($$ % 20000))); pid=""; cleanup(){ if [ -n "$pid" ]; then kill "$pid" >/dev/null 2>&1 || true; wait "$pid" 2>/dev/null || true; fi; rm -rf "$tmp"; }; trap cleanup EXIT; (cd server && go build -o "$tmp/app" .); (cd server && PORT="$port" "$tmp/app" >"$tmp/server.log" 2>&1) & pid=$!; ready=0; i=0; while [ "$i" -lt 10 ]; do if curl -fsS "http://127.0.0.1:$port/" >/dev/null 2>&1; then ready=1; break; fi; i=$((i+1)); sleep 1; done; test "$ready" = 1 || { cat "$tmp/server.log" 2>/dev/null || true; exit 1; }; for ref in $(grep -Eo "(href|src)=\"[^\"]+\\.(css|js)([#?][^\"]*)?\"" client/index.html | sed -E "s/^(href|src)=\"([^\"#?]+).*/\\2/" | sed -E "s#^\\./##"); do case "$ref" in http://*|https://*|//*) continue;; esac; clean=$(printf "%s" "$ref" | sed -E "s/[#?].*$//"); clean=${clean#/}; curl -fsS "http://127.0.0.1:$port/$clean" >/dev/null || { echo "server runtime does not serve /$clean from client/index.html"; exit 1; }; done; fi'`
 
 const productCoherenceValidationCommand = `sh -c 'brief=docs/product-brief.md; html=client/index.html; [ -f "$html" ] || html=index.html; if [ -f "$brief" ] && [ -f README.md ] && [ -f "$html" ]; then readme_title=$(sed -n "s/^# *//p" README.md | head -n1); brief_title=$(sed -n "s/^# \\(Product Brief: \\)\\{0,1\\}//p" "$brief" | head -n1 | sed -E "s/[[:space:]]+[—-].*$//"); html_title=$(sed -n "s/.*<title>\\([^<]*\\)<\\/title>.*/\\1/p" "$html" | head -n1 | sed -E "s/[[:space:]]+[—-].*$//"); norm(){ printf "%s" "$1" | tr "[:upper:]" "[:lower:]" | sed -E "s/product brief: //g; s/[^a-z0-9]+//g"; }; rt=$(norm "$readme_title"); bt=$(norm "$brief_title"); ht=$(norm "$html_title"); if [ -n "$rt" ] && [ -n "$bt" ] && [ "$rt" != "$bt" ]; then echo "README title $readme_title does not match product brief $brief_title"; exit 1; fi; if [ -n "$ht" ] && [ -n "$bt" ] && [ "$ht" != "$bt" ]; then echo "HTML title $html_title does not match product brief $brief_title"; exit 1; fi; fi'`
 
+const artifactContractValidationCommand = `sh -c 'contract=docs/artifact-contract.md; if [ -f docs/product-brief.md ] || [ -f "$contract" ]; then test -f "$contract" || { echo "docs/artifact-contract.md is required for generated app artifacts"; exit 1; }; check(){ label=$1; shift; for term in "$@"; do grep -qi "$term" "$contract" && return 0; done; echo "artifact contract missing $label section"; exit 1; }; check "primary route" "Primary route" "提供ルート" "ルート"; check "frontend" "Frontend" "フロントエンド" "client/"; check "backend" "Backend" "バックエンド" "server/"; check "validation" "Validation" "バリデーション" "検証"; fi'`
+
 const qaEvidenceCommand = `sh -c 'test -f docs/testing.md || test -f docs/smoke-test.md || test -f README.md || find test tests e2e cypress playwright -type f -print -quit 2>/dev/null | grep -q .'`
 
-const qaValidationCommand = `sh -c 'if [ -f package.json ]; then PM=npm; [ -f pnpm-lock.yaml ] && PM=pnpm; [ -f yarn.lock ] && PM=yarn; [ -f bun.lockb ] && PM=bun; if ! command -v node >/dev/null 2>&1 || ! command -v "$PM" >/dev/null 2>&1; then test -f docs/smoke-test.md || test -f docs/testing.md || test -f README.md; exit; fi; ran=0; for script in lint typecheck test build; do if node -e "const p=require(\"./package.json\"); process.exit(p.scripts&&p.scripts[process.argv[1]]?0:1)" "$script"; then ran=1; case "$PM:$script" in yarn:*) yarn "$script";; pnpm:*) pnpm "$script";; bun:*) bun run "$script";; *) npm run "$script";; esac; fi; done; test "$ran" = 1 || test -f docs/smoke-test.md || test -f README.md; elif [ -f go.mod ]; then if command -v go >/dev/null 2>&1; then go test ./...; else main=server/main.go; [ -f "$main" ] || main=main.go; test -f "$main" && grep -q "/healthz" "$main"; fi; else test -f docs/testing.md || test -f docs/smoke-test.md || test -f README.md; fi'`
+const qaValidationCommand = `sh -c 'moddir=; [ -f server/go.mod ] && moddir=server; [ -z "$moddir" ] && [ -f go.mod ] && moddir=.; if [ -n "$moddir" ]; then if command -v go >/dev/null 2>&1; then (cd "$moddir" && pkgs=$(go list ./...) && test -n "$pkgs" && go test ./...); else main=server/main.go; [ "$moddir" = "." ] && main=main.go; test -f "$main" && grep -q "/healthz" "$main"; fi; elif [ ! -f client/package.json ] && [ ! -f package.json ]; then test -f docs/testing.md || test -f docs/smoke-test.md || test -f README.md; fi'`
 
 const docsValidationCommand = `sh -c 'if [ -f docs/remediation_notes.md ] && grep -Eiq "human-led sprint|コード実装は行わず|計画段階|implementation is deferred|no code changes" docs/remediation_notes.md; then echo "documentation defers required implementation"; exit 1; fi; if [ -f main.go ] && ! grep -q "\"/health\"" main.go && grep -R --include="*.md" -E "/health endpoint|/health エンドポイント" README.md docs 2>/dev/null | grep -vq "/healthz"; then echo "documentation mentions /health but main.go does not serve it"; exit 1; fi; for dir in cmd web frontend internal; do if [ ! -d "$dir" ] && grep -R --include="*.md" -E "(^|[^[:alnum:]_./-])$dir/" README.md docs 2>/dev/null; then echo "documentation mentions missing $dir/ layout"; exit 1; fi; done'`
 
-const goTestValidationCommand = `sh -c 'if command -v go >/dev/null 2>&1; then go test ./...; else main=server/main.go; [ -f "$main" ] || main=main.go; test -f go.mod && test -f "$main" && grep -q "/healthz" "$main"; fi'`
+const reportOnlyValidationCommand = `sh -c 'if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then changed=$(git diff --name-only -- client server Dockerfile charts k8s .github 2>/dev/null | head -n1); test -z "$changed" || { echo "report-only subtask modified implementation or deployment file: $changed"; exit 1; }; fi'`
 
-const goVetValidationCommand = `sh -c 'if command -v go >/dev/null 2>&1; then go vet ./...; else main=server/main.go; [ -f "$main" ] || main=main.go; test -f go.mod && test -f "$main" && grep -q "net/http" "$main"; fi'`
+const goModuleLayoutValidationCommand = `sh -c 'if [ -f go.mod ] && [ -f server/go.mod ]; then root_go=$(find . -maxdepth 1 -name "*.go" -print -quit); test -n "$root_go" || { echo "root go.mod conflicts with canonical server/go.mod"; exit 1; }; fi'`
 
-const goModTidyValidationCommand = `sh -c 'if command -v go >/dev/null 2>&1; then go mod tidy -diff; else test -f go.mod; fi'`
+const goTestValidationCommand = `sh -c 'moddir=.; [ -f server/go.mod ] && moddir=server; if command -v go >/dev/null 2>&1; then if [ "$moddir" = "." ] && [ -f go.mod ]; then nested=$(find . -path "./.git" -prune -o -mindepth 2 -name go.mod -print | head -n1); test -z "$nested" || { echo "nested Go module $nested hides packages from root go test ./..."; exit 1; }; fi; (cd "$moddir" && pkgs=$(go list ./...) && test -n "$pkgs" || { echo "go list ./... matched no packages in $moddir"; exit 1; }); (cd "$moddir" && go test ./...); else main=server/main.go; [ "$moddir" = "." ] && main=main.go; test -f "$moddir/go.mod" && test -f "$main" && grep -q "/healthz" "$main"; fi'`
+
+const goVetValidationCommand = `sh -c 'moddir=.; [ -f server/go.mod ] && moddir=server; if command -v go >/dev/null 2>&1; then if [ "$moddir" = "." ] && [ -f go.mod ]; then nested=$(find . -path "./.git" -prune -o -mindepth 2 -name go.mod -print | head -n1); test -z "$nested" || { echo "nested Go module $nested hides packages from root go vet ./..."; exit 1; }; fi; (cd "$moddir" && pkgs=$(go list ./...) && test -n "$pkgs" || { echo "go list ./... matched no packages in $moddir"; exit 1; }); (cd "$moddir" && go vet ./...); else main=server/main.go; [ "$moddir" = "." ] && main=main.go; test -f "$moddir/go.mod" && test -f "$main" && grep -q "net/http" "$main"; fi'`
+
+const goBuildValidationCommand = `sh -c 'moddir=.; [ -f server/go.mod ] && moddir=server; if command -v go >/dev/null 2>&1; then (cd "$moddir" && pkgs=$(go list ./...) && test -n "$pkgs" || { echo "go list ./... matched no packages in $moddir"; exit 1; }); (cd "$moddir" && go build ./...); else main=server/main.go; [ "$moddir" = "." ] && main=main.go; test -f "$moddir/go.mod" && test -f "$main"; fi'`
+
+const goModTidyValidationCommand = `sh -c 'moddir=.; [ -f server/go.mod ] && moddir=server; if command -v go >/dev/null 2>&1; then (cd "$moddir" && go mod tidy -diff); else test -f "$moddir/go.mod"; fi'`
 
 const dockerValidationCommand = `sh -c 'test -f Dockerfile && grep -Eiq "^FROM[[:space:]]" Dockerfile && if [ -d client ]; then grep -Eq "COPY --from=.*client[[:space:]]+/app/client|COPY[[:space:]]+client[[:space:]]+/app/client" Dockerfile; elif [ -f index.html ] || [ -d src ]; then grep -Eq "COPY --from=.*index.html[[:space:]]+/app/index.html|COPY[[:space:]]+index.html[[:space:]]+/app/index.html" Dockerfile && grep -Eq "COPY --from=.*src[[:space:]]+/app/src|COPY[[:space:]]+src[[:space:]]+/app/src" Dockerfile; fi && if [ "$(go env GOOS 2>/dev/null || echo unknown)" != "windows" ] && command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then docker build -t arun-validation .; fi'`
 
@@ -77,13 +91,21 @@ type QualityGateCheckResult struct {
 
 func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 	switch subtask.AgentName {
+	case "analyst":
+		if strings.Contains(strings.ToLower(subtask.Description), "product planning") {
+			return &QualityGate{
+				RequiredFiles:      []string{filepath.Join("docs", "product-brief.md"), filepath.Join("docs", "artifact-contract.md")},
+				ValidationCommands: []string{artifactContractValidationCommand},
+			}
+		}
+		return nil
 	case "go-backend":
 		if !isCanonicalGoServiceTask(subtask.Description) {
 			return nil
 		}
 		return &QualityGate{
-			RequiredFiles:      []string{"go.mod", filepath.Join("server", "main.go")},
-			ValidationCommands: []string{goTestValidationCommand, goVetValidationCommand},
+			RequiredFiles:      []string{filepath.Join("server", "go.mod"), filepath.Join("server", "main.go")},
+			ValidationCommands: []string{goModuleLayoutValidationCommand, goTestValidationCommand, goVetValidationCommand},
 			ContentChecks: []QualityContentCheck{{
 				File:     filepath.Join("server", "main.go"),
 				Contains: []string{"net/http", "/healthz", `"status"`},
@@ -94,7 +116,11 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 			ValidationCommands: []string{
 				frontendProjectPresenceCommand,
 				frontendValidationCommand,
+				frontendPackageLayoutValidationCommand,
+				frontendPackageValidationCommand,
+				servedFrontendRuntimeValidationCommand,
 				productCoherenceValidationCommand,
+				artifactContractValidationCommand,
 			},
 		}
 	case "ci-fixer":
@@ -112,12 +138,12 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 	case "docs":
 		if !isCanonicalGoServiceTask(subtask.Description) {
 			return &QualityGate{
-				ValidationCommands: []string{docsValidationCommand, productCoherenceValidationCommand},
+				ValidationCommands: []string{docsValidationCommand, productCoherenceValidationCommand, artifactContractValidationCommand},
 			}
 		}
 		return &QualityGate{
 			RequiredFiles:      []string{"README.md"},
-			ValidationCommands: []string{docsValidationCommand, productCoherenceValidationCommand},
+			ValidationCommands: []string{docsValidationCommand, productCoherenceValidationCommand, artifactContractValidationCommand},
 			ContentChecks: []QualityContentCheck{{
 				File:     "README.md",
 				Contains: []string{"/healthz", "go test", "go run"},
@@ -136,7 +162,7 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 		}
 	case "release-manager":
 		return &QualityGate{
-			RequiredFiles: []string{"CHANGELOG.md"},
+			ValidationCommands: []string{reportOnlyValidationCommand},
 			ContentChecks: []QualityContentCheck{{
 				File:     "CHANGELOG.md",
 				Contains: []string{"Changelog", "v"},
@@ -144,21 +170,25 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 		}
 	case "dependency-updater":
 		return &QualityGate{
-			RequiredFiles:      []string{"go.mod"},
+			RequiredFiles:      []string{filepath.Join("server", "go.mod")},
 			ValidationCommands: []string{goModTidyValidationCommand, goTestValidationCommand},
 		}
 	case "qa":
 		return &QualityGate{
 			ValidationCommands: []string{
+				goModuleLayoutValidationCommand,
 				qaEvidenceCommand,
+				frontendPackageLayoutValidationCommand,
+				frontendPackageValidationCommand,
 				qaValidationCommand,
 				productCoherenceValidationCommand,
+				artifactContractValidationCommand,
 			},
 		}
 	case "docker":
 		return &QualityGate{
 			RequiredFiles:      []string{"Dockerfile"},
-			ValidationCommands: []string{dockerValidationCommand},
+			ValidationCommands: []string{frontendValidationCommand, frontendPackageLayoutValidationCommand, frontendPackageValidationCommand, servedFrontendRuntimeValidationCommand, dockerValidationCommand},
 			ContentChecks: []QualityContentCheck{{
 				File:     "Dockerfile",
 				Contains: []string{"FROM"},

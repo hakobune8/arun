@@ -270,12 +270,13 @@ func DefaultRegistry() *Registry {
 		RecommendedAfter: []string{"security", "dependency-updater"},
 		ArchitectureGuidance: []string{
 			"Inspect the existing Dockerfile, compose files, build context, entrypoint, exposed ports, and CI image-build flow before editing container files.",
+			"Put the primary Dockerfile at repository root and use the repository root as build context, even when the Go module lives under server/.",
 			"Prefer multi-stage builds, non-root runtime users, minimal copied context, deterministic package installation, and explicit health checks when the application supports them.",
 			"Keep secrets out of image layers, build args, labels, logs, and compose files; use runtime environment variables or orchestrator-managed secrets instead.",
 		},
 		OutputExpectations: []string{
-			"Container changes touch Dockerfile, .dockerignore, compose, or related build configuration instead of reporting no-op success.",
-			"`docker build` or the repository image-build command is run when Docker is available; otherwise static Dockerfile checks and the reason Docker was unavailable are reported.",
+			"Container changes touch root Dockerfile, .dockerignore, compose, or related build configuration instead of reporting no-op success.",
+			"`docker build` from the repository root or the repository image-build command is run when Docker is available; otherwise static Dockerfile checks and the reason Docker was unavailable are reported.",
 			"Security and runtime notes cover user, ports, health checks, secret handling, image size, and rollback considerations when relevant.",
 		},
 	}, func(llmClient llm.LLMClient) runtime.Agent {

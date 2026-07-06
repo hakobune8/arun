@@ -1753,31 +1753,31 @@ func implementationHeavyScrumPlan(record *orchestrationRecord) *orchestrator.Tas
 		}
 	}
 	return &orchestrator.TaskPlan{
-		Description: "Implementation-heavy scrum workflow with three PDCA-style sprint checkpoints. Each sprint runs planning, implementation, QA, adjustment planning, remediation, reporting, and one checkpoint commit in one pull request.",
+		Description: "Implementation-heavy scrum workflow with three PDCA-style sprint checkpoints. Each sprint runs planning, implementation, QA, adjustment planning, remediation, and reporting in one pull request, with changed subtasks committed individually before the sprint checkpoint.",
 		Subtasks: []orchestrator.Subtask{
-			step("sprint-1-plan", "analyst", "Sprint 1 product planning and design: inspect the repository state and translate the user's request into one concise product concept before implementation. Create or update docs/product-brief.md as the single source-of-truth product brief; do not create product/design.md, docs/PRODUCT_BRIEF.md, duplicate product brief files, competing concepts, alternate product names, or contradictory mechanics in later docs. Identify the target user, core loop or primary workflow, differentiating mechanic or value proposition, non-goals, and sprint-level acceptance criteria. If the request contains qualitative words such as novel, playful, simple, production-ready, or Japanese equivalents, turn each into observable behavior or review criteria. For games or UX-heavy work, define one differentiating mechanic that must appear in the implemented UI or source code, not only in documentation. Define validation commands, the files expected to change, and a simple repository layout that separates backend, frontend, deployment, and docs. For new repositories, prefer `server/` for the Go HTTP entrypoint and backend logic, `client/` for browser assets, `docs/` for product and validation notes, and `charts/` or `k8s/` for deployment artifacts. Keep the backend easy to evolve toward clean architecture by separating HTTP handling from domain/application logic when the implementation grows beyond a tiny vertical slice. Do not place Go server files, browser assets, Helm charts, and narrative docs together at the repository root. Do not implement code in this planning stage; leave concrete file changes to the following backend and frontend stages."),
-			step("sprint-1-backend", "go-backend", "Sprint 1 coding: create or improve a minimal Go net/http server with a /healthz health endpoint, one product endpoint or static handler, focused tests, clear errors, and simple configuration. Preserve the Sprint 1 product concept and acceptance criteria rather than building a generic scaffold. For an empty repository, initialize the Go module and make `/` serve the primary frontend or product response that matches the selected concept; avoid a root handler that returns unrelated placeholder text when a browser UI exists.", "sprint-1-plan"),
-			step("sprint-1-frontend", "frontend", "Sprint 1 coding: create or connect a minimal user-facing frontend/static experience that can be served by the project. Put browser assets under `client/` unless existing conventions require otherwise, and keep the Go server under `server/` or another clear backend directory. Make the primary path inspectable in a browser, avoid placeholder-only UI, preserve backend work, and implement the differentiating mechanic, interaction model, or user-facing value defined in Sprint 1 planning. Do not create an unconnected alternate frontend tree; app title, visible labels, README, and implementation behavior must use the same product concept.", "sprint-1-backend"),
-			step("sprint-1-qa", "qa", "Sprint 1 QA: run available tests or smoke checks, verify the acceptance criteria, primary user path, differentiating mechanic or value proposition, and repository layout clarity, record gaps in repository artifacts, and explicitly call out backend/frontend follow-up work for this sprint adjustment pass. Compare docs/product-brief.md against README H1, app title, visible UI labels, Go server root behavior, frontend code, and docs; treat concept drift, duplicate product brief files, product/design.md as a second brief, unserved alternate UI files, generic scaffolds, or missing differentiating mechanics as release-blocking gaps.", "sprint-1-frontend"),
-			step("sprint-1-adjust-plan", "analyst", "Sprint 1 adjustment planning: read Sprint 1 QA evidence and turn failures or missing baseline behavior into concise backend/frontend remediation notes. Do not implement code in this planning stage.", "sprint-1-qa"),
+			step("sprint-1-plan", "analyst", "Sprint 1 product planning and design: inspect the repository state and translate the user's request into one concise product concept before implementation. Create or update docs/product-brief.md as the single source-of-truth product brief, and create or update docs/artifact-contract.md as the implementation contract for primary route, frontend directory and entrypoint, required local assets, backend module path and entrypoint, served routes, Docker/Helm packaging expectations, and validation commands. Do not create product/design.md, docs/PRODUCT_BRIEF.md, duplicate product brief files, competing concepts, alternate product names, or contradictory mechanics in later docs; in short, do not create product/design.md as a second product brief. Identify the target user, core loop or primary workflow, differentiating mechanic or value proposition, non-goals, and sprint-level acceptance criteria. If the request contains qualitative words such as novel, playful, simple, production-ready, or Japanese equivalents, turn each into observable behavior or review criteria. For games or UX-heavy work, define one differentiating mechanic that must appear in the implemented UI or source code, not only in documentation. Define validation commands, the files expected to change, and a simple repository layout that separates backend, frontend, deployment, and docs. For new repositories, prefer `server/` for the Go HTTP entrypoint and backend logic, `client/` for browser assets, `docs/` for product and validation notes, and `charts/` or `k8s/` for deployment artifacts. Keep the backend easy to evolve toward clean architecture by separating HTTP handling from domain/application logic when the implementation grows beyond a tiny vertical slice. Do not place Go server files, browser assets, Helm charts, and narrative docs together at the repository root. Do not implement code in this planning stage; leave concrete file changes to the following backend and frontend stages."),
+			step("sprint-1-backend", "go-backend", "Sprint 1 coding: create or improve a minimal Go net/http server with a /healthz health endpoint, one product endpoint or static handler, focused tests, clear errors, and simple configuration. Preserve docs/product-brief.md and satisfy docs/artifact-contract.md rather than building a generic scaffold. For an empty repository, initialize the Go module from the contract and make `/` serve the primary frontend or product response that matches the selected concept; avoid a root handler that returns unrelated placeholder text when a browser UI exists. If the frontend contract names required local assets, serve every referenced CSS/JS path from the Go entrypoint.", "sprint-1-plan"),
+			step("sprint-1-frontend", "frontend", "Sprint 1 coding: create or connect a minimal user-facing frontend/static experience that can be served by the project. Put browser assets under the directory named in docs/artifact-contract.md, usually `client/`, unless existing conventions require otherwise, and keep the Go server under `server/` or another clear backend directory. Make the primary path inspectable in a browser, avoid placeholder-only UI, preserve backend work, and implement the differentiating mechanic, interaction model, or user-facing value defined in Sprint 1 planning. Do not create an unconnected alternate frontend tree; app title, visible labels, README, and implementation behavior must use the same product concept. Do not reference local CSS or JavaScript assets from HTML unless those files are created and served according to the artifact contract.", "sprint-1-backend"),
+			step("sprint-1-qa", "qa", "Sprint 1 QA: run available tests or smoke checks, verify the acceptance criteria, primary user path, differentiating mechanic or value proposition, and repository layout clarity, record gaps in repository artifacts, and explicitly call out backend/frontend follow-up work for this sprint adjustment pass. Compare docs/product-brief.md against README H1, app title, visible UI labels, Go server root behavior, frontend code, and docs; compare docs/artifact-contract.md against actual files, local asset references, Go module path, served routes, and validation commands. Treat concept drift, artifact-contract violations, duplicate product brief files, product/design.md as a second brief, unserved alternate UI files, generic scaffolds, or missing differentiating mechanics as release-blocking gaps.", "sprint-1-frontend"),
+			step("sprint-1-adjust-plan", "analyst", "Sprint 1 adjustment planning: read Sprint 1 QA evidence and turn failures, artifact-contract violations, or missing baseline behavior into concise backend/frontend remediation notes. Do not implement code in this planning stage.", "sprint-1-qa"),
 			step("sprint-1-backend-fix", "go-backend", "Sprint 1 remediation: address QA findings that require backend, API, test, or integration changes. Keep the repository runnable from a fresh checkout.", "sprint-1-adjust-plan"),
 			step("sprint-1-frontend-fix", "frontend", "Sprint 1 remediation: address QA findings that require frontend or static asset changes, preserving the backend fixes from this sprint.", "sprint-1-backend-fix"),
-			step("sprint-1-report", "release-manager", "Sprint 1 reporting: summarize delivered baseline, QA evidence, remediation performed, and remaining backlog before the Sprint 1 checkpoint commit. Keep the report focused on product outcome and validation evidence; do not paste the full original task prompt.", "sprint-1-frontend-fix"),
+			step("sprint-1-report", "release-manager", "Sprint 1 reporting: summarize delivered baseline, QA evidence, remediation performed, and remaining backlog before the Sprint 1 checkpoint. Keep the report focused on product outcome and validation evidence; do not paste the full original task prompt.", "sprint-1-frontend-fix"),
 
 			step("sprint-2-plan", "analyst", "Sprint 2 planning: read Sprint 1 report and repository state, then produce concise product-design refinement notes, deployment packaging notes, and unresolved product gaps. Confirm whether the implemented behavior still matches the user's original intent, the single product brief, and the differentiating requirement. Do not rename the product concept or introduce a second mechanic unless the first was explicitly rejected as a QA blocker. Do not implement code in this planning stage.", "sprint-1-report"),
-			step("sprint-2-backend", "go-backend", "Sprint 2 coding: harden app startup, configuration, tests, and user-facing behavior before packaging. Address remaining product or design gaps from Sprint 1 if they block the user's requested experience, and avoid broad rewrites that reduce reviewability. Keep `/`, health endpoints, tests, Docker, and Helm aligned with the same primary product path.", "sprint-2-plan"),
-			step("sprint-2-docker", "docker", "Sprint 2 coding: add or improve a Dockerfile and container-focused run instructions for the application produced so far. Keep layers deterministic, avoid secret leakage, and make the image runnable with documented ports and health checks. If the app has browser/static assets, copy them into the runtime image and document a smoke check proving the container root path returns the same primary UI as local `go run .`.", "sprint-2-backend"),
+			step("sprint-2-backend", "go-backend", "Sprint 2 coding: harden app startup, configuration, tests, and user-facing behavior before packaging. Address remaining product, design, or artifact-contract gaps from Sprint 1 if they block the user's requested experience, and avoid broad rewrites that reduce reviewability. Keep `/`, health endpoints, tests, Docker, and Helm aligned with the same primary product path defined in docs/artifact-contract.md.", "sprint-2-plan"),
+			step("sprint-2-docker", "docker", "Sprint 2 coding: add or improve the repository root Dockerfile and container-focused run instructions for the application produced so far. Use the repository root as Docker build context even when the Go module lives under server/. Keep layers deterministic, avoid secret leakage, and make the image runnable with documented ports and health checks. If the app has browser/static assets, copy them into the runtime image and document a smoke check proving the container root path returns the same primary UI as local `cd server && go run .`.", "sprint-2-backend"),
 			step("sprint-2-helm", "helm", "Sprint 2 coding: add or improve a Helm chart suitable for deploying this application into the same Kubernetes environment as ARUN. Include values for image, service, probes, resources, and labels. Ingress is not required.", "sprint-2-docker"),
 			step("sprint-2-kubernetes", "kubernetes", "Sprint 2 coding: add Kubernetes Deployment and Service manifests or chart templates for the application. Include selectors, probes where practical, resource defaults, and operational notes. Avoid ingress unless explicitly requested.", "sprint-2-helm"),
-			step("sprint-2-qa", "qa", "Sprint 2 QA: validate Docker, Helm, Kubernetes, and app-level smoke paths where tooling is available. When Docker is available, build and run the image, then verify `/healthz` and `/` from the container; when Docker is unavailable, statically confirm the runtime image copies all files needed for the primary UI. Record exact commands, observed results, release blockers, and packaging or deployment gaps for this sprint adjustment pass.", "sprint-2-kubernetes"),
+			step("sprint-2-qa", "qa", "Sprint 2 QA: validate Docker, Helm, Kubernetes, artifact contract, and app-level smoke paths where tooling is available. When Docker is available, build and run the image, then verify `/healthz` and `/` from the container; when Docker is unavailable, statically confirm the runtime image copies all files needed for the primary UI named in docs/artifact-contract.md. Record exact commands, observed results, release blockers, and packaging or deployment gaps for this sprint adjustment pass.", "sprint-2-kubernetes"),
 			step("sprint-2-adjust-plan", "analyst", "Sprint 2 adjustment planning: read Sprint 2 QA evidence and turn deployment/package failures into concise remediation notes before the Sprint 2 checkpoint. Do not implement code in this planning stage.", "sprint-2-qa"),
 			step("sprint-2-infra-fix", "kubernetes", "Sprint 2 remediation: fix Kubernetes, Helm, or deployment manifest issues found by QA, coordinating with existing Docker and app artifacts.", "sprint-2-adjust-plan"),
-			step("sprint-2-report", "release-manager", "Sprint 2 reporting: summarize deployment artifacts, QA evidence, remediation performed, and remaining CI/release backlog before the Sprint 2 checkpoint commit. Keep the report concise and avoid repeating long command blocks already covered in focused docs.", "sprint-2-infra-fix"),
+			step("sprint-2-report", "release-manager", "Sprint 2 reporting: summarize deployment artifacts, QA evidence, remediation performed, and remaining CI/release backlog before the Sprint 2 checkpoint. Keep the report concise and avoid repeating long command blocks already covered in focused docs.", "sprint-2-infra-fix"),
 
 			step("sprint-3-plan", "analyst", "Sprint 3 planning: read Sprint 2 report and repository state, then produce concise product-readiness, CI, documentation, final QA, review, and release-readiness notes. Re-check the user request against the actual product experience and identify any remaining design gap before final polish. Do not implement code in this planning stage.", "sprint-2-report"),
 			step("sprint-3-devops", "devops", "Sprint 3 coding: add or improve GitHub Actions CI so future pull requests can continuously run the available backend/frontend/container checks. Keep workflows minimal, reproducible, and aligned with local validation commands.", "sprint-3-plan"),
-			step("sprint-3-docs", "docs", "Sprint 3 documentation: update README or docs with a product-centered overview, primary user walkthrough, acceptance criteria status, local run, test, Docker, Helm/Kubernetes deploy, rollback or operations notes, and reviewer guidance. README H1 must be the product name or repository name, not a deployment topic such as Kubernetes. Explain what was built and how it behaves before listing commands. Keep README concise, move detailed procedures into focused docs, remove duplicated or stale instructions, remove copied parent-task prompt text, remove duplicate product brief files including product/design.md when it competes with docs/product-brief.md, and remove links to non-existent sprint reports or operations docs. Documentation must describe the implemented product, not an aspirational or alternate concept.", "sprint-3-devops"),
-			step("sprint-3-qa", "qa", "Sprint 3 QA: run final smoke and validation checks across app, CI, docs, Docker, Helm, and Kubernetes artifacts. Verify reviewer-facing setup from a fresh checkout perspective, check that frontend/backend/deployment/docs layout is understandable, and record any release-blocking gaps for this sprint adjustment pass. Include a product coherence check: the selected product brief, README H1, app title, served UI, source files, acceptance criteria status, container root response, and validation evidence must agree on the same concept and differentiating mechanic.", "sprint-3-docs"),
+			step("sprint-3-docs", "docs", "Sprint 3 documentation: update README or docs with a product-centered overview, primary user walkthrough, acceptance criteria status, artifact contract status, local run, test, Docker, Helm/Kubernetes deploy, rollback or operations notes, and reviewer guidance. README H1 must be the product name or repository name, not a deployment topic such as Kubernetes. Explain what was built and how it behaves before listing commands. Keep README concise, move detailed procedures into focused docs, remove duplicated or stale instructions, remove copied parent-task prompt text, remove duplicate product brief files including product/design.md when it competes with docs/product-brief.md, and remove links to non-existent sprint reports or operations docs. Documentation must describe the implemented product, not an aspirational or alternate concept, and must not contradict docs/artifact-contract.md.", "sprint-3-devops"),
+			step("sprint-3-qa", "qa", "Sprint 3 QA: run final smoke and validation checks across app, CI, docs, Docker, Helm, Kubernetes artifacts, and docs/artifact-contract.md. Verify reviewer-facing setup from a fresh checkout perspective, check that frontend/backend/deployment/docs layout is understandable, and record any release-blocking gaps for this sprint adjustment pass. Include a product coherence check: the selected product brief, artifact contract, README H1, app title, served UI, source files, acceptance criteria status, container root response, and validation evidence must agree on the same concept, primary route, file layout, and differentiating mechanic.", "sprint-3-docs"),
 			step("sprint-3-adjust-plan", "analyst", "Sprint 3 adjustment planning: read final QA evidence and convert release-blocking issues into concise remediation notes before review. Do not implement code in this planning stage.", "sprint-3-qa"),
 			step("sprint-3-backend-fix", "go-backend", "Sprint 3 remediation: fix any final app, test, startup, or integration issues discovered by QA before review.", "sprint-3-adjust-plan"),
 			step("sprint-3-review", "reviewer", "Sprint 3 review: inspect the final diff for correctness, maintainability, missing tests, user-facing completeness, repository structure, documentation duplication, accidental binary/workspace artifacts, product concept drift, unserved alternate UI files, broken documentation links, operational safety, and deployment risks. Leave actionable notes in repository artifacts where appropriate.", "sprint-3-backend-fix"),
@@ -1793,13 +1793,10 @@ func commitScrumSprintCheckpoint(record *orchestrationRecord, event *orchestrato
 	if event.Result == nil || !event.Result.Success {
 		return nil
 	}
-	sprint, ok := scrumSprintCheckpoint(event.Subtask.ID)
-	if !ok {
-		return nil
-	}
 	if strings.TrimSpace(record.RepoPath) == "" {
 		return fmt.Errorf("missing repository workspace")
 	}
+	sprint, isSprintCheckpoint := scrumSprintCheckpoint(event.Subtask.ID)
 	hygiene, err := scrubRepositoryArtifacts(record.RepoPath)
 	if err != nil {
 		return fmt.Errorf("repository hygiene: %w", err)
@@ -1816,15 +1813,29 @@ func commitScrumSprintCheckpoint(record *orchestrationRecord, event *orchestrato
 	if err := gitConfig(record.RepoPath, record.GitHubToken, "user.name", "ARUN"); err != nil {
 		return err
 	}
-	message := fmt.Sprintf("ARUN %s sprint %d checkpoint", record.ID, sprint)
 	if gitTreeClean(record.RepoPath, record.GitHubToken) {
+		if !isSprintCheckpoint {
+			return nil
+		}
+		message := fmt.Sprintf("ARUN %s sprint %d checkpoint", record.ID, sprint)
 		if err := gitCommitAllowEmpty(record.RepoPath, record.GitHubToken, message); err != nil {
 			return err
 		}
-	} else if err := gitCommit(record.RepoPath, record.GitHubToken, message); err != nil {
+		appendOrchestrationEvent(record, "sprint.commit", event.Subtask.ID, fmt.Sprintf("Committed Sprint %d checkpoint", sprint))
+		return nil
+	}
+	message := fmt.Sprintf("ARUN %s %s", record.ID, event.Subtask.ID)
+	if isSprintCheckpoint {
+		message = fmt.Sprintf("ARUN %s sprint %d checkpoint", record.ID, sprint)
+	}
+	if err := gitCommit(record.RepoPath, record.GitHubToken, message); err != nil {
 		return err
 	}
-	appendOrchestrationEvent(record, "sprint.commit", event.Subtask.ID, fmt.Sprintf("Committed Sprint %d checkpoint", sprint))
+	if isSprintCheckpoint {
+		appendOrchestrationEvent(record, "sprint.commit", event.Subtask.ID, fmt.Sprintf("Committed Sprint %d checkpoint", sprint))
+	} else {
+		appendOrchestrationEvent(record, "subtask.commit", event.Subtask.ID, fmt.Sprintf("Committed %s changes", event.Subtask.ID))
+	}
 	return nil
 }
 
@@ -3785,6 +3796,7 @@ Operating mode: 新規または sandbox repository 向けの build-first。安�
 Quality bar:
 - Scaffold から始めず、product planning から始めてください。ユーザーが求める価値を、具体的な concept、対象 user、core loop または workflow、差別化される behavior、non-goals、acceptance criteria に分解してから実装してください。
 - Product concept は 1 つだけを source of truth にしてください。README、docs、UI labels、code の間で複数の product brief、別名の product name、矛盾した差別化 mechanic を作らないでください。
+- docs/artifact-contract.md を作成し、成果物同士の接続 contract としてください。少なくとも Primary route、Frontend、Backend、Deployment、Validation を含め、frontend entrypoint、local CSS/JS assets、Go module path、Go entrypoint、served routes、Docker/Helm packaging expectations、validation commands を明記してください。
 - 「新規性」「楽しい」「ポップ」「シンプル」「production-ready」のような定性的意図が含まれる場合は、それぞれを review 可能な observable criteria に変換し、QA で確認してください。
 - Game または UX-heavy app では、要求に固有の mechanic、interaction、content choice を少なくとも 1 つ実装してください。label を変えただけの generic shell は不十分です。
 - 実装前に sprint-level acceptance criteria を定義し、QA で確認してください。
@@ -3802,6 +3814,7 @@ Quality bar:
 Sprint 1:
 - Repository state を調査し、最小で一貫した product increment を選んでください。
 - 実装前に concise な product/design brief を作成してください。対象 user、core loop または workflow、差別化 behavior、acceptance criteria、non-goals、要求された価値を QA がどう判定するかを含めてください。この brief を後続 implementation/documentation の唯一の source of truth にしてください。
+- docs/artifact-contract.md を作成し、product brief を実装へ接続する source of truth にしてください。Backend と frontend はこの contract に従い、QA は contract と実ファイル、served routes、local asset references、module path、validation commands を照合してください。
 - 空 repository の場合は、外部 service なしで開いて review/validation でき、main app route から提供される minimal Go server と lightweight frontend または static response から始めてください。
 - Repository evidence から primary implementation path を決め、最初の user-visible slice の acceptance criteria を定義してください。Backend、frontend、documentation、またはその組み合わせは repository に合う場合のみ使ってください。
 - Setup または usage documentation を含む minimal working slice を実装し、backend/server code、frontend/client assets、charts/manifests、docs が区別しやすい repository layout にしてください。
@@ -3823,6 +3836,7 @@ Expected output:
 - Concrete file changes、または安全な implementation が不可能だった理由の明確な explanation。
 - Sprint 1、Sprint 2、Sprint 3 sections。
 - Product/design brief と acceptance criteria status。定性的要求をどう observable にしたかを含めてください。
+- Artifact contract status。Primary route、frontend/backend file layout、served asset paths、module path、validation commands が実際の repository artifacts と一致しているかを含めてください。
 - Implementation、documentation、review、smoke、CI/CD、Kubernetes、release-readiness notes。
 - 実行した commands と validation results。
 - Acceptance criteria status、residual risks、known limitations。
@@ -4359,9 +4373,9 @@ func orchestrationPRBody(record *orchestrationRecord) string {
 
 func prBodyReadabilityNotice(language string) string {
 	if language == "ja" {
-		return "\n\n---\n\nこの PR 本文は読みやすさを保つため ARUN により短縮されました。詳細は run summary、生成された repository docs、各 sprint checkpoint を確認してください。\n"
+		return "\n\n---\n\nこの PR 本文は読みやすさを保つため ARUN により短縮されました。詳細は run summary、生成された repository docs、subtask/sprint checkpoint commit を確認してください。\n"
 	}
-	return "\n\n---\n\nThis PR body was shortened by ARUN for readability. See the run summary, generated repository docs, and sprint checkpoint commits for full details.\n"
+	return "\n\n---\n\nThis PR body was shortened by ARUN for readability. See the run summary, generated repository docs, and subtask/sprint checkpoint commits for full details.\n"
 }
 
 func truncateMarkdownBytes(body string, maxBytes int, notice string) string {
@@ -4531,7 +4545,7 @@ func structuredPullRequestSummary(record *orchestrationRecord, language string) 
 			lines = append(lines, fmt.Sprintf("- 実行中: %d", running))
 		}
 		lines = append(lines,
-			"- Sprint checkpoint: この PR branch の commit を確認してください。",
+			"- Subtask/sprint checkpoints: この PR branch の commit を確認してください。",
 			"- 詳細: run artifacts と生成された repository docs を確認してください。",
 		)
 		return strings.Join(lines, "\n")
@@ -4544,7 +4558,7 @@ func structuredPullRequestSummary(record *orchestrationRecord, language string) 
 		lines = append(lines, fmt.Sprintf("- Running: %d", running))
 	}
 	lines = append(lines,
-		"- Sprint checkpoints: see the commits on this PR branch.",
+		"- Subtask/sprint checkpoints: see the commits on this PR branch.",
 		"- Details: see the run artifacts and generated repository docs.",
 	)
 	return strings.Join(lines, "\n")

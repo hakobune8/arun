@@ -2,7 +2,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev
 LDFLAGS := -ldflags "-X github.com/hakobune8/arun/internal/cli.Version=$(VERSION)"
 BINARY := arun
 
-.PHONY: build test lint clean cover install run vet all web-build web-lint web-smoke
+.PHONY: build test lint clean cover install run vet all web-build web-lint web-smoke live-validate live-orchestrate
 
 all: lint build test
 
@@ -29,6 +29,12 @@ web-lint:
 
 web-smoke:
 	cd web && npm ci && npm run build && npm run smoke
+
+live-validate:
+	scripts/live-validate-buildkit.sh
+
+live-orchestrate:
+	scripts/live-validate-orchestrate.sh
 
 clean:
 	rm -f $(BINARY) $(BINARY).exe coverage.out coverage.html cover.html

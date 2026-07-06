@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -287,8 +288,8 @@ func TestApplyDefaultQualityGate_SpecializedBuiltIns(t *testing.T) {
 	}{
 		{"security", "SECURITY.md"},
 		{"frontend", ""},
-		{"release-manager", "CHANGELOG.md"},
-		{"dependency-updater", "go.mod"},
+		{"release-manager", ""},
+		{"dependency-updater", filepath.Join("server", "go.mod")},
 		{"qa", ""},
 		{"docker", "Dockerfile"},
 		{"helm", ""},
@@ -336,6 +337,25 @@ func TestSubtaskProfile_ReportOnlyAgentsDoNotRequireGoValidation(t *testing.T) {
 				t.Fatalf("%s tools = %+v, want write_file for planning/report artifacts", agent, prof.Tools.Allow)
 			}
 		})
+	}
+}
+
+func TestSubtaskProfile_GoAgentsUseRepoAwareValidation(t *testing.T) {
+	t.Parallel()
+
+	for _, agent := range []string{"go-backend", "ci-fixer", "security", "dependency-updater"} {
+		t.Run(agent, func(t *testing.T) {
+			prof := subtaskProfile(agent)
+			if prof.Commands.Test != goTestValidationCommand {
+				t.Fatalf("%s test command = %q, want repo-aware go test command", agent, prof.Commands.Test)
+			}
+			if prof.Commands.Lint != goVetValidationCommand {
+				t.Fatalf("%s lint command = %q, want repo-aware go vet command", agent, prof.Commands.Lint)
+			}
+		})
+	}
+	if prof := subtaskProfile("go-backend"); prof.Commands.Build != goBuildValidationCommand {
+		t.Fatalf("go-backend build command = %q, want repo-aware go build command", prof.Commands.Build)
 	}
 }
 
@@ -751,6 +771,60 @@ func TestExecuteSubtask_FrontendFailsNoOp(t *testing.T) {
 	}
 }
 
+func TestExecuteSubtask_FrontendFixAllowsNoOpWhenGatePasses(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("ARUN_HOME", filepath.Join(t.TempDir(), "arun-home"))
+	if err := os.MkdirAll(filepath.Join(repo, "client"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "server"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join("client", "index.html"): `<!doctype html><html><head><title>App</title><link rel="stylesheet" href="style.css"></head><body><script src="app.js"></script></body></html>`,
+		filepath.Join("client", "style.css"):  `body { margin: 0; }`,
+		filepath.Join("client", "app.js"):     `console.log("ready");`,
+		filepath.Join("server", "main.go"): `package main
+
+import "net/http"
+
+func main() {
+	http.Handle("/", http.FileServer(http.Dir("client")))
+}
+`,
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"frontend": &recordingAgent{name: "frontend"}},
+		&runtime.Config{},
+	)
+
+	subtask := &Subtask{
+		ID:          "sprint-1-frontend-fix",
+		Description: "Sprint 1 remediation: address QA findings that require frontend or static asset changes.",
+		AgentName:   "frontend",
+	}
+	applyDefaultQualityGate(subtask)
+
+	result := o.executeSubtask(context.Background(), subtask, "")
+	if !result.Success {
+		t.Fatalf("executeSubtask() failed for no-op frontend fix: %+v", result)
+	}
+	if result.QualityGate == nil || !result.QualityGate.Passed {
+		t.Fatalf("quality gate = %+v, want passed", result.QualityGate)
+	}
+	if !strings.Contains(result.Output, "No frontend changes were required") {
+		t.Fatalf("output = %q, want no-op success note", result.Output)
+	}
+}
+
 func TestExecuteSubtask_FrontendRecoversEmptyRepositoryNoOp(t *testing.T) {
 	repo := t.TempDir()
 	t.Setenv("ARUN_HOME", filepath.Join(t.TempDir(), "arun-home"))
@@ -782,7 +856,7 @@ func TestExecuteSubtask_FrontendRecoversEmptyRepositoryNoOp(t *testing.T) {
 	if !strings.Contains(result.Output, "static frontend scaffold") {
 		t.Fatalf("output = %q, want frontend fallback detail", result.Output)
 	}
-	for _, file := range []string{"package.json", filepath.Join("client", "index.html"), filepath.Join("client", "styles.css"), filepath.Join("client", "src", "main.js"), "README.md", filepath.Join("docs", "smoke-test.md"), filepath.Join("docs", "testing.md"), "CHANGELOG.md"} {
+	for _, file := range []string{filepath.Join("client", "package.json"), filepath.Join("client", "index.html"), filepath.Join("client", "styles.css"), filepath.Join("client", "src", "main.js"), "README.md", filepath.Join("docs", "smoke-test.md"), filepath.Join("docs", "testing.md"), "CHANGELOG.md"} {
 		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
 			t.Fatalf("%s not created: %v", file, err)
 		}
@@ -807,12 +881,18 @@ func TestRecoverFrontendStaticAppUsesInvaderProductConceptTitle(t *testing.T) {
 		!strings.Contains(string(index), `<h1 id="app-title">One-Button Invaders</h1>`) {
 		t.Fatalf("index.html does not use invader product concept title:\n%s", index)
 	}
-	pkg, err := os.ReadFile(filepath.Join(repo, "package.json"))
+	pkg, err := os.ReadFile(filepath.Join(repo, "client", "package.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(pkg), `"name": "one-button-invaders"`) {
-		t.Fatalf("package.json does not use invader product package name:\n%s", pkg)
+		t.Fatalf("client/package.json does not use invader product package name:\n%s", pkg)
+	}
+	if strings.Contains(string(pkg), "client/src/main.js") {
+		t.Fatalf("client/package.json should use client-relative script paths:\n%s", pkg)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "package.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("root package.json exists after frontend recovery: %v", err)
 	}
 	mainJS, err := os.ReadFile(filepath.Join(repo, "client", "src", "main.js"))
 	if err != nil {
@@ -830,6 +910,34 @@ func TestRecoverFrontendStaticAppUsesInvaderProductConceptTitle(t *testing.T) {
 	if !strings.Contains(string(brief), "# Product Brief: One-Button Invaders") ||
 		!strings.Contains(string(brief), "gravity-lane flip mechanic") {
 		t.Fatalf("product brief does not describe generated product concept:\n%s", brief)
+	}
+}
+
+func TestRepairGeneratedFrontendPackageLayoutMovesRootPackage(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "client"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "client", "index.html"), []byte("<!doctype html>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "package.json"), []byte(`{"scripts":{"test":"node --check client/src/main.js"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := repairGeneratedFrontendPackageLayout(repo); err != nil {
+		t.Fatalf("repairGeneratedFrontendPackageLayout() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "package.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("root package.json still exists: %v", err)
+	}
+	pkg, err := os.ReadFile(filepath.Join(repo, "client", "package.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(pkg), "node --check src/main.js") || strings.Contains(string(pkg), "client/src/main.js") {
+		t.Fatalf("client/package.json scripts not rewritten:\n%s", pkg)
 	}
 }
 
@@ -1109,6 +1217,64 @@ func main() {
 	}
 }
 
+func TestFrontendQualityGateFailsForMissingAbsoluteClientReferencedAssets(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	files := map[string]string{
+		filepath.Join("client", "index.html"): `<!doctype html><link rel="stylesheet" href="/style.css"><script src="/app.js"></script>`,
+		filepath.Join("server", "main.go"): `package main
+
+import (
+	"net/http"
+	"path"
+)
+
+func staticAssetPath(urlPath string) (string, bool) {
+	clean := path.Clean("/" + urlPath)
+	switch clean {
+	case "/styles.css":
+		return "client/styles.css", true
+	case "/src/main.js":
+		return "client/src/main.js", true
+	default:
+		return "", false
+	}
+}
+
+func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			if assetPath, ok := staticAssetPath(r.URL.Path); ok {
+				http.ServeFile(w, r, assetPath)
+				return
+			}
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeFile(w, r, "client/index.html")
+	})
+}
+`,
+	}
+	for path, content := range files {
+		full := filepath.Join(repo, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "frontend",
+		Description: "Add a browser game UI.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed with missing absolute client CSS/JS assets: %+v", status)
+	}
+}
+
 func TestFrontendQualityGateFailsWhenStaticAssetPathDoesNotServeClientRefs(t *testing.T) {
 	t.Parallel()
 
@@ -1164,6 +1330,113 @@ func main() {
 	}))
 	if status.Passed {
 		t.Fatalf("quality gate passed when staticAssetPath did not serve referenced client assets: %+v", status)
+	}
+}
+
+func TestFrontendQualityGateFailsWhenServerWorkingDirCannotServeClientAssets(t *testing.T) {
+	t.Parallel()
+	if goruntime.GOOS == "windows" {
+		t.Skip("runtime server smoke is skipped on Windows to avoid leaked process directory locks")
+	}
+
+	repo := t.TempDir()
+	files := map[string]string{
+		filepath.Join("server", "go.mod"):         "module github.com/hakobune8/arun-test/server\n\ngo 1.22\n",
+		filepath.Join("client", "index.html"):     `<!doctype html><link rel="stylesheet" href="./styles.css"><script src="./src/main.js"></script>`,
+		filepath.Join("client", "styles.css"):     "body { color: white; }",
+		filepath.Join("client", "src", "main.js"): "console.log('ok');",
+		filepath.Join("server", "main.go"): `package main
+
+import (
+	"log"
+	"net/http"
+	"os"
+	"path"
+	"strings"
+)
+
+const staticDir = "client"
+
+func rootHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		if assetPath, ok := staticAssetPath(r.URL.Path); ok {
+			http.ServeFile(w, r, assetPath)
+			return
+		}
+		http.NotFound(w, r)
+		return
+	}
+	if _, err := os.Stat(path.Join(staticDir, "index.html")); err == nil {
+		http.ServeFile(w, r, path.Join(staticDir, "index.html"))
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func staticAssetPath(urlPath string) (string, bool) {
+	clean := path.Clean("/" + urlPath)
+	switch {
+	case clean == "/styles.css":
+		return path.Join(staticDir, "styles.css"), true
+	case strings.HasPrefix(clean, "/src/") && strings.HasSuffix(clean, ".js"):
+		return path.Join(staticDir, strings.TrimPrefix(clean, "/")), true
+	default:
+		return "", false
+	}
+}
+
+func main() {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", rootHandler)
+	log.Fatal(http.ListenAndServe(":8080", mux))
+}
+`,
+	}
+	for path, content := range files {
+		full := filepath.Join(repo, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "frontend",
+		Description: "Add a browser game UI.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed when cd server runtime cannot serve client assets: %+v", status)
+	}
+}
+
+func TestFrontendQualityGateFailsForRootPackageInSeparatedGeneratedLayout(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	files := map[string]string{
+		"package.json":                            `{"scripts":{"test":"node --check client/src/main.js"}}`,
+		filepath.Join("server", "go.mod"):         "module github.com/hakobune8/arun-test/server\n\ngo 1.22\n",
+		filepath.Join("server", "main.go"):        frontendServingGoMain(),
+		filepath.Join("client", "index.html"):     `<!doctype html><link rel="stylesheet" href="./styles.css"><script src="./src/main.js"></script>`,
+		filepath.Join("client", "styles.css"):     "body { color: white; }",
+		filepath.Join("client", "src", "main.js"): "console.log('ok');",
+	}
+	for path, content := range files {
+		full := filepath.Join(repo, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "frontend",
+		Description: "Add a browser game UI.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed with root package.json in separated layout: %+v", status)
 	}
 }
 
@@ -1557,7 +1830,7 @@ func TestRecoverBuiltInSubtask_FrontendTimeoutRecoversEmptyRepository(t *testing
 	if !ok || !result.Success {
 		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
 	}
-	for _, file := range []string{"package.json", filepath.Join("client", "index.html"), filepath.Join("client", "src", "main.js"), filepath.Join("docs", "smoke-test.md")} {
+	for _, file := range []string{filepath.Join("client", "package.json"), filepath.Join("client", "index.html"), filepath.Join("client", "src", "main.js"), filepath.Join("docs", "smoke-test.md")} {
 		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
 			t.Fatalf("%s not created: %v", file, err)
 		}
@@ -1636,7 +1909,7 @@ func TestHealthzHandler(t *testing.T) {
 	if !ok || !result.Success {
 		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
 	}
-	for _, file := range []string{"package.json", filepath.Join("client", "index.html"), filepath.Join("client", "styles.css"), filepath.Join("client", "src", "main.js"), filepath.Join("docs", "smoke-test.md")} {
+	for _, file := range []string{filepath.Join("client", "package.json"), filepath.Join("client", "index.html"), filepath.Join("client", "styles.css"), filepath.Join("client", "src", "main.js"), filepath.Join("docs", "smoke-test.md")} {
 		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
 			t.Fatalf("%s not created: %v", file, err)
 		}
@@ -1721,7 +1994,7 @@ func main() {}
 	if !ok || !result.Success {
 		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
 	}
-	for _, file := range []string{filepath.Join("client", "styles.css"), filepath.Join("client", "src", "main.js"), "package.json"} {
+	for _, file := range []string{filepath.Join("client", "styles.css"), filepath.Join("client", "src", "main.js"), filepath.Join("client", "package.json")} {
 		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
 			t.Fatalf("%s not recovered: %v", file, err)
 		}
@@ -1832,10 +2105,10 @@ func main() {
 	if fileExists(filepath.Join(repo, "cmd", "server", "main.go")) {
 		t.Fatalf("broken generated Go file still exists")
 	}
-	if err := runShell(context.Background(), repo, "go test ./..."); err != nil {
+	if err := runShell(context.Background(), filepath.Join(repo, "server"), "go test ./..."); err != nil {
 		t.Fatalf("go test after recovery: %v", err)
 	}
-	if err := runShell(context.Background(), repo, "go vet ./..."); err != nil {
+	if err := runShell(context.Background(), filepath.Join(repo, "server"), "go vet ./..."); err != nil {
 		t.Fatalf("go vet after recovery: %v", err)
 	}
 }
@@ -1857,14 +2130,14 @@ func TestRecoverGoBackendServesExistingStaticIndex(t *testing.T) {
 	if _, err := recoverGoBackend(context.Background(), repo, "create /healthz with net/http and serve the static frontend"); err != nil {
 		t.Fatalf("recoverGoBackend() error = %v", err)
 	}
-	if err := runShell(context.Background(), repo, "go test ./..."); err != nil {
+	if err := runShell(context.Background(), filepath.Join(repo, "server"), "go test ./..."); err != nil {
 		t.Fatalf("go test after recovery: %v", err)
 	}
 	mainGo, err := os.ReadFile(filepath.Join(repo, "server", "main.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(mainGo), `path.Join(staticDir, "index.html")`) {
+	if !strings.Contains(string(mainGo), `filepath.Join(dir, "index.html")`) {
 		t.Fatalf("server/main.go does not serve existing client/index.html:\n%s", mainGo)
 	}
 }
@@ -1945,8 +2218,10 @@ func TestRecoverDockerfileCopiesStaticFrontendAssetsWhenPresent(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags=\"-s -w\" -o /out/app ./server",
-		"COPY --from=build /src/client /app/client",
+		"WORKDIR /src/server",
+		"COPY server/go.mod ./",
+		"RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags=\"-s -w\" -o /out/app .",
+		"COPY client /app/client",
 	} {
 		if !strings.Contains(string(dockerfile), want) {
 			t.Fatalf("Dockerfile missing %q:\n%s", want, dockerfile)
@@ -1958,6 +2233,94 @@ func TestRecoverDockerfileCopiesStaticFrontendAssetsWhenPresent(t *testing.T) {
 	}
 	if !strings.Contains(string(docs), "serves the same primary UI from `/`") {
 		t.Fatalf("container docs do not describe static UI parity:\n%s", docs)
+	}
+}
+
+func TestRecoverDockerfileCopiesStaticFrontendAssetsWithoutPackageJSON(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "client", "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join("client", "package.json"):   `{"scripts":{"test":"node --check src/main.js","build":"node --check src/main.js"}}`,
+		filepath.Join("server", "go.mod"):         "module github.com/hakobune8/arun-test/server\n\ngo 1.22\n",
+		filepath.Join("server", "main.go"):        frontendServingGoMain(),
+		filepath.Join("client", "index.html"):     `<!doctype html><link rel="stylesheet" href="styles.css"><script src="src/main.js"></script>`,
+		filepath.Join("client", "styles.css"):     "body { margin: 0; }\n",
+		filepath.Join("client", "src", "main.js"): "console.log('game')\n",
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "server"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	if _, err := recoverDockerfile(context.Background(), repo, "Add Dockerfile for a Go server that serves the static frontend from /"); err != nil {
+		t.Fatalf("recoverDockerfile() error = %v", err)
+	}
+	dockerfile, err := os.ReadFile(filepath.Join(repo, "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(dockerfile), "COPY client /app/client") {
+		t.Fatalf("Dockerfile does not copy package-less static frontend assets:\n%s", dockerfile)
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "docker",
+		Description: "Add Dockerfile for a Go server that serves static frontend assets.",
+	}))
+	if !status.Passed {
+		t.Fatalf("quality gate failed: %+v", status)
+	}
+}
+
+func TestRecoverDockerfileRepairsMissingAbsoluteFrontendAssets(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	files := map[string]string{
+		filepath.Join("server", "go.mod"):     "module github.com/hakobune8/arun-test/server\n\ngo 1.22\n",
+		filepath.Join("server", "main.go"):    "package main\n\nimport \"net/http\"\n\nfunc main() { http.HandleFunc(\"/healthz\", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(\"ok\")) }); http.ListenAndServe(\":8080\", nil) }\n",
+		filepath.Join("client", "index.html"): `<!doctype html><link rel="stylesheet" href="/style.css"><script src="/app.js"></script>`,
+	}
+	for path, content := range files {
+		full := filepath.Join(repo, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	if _, err := recoverDockerfile(context.Background(), repo, "Add Dockerfile for a Go server that serves the static frontend from /"); err != nil {
+		t.Fatalf("recoverDockerfile() error = %v", err)
+	}
+	for _, file := range []string{
+		filepath.Join("client", "styles.css"),
+		filepath.Join("client", "src", "main.js"),
+		"Dockerfile",
+	} {
+		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
+			t.Fatalf("%s not created: %v", file, err)
+		}
+	}
+	dockerfile, err := os.ReadFile(filepath.Join(repo, "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(dockerfile), "COPY client /app/client") {
+		t.Fatalf("Dockerfile does not copy repaired client assets:\n%s", dockerfile)
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "docker",
+		Description: "Add Dockerfile for a Go server that serves static frontend assets.",
+	}))
+	if !status.Passed {
+		t.Fatalf("quality gate failed after recovery: %+v", status)
 	}
 }
 
@@ -2083,6 +2446,113 @@ func TestHelmQualityGateFailsWithoutChart(t *testing.T) {
 	}))
 	if status.Passed {
 		t.Fatalf("quality gate passed without chart: %+v", status)
+	}
+}
+
+func TestArtifactContractQualityGateFailsWhenGeneratedAppLacksContract(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "client"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "client", "index.html"), []byte("<!doctype html><title>App</title>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "docs", "product-brief.md"), []byte("# Product Brief: App\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	status := validateQualityGate(context.Background(), repo, &QualityGate{
+		ValidationCommands: []string{artifactContractValidationCommand},
+	})
+	if status.Passed {
+		t.Fatalf("quality gate passed without artifact contract: %+v", status)
+	}
+	if !strings.Contains(qualityGateError(status), "docs/artifact-contract.md") {
+		t.Fatalf("quality gate error = %q, want artifact contract", qualityGateError(status))
+	}
+}
+
+func TestArtifactContractQualityGateAcceptsJapaneseContractSections(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	contract := `# 実装契約
+
+## 提供ルート
+- GET / は client/index.html を返す。
+
+## バックエンド
+- server/main.go に Go HTTP エントリポイントを置く。
+
+## フロントエンド
+- client/index.html, client/style.css, client/app.js を使う。
+
+## バリデーション
+- go test ./...
+`
+	if err := os.WriteFile(filepath.Join(repo, "docs", "product-brief.md"), []byte("# Product Brief: App\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "docs", "artifact-contract.md"), []byte(contract), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	status := validateQualityGate(context.Background(), repo, &QualityGate{
+		ValidationCommands: []string{artifactContractValidationCommand},
+	})
+	if !status.Passed {
+		t.Fatalf("quality gate failed for Japanese artifact contract: %s", qualityGateError(status))
+	}
+}
+
+func TestRecoverBuiltInSubtask_AnalystQualityGateFailureCreatesPlanningArtifacts(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "docs", "artifact-contract.md"), []byte("# 実装契約\n\n## バリデーション\n- go test ./...\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-planning-step"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"analyst": &recordingAgent{name: "analyst"}},
+		&runtime.Config{},
+	)
+	subtask := &Subtask{
+		ID:          "sprint-1-plan",
+		AgentName:   "analyst",
+		Description: "Sprint 1 product planning and design: create docs/product-brief.md and docs/artifact-contract.md for a Go net/http app with /healthz.",
+	}
+	applyDefaultQualityGate(subtask)
+	status := validateQualityGate(context.Background(), repo, subtask.QualityGate)
+	if status.Passed {
+		t.Fatalf("quality gate unexpectedly passed before recovery")
+	}
+
+	result, ok := o.recoverNoOpBuiltInSubtaskWithStatus(context.Background(), subtask, runSandbox, status)
+	if !ok || !result.Success {
+		t.Fatalf("recoverNoOpBuiltInSubtaskWithStatus() = (%+v, %v), want success", result, ok)
+	}
+	for _, file := range []string{filepath.Join("docs", "product-brief.md"), filepath.Join("docs", "artifact-contract.md")} {
+		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
+			t.Fatalf("%s not created: %v", file, err)
+		}
+	}
+	if result.QualityGate == nil || !result.QualityGate.Passed {
+		t.Fatalf("quality gate = %+v, want passed after recovery", result.QualityGate)
 	}
 }
 
@@ -2240,7 +2710,7 @@ func TestRecoverGoBackend_CreatesValidService(t *testing.T) {
 	if !strings.Contains(out, "Go net/http service") {
 		t.Fatalf("output = %q", out)
 	}
-	for _, file := range []string{"go.mod", filepath.Join("server", "main.go")} {
+	for _, file := range []string{filepath.Join("server", "go.mod"), filepath.Join("server", "main.go")} {
 		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
 			t.Fatalf("%s not created: %v", file, err)
 		}
@@ -2253,6 +2723,116 @@ func TestRecoverGoBackend_CreatesValidService(t *testing.T) {
 		if !strings.Contains(string(mainData), want) {
 			t.Fatalf("server/main.go missing %q:\n%s", want, mainData)
 		}
+	}
+}
+
+func TestRecoverGoBackendServesClientFromServerWorkingDirectory(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "client", "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join("client", "package.json"):   `{"scripts":{"test":"node --check src/main.js","build":"node --check src/main.js"}}`,
+		filepath.Join("client", "index.html"):     `<!doctype html><link rel="stylesheet" href="./styles.css"><script src="./src/main.js"></script>`,
+		filepath.Join("client", "styles.css"):     "body { color: white; }",
+		filepath.Join("client", "src", "main.js"): "console.log('ok');",
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	if _, err := recoverGoBackend(context.Background(), repo, "https://github.com/hakobune8/arun-test.git create /healthz with net/http and serve client assets"); err != nil {
+		t.Fatalf("recoverGoBackend() error = %v", err)
+	}
+	mainData, err := os.ReadFile(filepath.Join(repo, "server", "main.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(mainData), `filepath.Join("..", "client")`) {
+		t.Fatalf("server/main.go does not resolve ../client when run from server directory:\n%s", mainData)
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "frontend",
+		Description: "Add a browser game UI.",
+	}))
+	if !status.Passed {
+		t.Fatalf("frontend quality gate failed after backend recovery: %+v", status)
+	}
+}
+
+func TestGoQualityGateRejectsConflictingRootAndServerModules(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "server"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"go.mod":                          "module github.com/hakobune8/arun-test\n\ngo 1.22\n",
+		filepath.Join("server", "go.mod"): "module github.com/hakobune8/arun-test/server\n\ngo 1.22\n",
+		filepath.Join("server", "main.go"): `package main
+
+import "net/http"
+
+func main() {
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(` + "`" + `{"status":"ok"}` + "`" + `))
+	})
+	_ = http.ListenAndServe(":8080", nil)
+}
+`,
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "go-backend",
+		Description: "Create a minimal Go net/http server with /healthz.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed with nested server/go.mod: %+v", status)
+	}
+	if !strings.Contains(qualityGateError(status), "root go.mod conflicts") {
+		t.Fatalf("quality gate error = %q, want root go.mod conflict", qualityGateError(status))
+	}
+}
+
+func TestRecoverGoBackendRemovesConflictingRootModule(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "server"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"go.mod":                          "module github.com/hakobune8/arun-test\n\ngo 1.22\n",
+		filepath.Join("server", "go.mod"): "module github.com/hakobune8/arun-test/server\n\ngo 1.22\n",
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	if _, err := recoverGoBackend(context.Background(), repo, "Create a minimal Go net/http server with /healthz."); err != nil {
+		t.Fatalf("recoverGoBackend() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "go.mod")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("root go.mod still exists or stat failed unexpectedly: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "server", "go.mod")); err != nil {
+		t.Fatalf("server/go.mod missing after recovery: %v", err)
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "go-backend",
+		Description: "Create a minimal Go net/http server with /healthz.",
+	}))
+	if !status.Passed {
+		t.Fatalf("quality gate failed after recovery: %+v", status)
 	}
 }
 
@@ -2415,6 +2995,57 @@ func TestRecoverBuiltInSubtask_StaticFrontendQAAndRelease(t *testing.T) {
 	}
 }
 
+func TestRecoverFrontendReleaseDiscardsImplementationChanges(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if _, err := recoverFrontendStaticApp(repo, "新規性のあるインベーダーゲームを作成する"); err != nil {
+		t.Fatalf("recoverFrontendStaticApp() error = %v", err)
+	}
+	if err := runCmd(context.Background(), repo, "git", "init", "-b", "main"); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+	if err := runCmd(context.Background(), repo, "git", "config", "user.email", "arun@example.com"); err != nil {
+		t.Fatalf("git config email: %v", err)
+	}
+	if err := runCmd(context.Background(), repo, "git", "config", "user.name", "ARUN"); err != nil {
+		t.Fatalf("git config name: %v", err)
+	}
+	if err := runCmd(context.Background(), repo, "git", "add", "."); err != nil {
+		t.Fatalf("git add: %v", err)
+	}
+	if err := runCmd(context.Background(), repo, "git", "commit", "-m", "baseline"); err != nil {
+		t.Fatalf("git commit: %v", err)
+	}
+	original, err := os.ReadFile(filepath.Join(repo, "client", "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "client", "index.html"), []byte("<!doctype html><title>Corrupted</title>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := recoverFrontendRelease(repo, "Sprint 1 reporting: summarize validation evidence."); err != nil {
+		t.Fatalf("recoverFrontendRelease() error = %v", err)
+	}
+	restored, err := os.ReadFile(filepath.Join(repo, "client", "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored = bytes.ReplaceAll(restored, []byte("\r\n"), []byte("\n"))
+	original = bytes.ReplaceAll(original, []byte("\r\n"), []byte("\n"))
+	if !bytes.Equal(restored, original) {
+		t.Fatalf("client/index.html was not restored:\n%s", restored)
+	}
+	changelog, err := os.ReadFile(filepath.Join(repo, "CHANGELOG.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(changelog), "v0.1.0") {
+		t.Fatalf("CHANGELOG.md missing release entry:\n%s", changelog)
+	}
+}
+
 func TestRecoverBuiltInSubtask_FrontendRemovesUnservedAlternateUIAndArtifacts(t *testing.T) {
 	t.Parallel()
 
@@ -2558,6 +3189,20 @@ Target baseline:
 	for _, want := range []string{"Recovery Plan", "net/http", "/healthz", "go test ./..."} {
 		if !strings.Contains(string(body), want) {
 			t.Fatalf("planning artifact missing %q:\n%s", want, body)
+		}
+	}
+	for _, file := range []string{filepath.Join("docs", "product-brief.md"), filepath.Join("docs", "artifact-contract.md")} {
+		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
+			t.Fatalf("%s not created: %v", file, err)
+		}
+	}
+	contract, err := os.ReadFile(filepath.Join(repo, "docs", "artifact-contract.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Primary route", "Frontend", "Backend", "Validation"} {
+		if !strings.Contains(string(contract), want) {
+			t.Fatalf("artifact contract missing %q:\n%s", want, contract)
 		}
 	}
 	if result.QualityGate == nil || !result.QualityGate.Passed {

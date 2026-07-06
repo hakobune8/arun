@@ -30,7 +30,7 @@ import (
 
 func (o *Orchestrator) recoverBuiltInSubtask(ctx context.Context, subtask *Subtask, runSandbox sandbox.Sandbox, runtimeErr error) (SubtaskResult, bool) {
 	if subtask.AgentName == "frontend" && (shouldRecoverFrontendScaffold(runSandbox.RootDir(), subtask.Description) || missingReferencedFrontendAssetsExist(runSandbox.RootDir()) || unservedAlternateFrontendExists(runSandbox.RootDir()) || unservedRootFrontendAssetsExist(runSandbox.RootDir())) {
-		out, err := recoverFrontendStaticApp(runSandbox.RootDir(), subtask.Description)
+		out, err := recoverFrontendAndServingBackend(ctx, runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, runtimeErr, err), err == nil
 	}
 	if frontendProjectEvidenceExists(runSandbox.RootDir()) {
@@ -117,8 +117,11 @@ func (o *Orchestrator) recoverNoOpBuiltInSubtaskWithStatus(ctx context.Context, 
 	defer cancel()
 
 	switch subtask.AgentName {
+	case "analyst":
+		out, err := recoverScrumPlanning(runSandbox.RootDir(), subtask)
+		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 	case "frontend":
-		out, err := recoverFrontendStaticApp(runSandbox.RootDir(), subtask.Description)
+		out, err := recoverFrontendAndServingBackend(ctx, runSandbox.RootDir(), subtask.Description)
 		return o.recoveredSubtaskResult(subtask, runSandbox, out, errors.New(qualityGateError(status)), err), err == nil
 	case "docs":
 		if staticFrontendProjectExists(runSandbox.RootDir()) {
@@ -163,6 +166,23 @@ func (o *Orchestrator) recoverNoOpBuiltInSubtaskWithStatus(ctx context.Context, 
 	}
 }
 
+func recoverFrontendAndServingBackend(_ context.Context, root, description string) (string, error) {
+	out, err := recoverFrontendStaticApp(root, description)
+	if err != nil {
+		return "", err
+	}
+	if generatedGoModuleExists(root) || generatedGoEntrypointExists(root) {
+		recoveryCtx, cancel := fallbackRecoveryContext()
+		defer cancel()
+		backendOut, err := recoverGoBackend(recoveryCtx, root, description)
+		if err != nil {
+			return "", err
+		}
+		out = strings.TrimSpace(out + "\n" + backendOut)
+	}
+	return out, nil
+}
+
 func recoverScrumPlanning(root string, subtask *Subtask) (string, error) {
 	if subtask == nil {
 		return "", errors.New("missing subtask")
@@ -170,6 +190,16 @@ func recoverScrumPlanning(root string, subtask *Subtask) (string, error) {
 	docsDir := filepath.Join(root, "docs", "sprint-planning")
 	if err := os.MkdirAll(docsDir, 0o755); err != nil {
 		return "", err
+	}
+	title := inferFrontendProductTitle(subtask.Description, root)
+	if strings.TrimSpace(title) == "" {
+		title = "ARUN Sprint App"
+	}
+	if err := os.WriteFile(filepath.Join(root, "docs", "product-brief.md"), []byte(frontendProductBrief(title, subtask.Description)), 0o600); err != nil {
+		return "", fmt.Errorf("write docs/product-brief.md: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "docs", "artifact-contract.md"), []byte(artifactContractDoc(title, inferServerModulePath(subtask.Description, root))), 0o600); err != nil {
+		return "", fmt.Errorf("write docs/artifact-contract.md: %w", err)
 	}
 	safeID := strings.TrimSpace(subtask.ID)
 	if safeID == "" {
@@ -184,14 +214,17 @@ func recoverScrumPlanning(root string, subtask *Subtask) (string, error) {
 			"## Scope\n\n"+
 			"%s\n\n"+
 			"## Implementation Direction\n\n"+
+			"- Treat `docs/product-brief.md` as the product source of truth.\n"+
+			"- Treat `docs/artifact-contract.md` as the connection contract for routes,\n"+
+			"  frontend assets, backend entrypoints, module path, and validation commands.\n"+
 			"- Start with the smallest reviewable Go `net/http` service increment.\n"+
 			"- Keep `/healthz` available and covered by tests.\n"+
 			"- Add or preserve a lightweight frontend/static response only when it helps the\n"+
 			"  repository goal.\n"+
 			"- Keep follow-up implementation stages responsible for concrete code changes.\n\n"+
 			"## Validation Expectations\n\n"+
-			"- Run `go test ./...` when Go sources are present.\n"+
-			"- Run `go vet ./...` when the Go toolchain is available.\n"+
+			"- Run `cd server && go test ./...` when Go sources are present.\n"+
+			"- Run `cd server && go vet ./...` when the Go toolchain is available.\n"+
 			"- Record smoke-test evidence in repository documentation.\n",
 		strings.TrimSpace(subtask.ID),
 		strings.TrimSpace(subtask.Description),
@@ -199,7 +232,7 @@ func recoverScrumPlanning(root string, subtask *Subtask) (string, error) {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		return "", fmt.Errorf("write planning artifact: %w", err)
 	}
-	return fmt.Sprintf("Recovered analyst planning by writing %s", filepath.ToSlash(filepath.Join("docs", "sprint-planning", safeID+".md"))), nil
+	return fmt.Sprintf("Recovered analyst planning, product brief, and artifact contract by writing %s", filepath.ToSlash(filepath.Join("docs", "sprint-planning", safeID+".md"))), nil
 }
 
 func fallbackRecoveryContext() (context.Context, context.CancelFunc) {
@@ -284,15 +317,18 @@ func recoverGoBackend(ctx context.Context, root, description string) (string, er
 			return "", err
 		}
 	}
-	modulePath := inferModulePath(description, root)
-	if !fileExists(filepath.Join(root, "go.mod")) {
-		if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module "+modulePath+"\n\ngo 1.22\n"), 0o600); err != nil {
-			return "", fmt.Errorf("write go.mod: %w", err)
-		}
-	}
 	serverDir := generatedAppServerDir(root, description)
 	if err := os.MkdirAll(filepath.Join(root, serverDir), 0o755); err != nil {
 		return "", fmt.Errorf("create %s: %w", serverDir, err)
+	}
+	modulePath := inferServerModulePath(description, root)
+	if !fileExists(filepath.Join(root, serverDir, "go.mod")) {
+		if err := os.WriteFile(filepath.Join(root, serverDir, "go.mod"), []byte("module "+modulePath+"\n\ngo 1.22\n"), 0o600); err != nil {
+			return "", fmt.Errorf("write %s/go.mod: %w", serverDir, err)
+		}
+	}
+	if err := repairGeneratedGoModuleLayout(root); err != nil {
+		return "", err
 	}
 	main := frontendServingGoMain()
 	if err := os.WriteFile(filepath.Join(root, serverDir, "main.go"), []byte(main), 0o600); err != nil {
@@ -369,6 +405,39 @@ func TestRootHandlerServesStaticIndexWhenPresent(t *testing.T) {
 	}
 }
 
+func TestRootHandlerServesStaticIndexFromServerWorkingDirectory(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "client"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "server"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "client", "index.html"), []byte("<!doctype html><title>Game</title>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(previous) }()
+	if err := os.Chdir(filepath.Join(dir, "server")); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	rootHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if !strings.Contains(rec.Body.String(), "<title>Game</title>") {
+		t.Fatalf("body = %q, want static index", rec.Body.String())
+	}
+}
+
 func TestRootHandlerServesFrontendAssets(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "client", "src"), 0o755); err != nil {
@@ -412,10 +481,10 @@ func TestRootHandlerServesFrontendAssets(t *testing.T) {
 	if !commandAvailable("go") {
 		return "Created minimal Go net/http service with / and /healthz. Go toolchain is unavailable; validation used static artifact checks.", nil
 	}
-	if err := runShell(ctx, root, "go test ./..."); err != nil {
+	if err := runShell(ctx, filepath.Join(root, serverDir), "go test ./..."); err != nil {
 		return "", err
 	}
-	if err := runShell(ctx, root, "go vet ./..."); err != nil {
+	if err := runShell(ctx, filepath.Join(root, serverDir), "go vet ./..."); err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("Created minimal Go net/http service with / and /healthz under %s.", filepath.ToSlash(serverDir)), nil
@@ -430,12 +499,21 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 )
 
-const staticDir = "client"
+func staticDir() string {
+	for _, dir := range []string{"client", filepath.Join("..", "client")} {
+		if _, err := os.Stat(filepath.Join(dir, "index.html")); err == nil {
+			return dir
+		}
+	}
+	return "client"
+}
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
+	dir := staticDir()
 	if r.URL.Path != "/" {
 		if assetPath, ok := staticAssetPath(r.URL.Path); ok {
 			http.ServeFile(w, r, assetPath)
@@ -444,8 +522,8 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := os.Stat(path.Join(staticDir, "index.html")); err == nil {
-		http.ServeFile(w, r, path.Join(staticDir, "index.html"))
+	if _, err := os.Stat(filepath.Join(dir, "index.html")); err == nil {
+		http.ServeFile(w, r, filepath.Join(dir, "index.html"))
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -453,12 +531,13 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func staticAssetPath(urlPath string) (string, bool) {
+	dir := staticDir()
 	clean := path.Clean("/" + urlPath)
 	switch {
 	case clean == "/styles.css":
-		return path.Join(staticDir, "styles.css"), true
+		return filepath.Join(dir, "styles.css"), true
 	case strings.HasPrefix(clean, "/src/") && strings.HasSuffix(clean, ".js"):
-		return path.Join(staticDir, strings.TrimPrefix(clean, "/")), true
+		return filepath.Join(dir, strings.TrimPrefix(clean, "/")), true
 	default:
 		return "", false
 	}
@@ -473,7 +552,11 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", rootHandler)
 	mux.HandleFunc("/healthz", healthzHandler)
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
 `
 }
@@ -492,6 +575,17 @@ func shouldResetCanonicalGoFallback(root, description string) bool {
 
 func generatedAppServerDir(root, description string) string {
 	return "server"
+}
+
+func generatedGoModuleExists(root string) bool {
+	return fileExists(filepath.Join(root, "server", "go.mod")) || fileExists(filepath.Join(root, "go.mod"))
+}
+
+func generatedGoModuleDir(root string) string {
+	if fileExists(filepath.Join(root, "server", "go.mod")) {
+		return "server"
+	}
+	return "."
 }
 
 func generatedGoEntrypointExists(root string) bool {
@@ -545,6 +639,22 @@ func removeGeneratedGoFiles(root string) error {
 	})
 }
 
+func repairGeneratedGoModuleLayout(root string) error {
+	if !fileExists(filepath.Join(root, "server", "go.mod")) {
+		return nil
+	}
+	for _, name := range []string{
+		"go.mod",
+		"go.sum",
+	} {
+		path := filepath.Join(root, name)
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("remove conflicting root Go module %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
 func recoverFrontendStaticApp(root, description string) (string, error) {
 	if err := os.MkdirAll(filepath.Join(root, "client", "src"), 0o755); err != nil {
 		return "", fmt.Errorf("create client src dir: %w", err)
@@ -570,8 +680,8 @@ func recoverFrontendStaticApp(root, description string) (string, error) {
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --check client/src/main.js",
-    "build": "node --check client/src/main.js"
+    "test": "node --check src/main.js",
+    "build": "node --check src/main.js"
   }
 }
 `, sanitizePackageName(projectName))
@@ -851,15 +961,16 @@ restart();
 tick();
 `
 	files := map[string]string{
-		"package.json":                            packageJSON,
+		filepath.Join("client", "package.json"):   packageJSON,
 		filepath.Join("client", "index.html"):     indexHTML,
 		filepath.Join("client", "styles.css"):     stylesCSS,
 		filepath.Join("client", "src", "main.js"): mainJS,
 		"README.md": frontendReadme(title, description),
-		filepath.Join("docs", "product-brief.md"): frontendProductBrief(title, description),
-		filepath.Join("docs", "smoke-test.md"):    frontendSmokeTest(description),
-		filepath.Join("docs", "testing.md"):       frontendTestingDoc(description),
-		"CHANGELOG.md":                            frontendChangelog(description),
+		filepath.Join("docs", "product-brief.md"):     frontendProductBrief(title, description),
+		filepath.Join("docs", "artifact-contract.md"): artifactContractDoc(title, inferServerModulePath(description, root)),
+		filepath.Join("docs", "smoke-test.md"):        frontendSmokeTest(description),
+		filepath.Join("docs", "testing.md"):           frontendTestingDoc(description),
+		"CHANGELOG.md":                                frontendChangelog(description),
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o600); err != nil {
@@ -892,10 +1003,11 @@ func recoverFrontendDocs(root, description string) (string, error) {
 	}
 	files := map[string]string{
 		"README.md": frontendReadme(title, description),
-		filepath.Join("docs", "product-brief.md"): frontendProductBrief(title, description),
-		filepath.Join("docs", "smoke-test.md"):    frontendSmokeTest(description),
-		filepath.Join("docs", "testing.md"):       frontendTestingDoc(description),
-		"CHANGELOG.md":                            frontendChangelog(description),
+		filepath.Join("docs", "product-brief.md"):     frontendProductBrief(title, description),
+		filepath.Join("docs", "artifact-contract.md"): artifactContractDoc(title, inferServerModulePath(description, root)),
+		filepath.Join("docs", "smoke-test.md"):        frontendSmokeTest(description),
+		filepath.Join("docs", "testing.md"):           frontendTestingDoc(description),
+		"CHANGELOG.md":                                frontendChangelog(description),
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o600); err != nil {
@@ -925,6 +1037,9 @@ func recoverFrontendQA(root, description string) (string, error) {
 }
 
 func recoverFrontendRelease(root, description string) (string, error) {
+	if err := discardReportOnlyImplementationChanges(root); err != nil {
+		return "", err
+	}
 	if err := os.WriteFile(filepath.Join(root, "CHANGELOG.md"), []byte(frontendChangelog(description)), 0o600); err != nil {
 		return "", fmt.Errorf("write CHANGELOG.md: %w", err)
 	}
@@ -932,6 +1047,36 @@ func recoverFrontendRelease(root, description string) (string, error) {
 		return "", err
 	}
 	return "Added CHANGELOG.md for the static frontend scaffold release.", nil
+}
+
+func discardReportOnlyImplementationChanges(root string) error {
+	if !commandAvailable("git") {
+		return nil
+	}
+	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
+	cmd.Dir = root
+	if err := cmd.Run(); err != nil {
+		return nil
+	}
+	targets := []string{"client", "server", "Dockerfile", "charts", "k8s", ".github"}
+	diffArgs := append([]string{"diff", "--name-only", "--"}, targets...)
+	cmd = exec.Command("git", diffArgs...)
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("inspect report-only implementation changes: %w", err)
+	}
+	changed := strings.Fields(string(out))
+	if len(changed) == 0 {
+		return nil
+	}
+	args := append([]string{"checkout", "--"}, changed...)
+	cmd = exec.Command("git", args...)
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("discard report-only implementation changes: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 func ensureGoServesRootFrontendAssets(root string) error {
@@ -958,11 +1103,15 @@ func ensureGoServesRootFrontendAssets(root string) error {
 }
 
 func recoverGoQA(ctx context.Context, root, description string) (string, error) {
-	if !fileExists(filepath.Join(root, "go.mod")) || !generatedGoEntrypointExists(root) {
+	if !generatedGoModuleExists(root) || !generatedGoEntrypointExists(root) {
 		if _, err := recoverGoBackend(ctx, root, description); err != nil {
 			return "", err
 		}
 	}
+	if err := repairGeneratedGoModuleLayout(root); err != nil {
+		return "", err
+	}
+	moduleDir := generatedGoModuleDir(root)
 	if err := repairDockerfileGoSumAssumption(root); err != nil {
 		return "", err
 	}
@@ -976,14 +1125,14 @@ func recoverGoQA(ctx context.Context, root, description string) (string, error) 
 		"## Automated validation",
 		"",
 		"```sh",
-		"go test ./...",
-		"go vet ./...",
+		"cd server && go test ./...",
+		"cd server && go vet ./...",
 		"```",
 		"",
 		"## Smoke check",
 		"",
 		"```sh",
-		"go run ./server",
+		"cd server && go run .",
 		"curl http://127.0.0.1:8080/healthz",
 		"```",
 		"",
@@ -1001,9 +1150,9 @@ func recoverGoQA(ctx context.Context, root, description string) (string, error) 
 	smoke := strings.Join([]string{
 		"# Smoke Test",
 		"",
-		"1. Run `go test ./...`.",
-		"2. Run `go vet ./...`.",
-		"3. Start the service with `go run ./server`.",
+		"1. Run `cd server && go test ./...`.",
+		"2. Run `cd server && go vet ./...`.",
+		"3. Start the service with `cd server && go run .`.",
 		"4. Request `http://127.0.0.1:8080/healthz` and confirm the JSON status is `ok`.",
 		"5. Request `/` and confirm the service returns a successful response.",
 		"",
@@ -1026,16 +1175,16 @@ func recoverGoQA(ctx context.Context, root, description string) (string, error) 
 	if !commandAvailable("go") {
 		return "Added Go QA evidence docs. Go toolchain is unavailable; validation used static artifact checks.", nil
 	}
-	if err := runShell(ctx, root, "go mod tidy"); err != nil {
+	if err := runShell(ctx, filepath.Join(root, moduleDir), "go mod tidy"); err != nil {
 		return "", err
 	}
-	if err := runShell(ctx, root, "go test ./..."); err != nil {
+	if err := runShell(ctx, filepath.Join(root, moduleDir), "go test ./..."); err != nil {
 		return "", err
 	}
-	if err := runShell(ctx, root, "go vet ./..."); err != nil {
+	if err := runShell(ctx, filepath.Join(root, moduleDir), "go vet ./..."); err != nil {
 		return "", err
 	}
-	return "Added Go QA evidence docs and verified go test ./... and go vet ./....", nil
+	return "Added Go QA evidence docs and verified cd server && go test ./... and go vet ./....", nil
 }
 
 func repairDockerfileGoSumAssumption(root string) error {
@@ -1135,16 +1284,16 @@ func frontendReadme(title, description string) string {
 		"",
 		"## Run",
 		"",
-		"Run the Go server with `go run ./server` and open `http://127.0.0.1:8080/`, or open `client/index.html` directly for a static browser review.",
+		"Run the Go server with `cd server && go run .` and open `http://127.0.0.1:8080/`, or open `client/index.html` directly for a static browser review.",
 		"",
 		"## Validate",
 		"",
 		"```sh",
-		"npm test",
-		"npm run build",
+		"npm --prefix client test",
+		"npm --prefix client run build",
 		"```",
 		"",
-		"Both scripts use `node --check` and do not require package installation.",
+		"Both scripts use `node --check` from `client/package.json` and do not require package installation.",
 		"",
 	}, "\n")
 }
@@ -1168,7 +1317,7 @@ func frontendProductBrief(title, _ string) string {
 		"- The primary route `/` serves the browser game from `client/` when run through the Go server in `server/`.",
 		"- Space changes the gravity lane between Floor and Ceiling.",
 		"- A score is awarded only when the defender is aligned with the invader and on the same lane.",
-		"- The Docker runtime image includes the client assets required for `/` to serve the same UI as local `go run ./server`.",
+		"- The Docker runtime image includes the client assets required for `/` to serve the same UI as local `cd server && go run .`.",
 		"",
 		"## Non-Goals",
 		"",
@@ -1179,18 +1328,66 @@ func frontendProductBrief(title, _ string) string {
 	}, "\n")
 }
 
+func artifactContractDoc(title, modulePath string) string {
+	if strings.TrimSpace(title) == "" {
+		title = "ARUN Sprint App"
+	}
+	if strings.TrimSpace(modulePath) == "" {
+		modulePath = "github.com/hakobune8/arun-test"
+	}
+	return strings.Join([]string{
+		"# Artifact Contract: " + title,
+		"",
+		"This contract is the implementation source of truth for how generated artifacts connect. Product intent lives in `docs/product-brief.md`; this file defines the route, file, module, and validation expectations that backend, frontend, QA, Docker, Helm, and documentation work must preserve.",
+		"",
+		"## Primary route",
+		"",
+		"- `/` serves the primary browser experience.",
+		"- `/healthz` returns a JSON health response.",
+		"",
+		"## Frontend",
+		"",
+		"- Directory: `client/`.",
+		"- Package file: `client/package.json`.",
+		"- Entrypoint: `client/index.html`.",
+		"- Required local assets: `client/styles.css` and `client/src/main.js`.",
+		"- HTML must not reference local CSS or JavaScript files that are absent from the repository.",
+		"",
+		"## Backend",
+		"",
+		"- Language: Go.",
+		"- Module path: `" + modulePath + "`.",
+		"- Module file: `server/go.mod`.",
+		"- Entrypoint: `server/main.go`.",
+		"- The Go server must serve `/` from `client/index.html` and must serve every local CSS or JavaScript file referenced by that HTML.",
+		"",
+		"## Deployment",
+		"",
+		"- Docker and Kubernetes artifacts must package the same backend and frontend paths defined above.",
+		"- Helm chart templates must expose the application service and health checks without introducing a separate product path.",
+		"",
+		"## Validation",
+		"",
+		"- `cd server && go test ./...` passes when Go tooling is available.",
+		"- `cd server && go vet ./...` passes when Go tooling is available.",
+		"- Frontend smoke validation confirms `/` returns HTML and that referenced local CSS/JS assets exist and are served.",
+		"- QA must treat any mismatch between this contract and repository artifacts as release-blocking.",
+		"",
+	}, "\n")
+}
+
 func frontendSmokeTest(description string) string {
 	return strings.Join([]string{
 		"# Smoke Test",
 		"",
-		"1. Start the Go server with `go run ./server` and open `/`, or open `client/index.html` in a browser.",
+		"1. Start the Go server with `cd server && go run .` and open `/`, or open `client/index.html` in a browser.",
 		"2. Confirm the arena, score display, lives display, gravity display, target lane display, and restart button render without layout overlap.",
 		"3. Press ArrowLeft and ArrowRight and confirm the defender moves horizontally.",
 		"4. Press Space and confirm the gravity display flips between Floor and Ceiling.",
 		"5. Press Space while aligned on the same lane as the invader and confirm the score increases.",
 		"6. Let an invader reach the bottom and confirm lives decrement.",
 		"7. Click `Restart` and confirm score returns to 0, lives returns to 3, and gravity returns to Floor.",
-		"8. Run `npm test` and `npm run build`.",
+		"8. Run `npm --prefix client test` and `npm --prefix client run build`.",
 		"",
 		"## Product Coverage",
 		"",
@@ -1209,11 +1406,11 @@ func frontendTestingDoc(description string) string {
 		"Run the configured package scripts when a JavaScript runtime is available:",
 		"",
 		"```sh",
-		"npm test",
-		"npm run build",
+		"npm --prefix client test",
+		"npm --prefix client run build",
 		"```",
 		"",
-		"The generated scaffold keeps both commands dependency-free by using syntax checks for `client/src/main.js`.",
+		"The generated scaffold keeps both commands dependency-free by using syntax checks from `client/package.json`.",
 		"",
 		"## Manual smoke check",
 		"",
@@ -1247,13 +1444,19 @@ func frontendChangelog(description string) string {
 		"## Release readiness",
 		"",
 		"- Review the generated static files before publishing.",
-		"- Run `npm test` and `npm run build` when a JavaScript runtime is available.",
+		"- Run `npm --prefix client test` and `npm --prefix client run build` when a JavaScript runtime is available.",
 		"- Perform the manual browser smoke check documented in `docs/testing.md`.",
 		"",
 	}, "\n")
 }
 
 func cleanupGeneratedArtifactHygiene(root string) error {
+	if err := repairGeneratedGoModuleLayout(root); err != nil {
+		return err
+	}
+	if err := repairGeneratedFrontendPackageLayout(root); err != nil {
+		return err
+	}
 	if err := migrateGeneratedRootAppLayout(root); err != nil {
 		return err
 	}
@@ -1390,7 +1593,10 @@ func migrateGeneratedRootAppLayout(root string) error {
 }
 
 func rewriteGeneratedPackageJSONForStaticLayout(root string) error {
-	path := filepath.Join(root, "package.json")
+	path := filepath.Join(root, "client", "package.json")
+	if !fileExists(path) {
+		path = filepath.Join(root, "package.json")
+	}
 	if !fileExists(path) {
 		return nil
 	}
@@ -1398,11 +1604,36 @@ func rewriteGeneratedPackageJSONForStaticLayout(root string) error {
 	if err != nil {
 		return err
 	}
-	updated := strings.ReplaceAll(string(data), "node --check src/main.js", "node --check client/src/main.js")
+	updated := strings.ReplaceAll(string(data), "node --check client/src/main.js", "node --check src/main.js")
 	if updated == string(data) {
 		return nil
 	}
 	return os.WriteFile(path, []byte(updated), 0o600)
+}
+
+func repairGeneratedFrontendPackageLayout(root string) error {
+	rootPkg := filepath.Join(root, "package.json")
+	if !fileExists(rootPkg) || !fileExists(filepath.Join(root, "client", "index.html")) {
+		return nil
+	}
+	data, err := os.ReadFile(rootPkg)
+	if err != nil {
+		return err
+	}
+	content := strings.ReplaceAll(string(data), "node --check client/src/main.js", "node --check src/main.js")
+	clientPkg := filepath.Join(root, "client", "package.json")
+	if err := os.MkdirAll(filepath.Dir(clientPkg), 0o755); err != nil {
+		return err
+	}
+	if !fileExists(clientPkg) {
+		if err := os.WriteFile(clientPkg, []byte(content), 0o600); err != nil {
+			return err
+		}
+	}
+	if err := os.Remove(rootPkg); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 func referencedRootFrontendAssets(indexPath string) ([]string, error) {
@@ -1426,9 +1657,10 @@ func referencedRootFrontendAssets(indexPath string) ([]string, error) {
 			}
 			ref := strings.TrimPrefix(remaining[:end], "./")
 			remaining = remaining[end+1:]
-			if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") || strings.HasPrefix(ref, "//") || strings.HasPrefix(ref, "/") {
+			if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") || strings.HasPrefix(ref, "//") {
 				continue
 			}
+			ref = strings.TrimPrefix(ref, "/")
 			clean := filepath.Clean(ref)
 			if strings.HasPrefix(clean, "..") {
 				continue
@@ -1728,7 +1960,7 @@ func promptContaminationCutIndex(content string) int {
 }
 
 func recoverGoCI(ctx context.Context, root string) (string, error) {
-	if !fileExists(filepath.Join(root, "go.mod")) || !generatedGoEntrypointExists(root) {
+	if !generatedGoModuleExists(root) || !generatedGoEntrypointExists(root) {
 		return "", fmt.Errorf("go service files are required before CI recovery")
 	}
 	testDir := "server"
@@ -1791,11 +2023,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
-      - run: go test ./...
-      - run: go vet ./...
+	      - uses: actions/setup-go@v5
+	        with:
+	          go-version: "1.22"
+	      - run: go test ./...
+	        working-directory: server
+	      - run: go vet ./...
+	        working-directory: server
 `
 	if err := os.WriteFile(filepath.Join(workflowDir, "go.yml"), []byte(workflow), 0o600); err != nil {
 		return "", fmt.Errorf("write workflow: %w", err)
@@ -1808,36 +2042,55 @@ jobs:
 	if !commandAvailable("go") {
 		return "Added Go handler tests and GitHub Actions workflow. Go toolchain is unavailable; validation used static artifact checks.", nil
 	}
-	if err := runShell(ctx, root, "go test ./..."); err != nil {
+	if err := runShell(ctx, filepath.Join(root, testDir), "go test ./..."); err != nil {
 		return "", err
 	}
-	if err := runShell(ctx, root, "go vet ./..."); err != nil {
+	if err := runShell(ctx, filepath.Join(root, testDir), "go vet ./..."); err != nil {
 		return "", err
 	}
 	return "Added Go handler tests and GitHub Actions workflow.", nil
 }
 
 func recoverDockerfile(ctx context.Context, root, description string) (string, error) {
-	if !fileExists(filepath.Join(root, "go.mod")) || !generatedGoEntrypointExists(root) {
+	if !generatedGoModuleExists(root) || !generatedGoEntrypointExists(root) {
 		if _, err := recoverGoBackend(ctx, root, description); err != nil {
 			return "", err
 		}
 	}
+	if missingReferencedFrontendAssetsExist(root) {
+		if _, err := recoverFrontendStaticApp(root, description); err != nil {
+			return "", err
+		}
+		if _, err := recoverGoBackend(ctx, root, description); err != nil {
+			return "", err
+		}
+	}
+	if err := repairGeneratedGoModuleLayout(root); err != nil {
+		return "", err
+	}
+	if staticFrontendProjectExists(root) {
+		if err := runShell(ctx, root, frontendValidationCommand); err != nil {
+			if _, recoverErr := recoverGoBackend(ctx, root, description); recoverErr != nil {
+				return "", recoverErr
+			}
+		}
+		if err := runShell(ctx, root, servedFrontendRuntimeValidationCommand); err != nil {
+			if _, recoverErr := recoverGoBackend(ctx, root, description); recoverErr != nil {
+				return "", recoverErr
+			}
+		}
+	}
 	staticAssetCopies := ""
 	if staticFrontendProjectExists(root) {
-		staticAssetCopies = `COPY --from=build /src/client /app/client
+		staticAssetCopies = `COPY client /app/client
 `
 	}
-	buildTarget := "."
-	if fileExists(filepath.Join(root, "server", "main.go")) {
-		buildTarget = "./server"
-	}
 	dockerfile := fmt.Sprintf(`FROM golang:1.22-alpine AS build
-WORKDIR /src
-COPY go.mod ./
+WORKDIR /src/server
+COPY server/go.mod ./
 RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/app %s
+COPY server/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/app .
 
 FROM alpine:3.20
 RUN addgroup -S app && adduser -S app -G app
@@ -1848,7 +2101,7 @@ USER app
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
 ENTRYPOINT ["/app/app"]
-`, buildTarget, staticAssetCopies)
+`, staticAssetCopies)
 	dockerignore := `.git
 run.log
 run_state.json
@@ -1884,7 +2137,7 @@ node_modules
 		"curl http://127.0.0.1:8080/ | grep '<title>'",
 		"```",
 		"",
-		"The runtime image copies `client/` into `/app/client`, so the container serves the same primary UI from `/` that local `go run ./server` serves.",
+		"The runtime image copies `client/` into `/app/client`, so the container serves the same primary UI from `/` that local `cd server && go run .` serves.",
 		"",
 	}, "\n")
 	if err := os.WriteFile(filepath.Join(docsDir, "container-run.md"), []byte(containerDocs), 0o600); err != nil {
@@ -2018,7 +2271,7 @@ func recoverDocs(root, description string) (string, error) {
 		"## Run",
 		"",
 		"```sh",
-		"go run ./server",
+		"cd server && go run .",
 		"```",
 		"",
 		"The service listens on `:8080`.",
@@ -2031,8 +2284,8 @@ func recoverDocs(root, description string) (string, error) {
 		"## Test",
 		"",
 		"```sh",
-		"go test ./...",
-		"go vet ./...",
+		"cd server && go test ./...",
+		"cd server && go vet ./...",
 		"```",
 		"",
 	}, "\n")
@@ -2079,6 +2332,17 @@ func inferModulePath(description, root string) string {
 		return "arun-scenario"
 	}
 	return sanitizePackageName(name)
+}
+
+func inferServerModulePath(description, root string) string {
+	modulePath := strings.TrimSuffix(inferModulePath(description, root), "/")
+	if modulePath == "" {
+		return "arun-scenario/server"
+	}
+	if strings.HasSuffix(modulePath, "/server") {
+		return modulePath
+	}
+	return modulePath + "/server"
 }
 
 func githubModuleFromGitRemote(root string) string {
@@ -2234,11 +2498,12 @@ func repositoryIsEffectivelyEmpty(root string) bool {
 }
 
 func staticFrontendProjectExists(root string) bool {
-	return fileExists(filepath.Join(root, "package.json")) &&
-		((fileExists(filepath.Join(root, "client", "index.html")) &&
-			fileExists(filepath.Join(root, "client", "src", "main.js"))) ||
-			(fileExists(filepath.Join(root, "index.html")) &&
-				fileExists(filepath.Join(root, "src", "main.js"))))
+	return (fileExists(filepath.Join(root, "client", "index.html")) &&
+		(fileExists(filepath.Join(root, "client", "src", "main.js")) ||
+			fileExists(filepath.Join(root, "client", "styles.css")))) ||
+		(fileExists(filepath.Join(root, "index.html")) &&
+			(fileExists(filepath.Join(root, "src", "main.js")) ||
+				fileExists(filepath.Join(root, "styles.css"))))
 }
 
 func frontendProjectEvidenceExists(root string) bool {
