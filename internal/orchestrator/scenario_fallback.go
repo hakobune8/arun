@@ -2082,7 +2082,7 @@ func markdownHasInvalidRepositoryClaims(root, content string) bool {
 	}
 	for _, rel := range []string{
 		filepath.Join(".github", "workflows", "ci.yml"),
-		filepath.Join("values.schema.json"),
+		"values.schema.json",
 	} {
 		relSlash := filepath.ToSlash(rel)
 		if strings.Contains(content, relSlash) && !fileExists(filepath.Join(root, rel)) {
