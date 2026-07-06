@@ -1886,10 +1886,10 @@ func main() {
 	if fileExists(filepath.Join(repo, "cmd", "server", "main.go")) {
 		t.Fatalf("broken generated Go file still exists")
 	}
-	if err := runShell(context.Background(), repo, "go test ./..."); err != nil {
+	if err := runShell(context.Background(), filepath.Join(repo, "server"), "go test ./..."); err != nil {
 		t.Fatalf("go test after recovery: %v", err)
 	}
-	if err := runShell(context.Background(), repo, "go vet ./..."); err != nil {
+	if err := runShell(context.Background(), filepath.Join(repo, "server"), "go vet ./..."); err != nil {
 		t.Fatalf("go vet after recovery: %v", err)
 	}
 }
@@ -1911,7 +1911,7 @@ func TestRecoverGoBackendServesExistingStaticIndex(t *testing.T) {
 	if _, err := recoverGoBackend(context.Background(), repo, "create /healthz with net/http and serve the static frontend"); err != nil {
 		t.Fatalf("recoverGoBackend() error = %v", err)
 	}
-	if err := runShell(context.Background(), repo, "go test ./..."); err != nil {
+	if err := runShell(context.Background(), filepath.Join(repo, "server"), "go test ./..."); err != nil {
 		t.Fatalf("go test after recovery: %v", err)
 	}
 	mainGo, err := os.ReadFile(filepath.Join(repo, "server", "main.go"))
@@ -1999,8 +1999,10 @@ func TestRecoverDockerfileCopiesStaticFrontendAssetsWhenPresent(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags=\"-s -w\" -o /out/app ./server",
-		"COPY --from=build /src/client /app/client",
+		"WORKDIR /src/server",
+		"COPY server/go.mod ./",
+		"RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags=\"-s -w\" -o /out/app .",
+		"COPY client /app/client",
 	} {
 		if !strings.Contains(string(dockerfile), want) {
 			t.Fatalf("Dockerfile missing %q:\n%s", want, dockerfile)
@@ -2023,7 +2025,7 @@ func TestRecoverDockerfileCopiesStaticFrontendAssetsWithoutPackageJSON(t *testin
 		t.Fatal(err)
 	}
 	files := map[string]string{
-		"go.mod":                                  "module github.com/hakobune8/arun-test\n\ngo 1.22\n",
+		filepath.Join("server", "go.mod"):         "module github.com/hakobune8/arun-test/server\n\ngo 1.22\n",
 		filepath.Join("server", "main.go"):        "package main\n\nimport \"net/http\"\n\nfunc main() { http.HandleFunc(\"/healthz\", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(\"ok\")) }); http.ListenAndServe(\":8080\", nil) }\n",
 		filepath.Join("client", "index.html"):     `<!doctype html><link rel="stylesheet" href="styles.css"><script src="src/main.js"></script>`,
 		filepath.Join("client", "styles.css"):     "body { margin: 0; }\n",
@@ -2044,7 +2046,7 @@ func TestRecoverDockerfileCopiesStaticFrontendAssetsWithoutPackageJSON(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(dockerfile), "COPY --from=build /src/client /app/client") {
+	if !strings.Contains(string(dockerfile), "COPY client /app/client") {
 		t.Fatalf("Dockerfile does not copy package-less static frontend assets:\n%s", dockerfile)
 	}
 	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
@@ -2442,7 +2444,7 @@ func TestRecoverGoBackend_CreatesValidService(t *testing.T) {
 	if !strings.Contains(out, "Go net/http service") {
 		t.Fatalf("output = %q", out)
 	}
-	for _, file := range []string{"go.mod", filepath.Join("server", "main.go")} {
+	for _, file := range []string{filepath.Join("server", "go.mod"), filepath.Join("server", "main.go")} {
 		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
 			t.Fatalf("%s not created: %v", file, err)
 		}
@@ -2458,7 +2460,7 @@ func TestRecoverGoBackend_CreatesValidService(t *testing.T) {
 	}
 }
 
-func TestGoQualityGateRejectsNestedServerModule(t *testing.T) {
+func TestGoQualityGateRejectsConflictingRootAndServerModules(t *testing.T) {
 	t.Parallel()
 
 	repo := t.TempDir()
@@ -2492,12 +2494,12 @@ func main() {
 	if status.Passed {
 		t.Fatalf("quality gate passed with nested server/go.mod: %+v", status)
 	}
-	if !strings.Contains(qualityGateError(status), "nested Go module") {
-		t.Fatalf("quality gate error = %q, want nested Go module", qualityGateError(status))
+	if !strings.Contains(qualityGateError(status), "root go.mod conflicts") {
+		t.Fatalf("quality gate error = %q, want root go.mod conflict", qualityGateError(status))
 	}
 }
 
-func TestRecoverGoBackendRemovesNestedServerModule(t *testing.T) {
+func TestRecoverGoBackendRemovesConflictingRootModule(t *testing.T) {
 	t.Parallel()
 
 	repo := t.TempDir()
@@ -2516,8 +2518,11 @@ func TestRecoverGoBackendRemovesNestedServerModule(t *testing.T) {
 	if _, err := recoverGoBackend(context.Background(), repo, "Create a minimal Go net/http server with /healthz."); err != nil {
 		t.Fatalf("recoverGoBackend() error = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(repo, "server", "go.mod")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("server/go.mod still exists or stat failed unexpectedly: %v", err)
+	if _, err := os.Stat(filepath.Join(repo, "go.mod")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("root go.mod still exists or stat failed unexpectedly: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "server", "go.mod")); err != nil {
+		t.Fatalf("server/go.mod missing after recovery: %v", err)
 	}
 	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
 		AgentName:   "go-backend",

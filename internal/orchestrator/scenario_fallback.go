@@ -181,7 +181,7 @@ func recoverScrumPlanning(root string, subtask *Subtask) (string, error) {
 	if err := os.WriteFile(filepath.Join(root, "docs", "product-brief.md"), []byte(frontendProductBrief(title, subtask.Description)), 0o600); err != nil {
 		return "", fmt.Errorf("write docs/product-brief.md: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "docs", "artifact-contract.md"), []byte(artifactContractDoc(title, inferModulePath(subtask.Description, root))), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "docs", "artifact-contract.md"), []byte(artifactContractDoc(title, inferServerModulePath(subtask.Description, root))), 0o600); err != nil {
 		return "", fmt.Errorf("write docs/artifact-contract.md: %w", err)
 	}
 	safeID := strings.TrimSpace(subtask.ID)
@@ -206,8 +206,8 @@ func recoverScrumPlanning(root string, subtask *Subtask) (string, error) {
 			"  repository goal.\n"+
 			"- Keep follow-up implementation stages responsible for concrete code changes.\n\n"+
 			"## Validation Expectations\n\n"+
-			"- Run `go test ./...` when Go sources are present.\n"+
-			"- Run `go vet ./...` when the Go toolchain is available.\n"+
+			"- Run `cd server && go test ./...` when Go sources are present.\n"+
+			"- Run `cd server && go vet ./...` when the Go toolchain is available.\n"+
 			"- Record smoke-test evidence in repository documentation.\n",
 		strings.TrimSpace(subtask.ID),
 		strings.TrimSpace(subtask.Description),
@@ -300,18 +300,18 @@ func recoverGoBackend(ctx context.Context, root, description string) (string, er
 			return "", err
 		}
 	}
-	modulePath := inferModulePath(description, root)
-	if !fileExists(filepath.Join(root, "go.mod")) {
-		if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module "+modulePath+"\n\ngo 1.22\n"), 0o600); err != nil {
-			return "", fmt.Errorf("write go.mod: %w", err)
+	serverDir := generatedAppServerDir(root, description)
+	if err := os.MkdirAll(filepath.Join(root, serverDir), 0o755); err != nil {
+		return "", fmt.Errorf("create %s: %w", serverDir, err)
+	}
+	modulePath := inferServerModulePath(description, root)
+	if !fileExists(filepath.Join(root, serverDir, "go.mod")) {
+		if err := os.WriteFile(filepath.Join(root, serverDir, "go.mod"), []byte("module "+modulePath+"\n\ngo 1.22\n"), 0o600); err != nil {
+			return "", fmt.Errorf("write %s/go.mod: %w", serverDir, err)
 		}
 	}
 	if err := repairGeneratedGoModuleLayout(root); err != nil {
 		return "", err
-	}
-	serverDir := generatedAppServerDir(root, description)
-	if err := os.MkdirAll(filepath.Join(root, serverDir), 0o755); err != nil {
-		return "", fmt.Errorf("create %s: %w", serverDir, err)
 	}
 	main := frontendServingGoMain()
 	if err := os.WriteFile(filepath.Join(root, serverDir, "main.go"), []byte(main), 0o600); err != nil {
@@ -431,10 +431,10 @@ func TestRootHandlerServesFrontendAssets(t *testing.T) {
 	if !commandAvailable("go") {
 		return "Created minimal Go net/http service with / and /healthz. Go toolchain is unavailable; validation used static artifact checks.", nil
 	}
-	if err := runShell(ctx, root, "go test ./..."); err != nil {
+	if err := runShell(ctx, filepath.Join(root, serverDir), "go test ./..."); err != nil {
 		return "", err
 	}
-	if err := runShell(ctx, root, "go vet ./..."); err != nil {
+	if err := runShell(ctx, filepath.Join(root, serverDir), "go vet ./..."); err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("Created minimal Go net/http service with / and /healthz under %s.", filepath.ToSlash(serverDir)), nil
@@ -513,6 +513,17 @@ func generatedAppServerDir(root, description string) string {
 	return "server"
 }
 
+func generatedGoModuleExists(root string) bool {
+	return fileExists(filepath.Join(root, "server", "go.mod")) || fileExists(filepath.Join(root, "go.mod"))
+}
+
+func generatedGoModuleDir(root string) string {
+	if fileExists(filepath.Join(root, "server", "go.mod")) {
+		return "server"
+	}
+	return "."
+}
+
 func generatedGoEntrypointExists(root string) bool {
 	if fileExists(filepath.Join(root, "main.go")) {
 		return true
@@ -565,16 +576,16 @@ func removeGeneratedGoFiles(root string) error {
 }
 
 func repairGeneratedGoModuleLayout(root string) error {
-	if !fileExists(filepath.Join(root, "go.mod")) {
+	if !fileExists(filepath.Join(root, "server", "go.mod")) {
 		return nil
 	}
 	for _, name := range []string{
-		filepath.Join("server", "go.mod"),
-		filepath.Join("server", "go.sum"),
+		"go.mod",
+		"go.sum",
 	} {
 		path := filepath.Join(root, name)
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("remove nested generated Go module %s: %w", name, err)
+			return fmt.Errorf("remove conflicting root Go module %s: %w", name, err)
 		}
 	}
 	return nil
@@ -892,7 +903,7 @@ tick();
 		filepath.Join("client", "src", "main.js"): mainJS,
 		"README.md": frontendReadme(title, description),
 		filepath.Join("docs", "product-brief.md"):     frontendProductBrief(title, description),
-		filepath.Join("docs", "artifact-contract.md"): artifactContractDoc(title, inferModulePath(description, root)),
+		filepath.Join("docs", "artifact-contract.md"): artifactContractDoc(title, inferServerModulePath(description, root)),
 		filepath.Join("docs", "smoke-test.md"):        frontendSmokeTest(description),
 		filepath.Join("docs", "testing.md"):           frontendTestingDoc(description),
 		"CHANGELOG.md":                                frontendChangelog(description),
@@ -929,7 +940,7 @@ func recoverFrontendDocs(root, description string) (string, error) {
 	files := map[string]string{
 		"README.md": frontendReadme(title, description),
 		filepath.Join("docs", "product-brief.md"):     frontendProductBrief(title, description),
-		filepath.Join("docs", "artifact-contract.md"): artifactContractDoc(title, inferModulePath(description, root)),
+		filepath.Join("docs", "artifact-contract.md"): artifactContractDoc(title, inferServerModulePath(description, root)),
 		filepath.Join("docs", "smoke-test.md"):        frontendSmokeTest(description),
 		filepath.Join("docs", "testing.md"):           frontendTestingDoc(description),
 		"CHANGELOG.md":                                frontendChangelog(description),
@@ -995,11 +1006,15 @@ func ensureGoServesRootFrontendAssets(root string) error {
 }
 
 func recoverGoQA(ctx context.Context, root, description string) (string, error) {
-	if !fileExists(filepath.Join(root, "go.mod")) || !generatedGoEntrypointExists(root) {
+	if !generatedGoModuleExists(root) || !generatedGoEntrypointExists(root) {
 		if _, err := recoverGoBackend(ctx, root, description); err != nil {
 			return "", err
 		}
 	}
+	if err := repairGeneratedGoModuleLayout(root); err != nil {
+		return "", err
+	}
+	moduleDir := generatedGoModuleDir(root)
 	if err := repairDockerfileGoSumAssumption(root); err != nil {
 		return "", err
 	}
@@ -1013,14 +1028,14 @@ func recoverGoQA(ctx context.Context, root, description string) (string, error) 
 		"## Automated validation",
 		"",
 		"```sh",
-		"go test ./...",
-		"go vet ./...",
+		"cd server && go test ./...",
+		"cd server && go vet ./...",
 		"```",
 		"",
 		"## Smoke check",
 		"",
 		"```sh",
-		"go run ./server",
+		"cd server && go run .",
 		"curl http://127.0.0.1:8080/healthz",
 		"```",
 		"",
@@ -1038,9 +1053,9 @@ func recoverGoQA(ctx context.Context, root, description string) (string, error) 
 	smoke := strings.Join([]string{
 		"# Smoke Test",
 		"",
-		"1. Run `go test ./...`.",
-		"2. Run `go vet ./...`.",
-		"3. Start the service with `go run ./server`.",
+		"1. Run `cd server && go test ./...`.",
+		"2. Run `cd server && go vet ./...`.",
+		"3. Start the service with `cd server && go run .`.",
 		"4. Request `http://127.0.0.1:8080/healthz` and confirm the JSON status is `ok`.",
 		"5. Request `/` and confirm the service returns a successful response.",
 		"",
@@ -1063,16 +1078,16 @@ func recoverGoQA(ctx context.Context, root, description string) (string, error) 
 	if !commandAvailable("go") {
 		return "Added Go QA evidence docs. Go toolchain is unavailable; validation used static artifact checks.", nil
 	}
-	if err := runShell(ctx, root, "go mod tidy"); err != nil {
+	if err := runShell(ctx, filepath.Join(root, moduleDir), "go mod tidy"); err != nil {
 		return "", err
 	}
-	if err := runShell(ctx, root, "go test ./..."); err != nil {
+	if err := runShell(ctx, filepath.Join(root, moduleDir), "go test ./..."); err != nil {
 		return "", err
 	}
-	if err := runShell(ctx, root, "go vet ./..."); err != nil {
+	if err := runShell(ctx, filepath.Join(root, moduleDir), "go vet ./..."); err != nil {
 		return "", err
 	}
-	return "Added Go QA evidence docs and verified go test ./... and go vet ./....", nil
+	return "Added Go QA evidence docs and verified cd server && go test ./... and go vet ./....", nil
 }
 
 func repairDockerfileGoSumAssumption(root string) error {
@@ -1244,6 +1259,7 @@ func artifactContractDoc(title, modulePath string) string {
 		"",
 		"- Language: Go.",
 		"- Module path: `" + modulePath + "`.",
+		"- Module file: `server/go.mod`.",
 		"- Entrypoint: `server/main.go`.",
 		"- The Go server must serve `/` from `client/index.html` and must serve every local CSS or JavaScript file referenced by that HTML.",
 		"",
@@ -1254,7 +1270,8 @@ func artifactContractDoc(title, modulePath string) string {
 		"",
 		"## Validation",
 		"",
-		"- `go test ./...` passes when Go tooling is available.",
+		"- `cd server && go test ./...` passes when Go tooling is available.",
+		"- `cd server && go vet ./...` passes when Go tooling is available.",
 		"- Frontend smoke validation confirms `/` returns HTML and that referenced local CSS/JS assets exist and are served.",
 		"- QA must treat any mismatch between this contract and repository artifacts as release-blocking.",
 		"",
@@ -1813,7 +1830,7 @@ func promptContaminationCutIndex(content string) int {
 }
 
 func recoverGoCI(ctx context.Context, root string) (string, error) {
-	if !fileExists(filepath.Join(root, "go.mod")) || !generatedGoEntrypointExists(root) {
+	if !generatedGoModuleExists(root) || !generatedGoEntrypointExists(root) {
 		return "", fmt.Errorf("go service files are required before CI recovery")
 	}
 	testDir := "server"
@@ -1876,11 +1893,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
-      - run: go test ./...
-      - run: go vet ./...
+	      - uses: actions/setup-go@v5
+	        with:
+	          go-version: "1.22"
+	      - run: go test ./...
+	        working-directory: server
+	      - run: go vet ./...
+	        working-directory: server
 `
 	if err := os.WriteFile(filepath.Join(workflowDir, "go.yml"), []byte(workflow), 0o600); err != nil {
 		return "", fmt.Errorf("write workflow: %w", err)
@@ -1893,36 +1912,35 @@ jobs:
 	if !commandAvailable("go") {
 		return "Added Go handler tests and GitHub Actions workflow. Go toolchain is unavailable; validation used static artifact checks.", nil
 	}
-	if err := runShell(ctx, root, "go test ./..."); err != nil {
+	if err := runShell(ctx, filepath.Join(root, testDir), "go test ./..."); err != nil {
 		return "", err
 	}
-	if err := runShell(ctx, root, "go vet ./..."); err != nil {
+	if err := runShell(ctx, filepath.Join(root, testDir), "go vet ./..."); err != nil {
 		return "", err
 	}
 	return "Added Go handler tests and GitHub Actions workflow.", nil
 }
 
 func recoverDockerfile(ctx context.Context, root, description string) (string, error) {
-	if !fileExists(filepath.Join(root, "go.mod")) || !generatedGoEntrypointExists(root) {
+	if !generatedGoModuleExists(root) || !generatedGoEntrypointExists(root) {
 		if _, err := recoverGoBackend(ctx, root, description); err != nil {
 			return "", err
 		}
 	}
+	if err := repairGeneratedGoModuleLayout(root); err != nil {
+		return "", err
+	}
 	staticAssetCopies := ""
 	if staticFrontendProjectExists(root) {
-		staticAssetCopies = `COPY --from=build /src/client /app/client
+		staticAssetCopies = `COPY client /app/client
 `
 	}
-	buildTarget := "."
-	if fileExists(filepath.Join(root, "server", "main.go")) {
-		buildTarget = "./server"
-	}
 	dockerfile := fmt.Sprintf(`FROM golang:1.22-alpine AS build
-WORKDIR /src
-COPY go.mod ./
+WORKDIR /src/server
+COPY server/go.mod ./
 RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/app %s
+COPY server/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/app .
 
 FROM alpine:3.20
 RUN addgroup -S app && adduser -S app -G app
@@ -1933,7 +1951,7 @@ USER app
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
 ENTRYPOINT ["/app/app"]
-`, buildTarget, staticAssetCopies)
+`, staticAssetCopies)
 	dockerignore := `.git
 run.log
 run_state.json
@@ -2103,7 +2121,7 @@ func recoverDocs(root, description string) (string, error) {
 		"## Run",
 		"",
 		"```sh",
-		"go run ./server",
+		"cd server && go run .",
 		"```",
 		"",
 		"The service listens on `:8080`.",
@@ -2116,8 +2134,8 @@ func recoverDocs(root, description string) (string, error) {
 		"## Test",
 		"",
 		"```sh",
-		"go test ./...",
-		"go vet ./...",
+		"cd server && go test ./...",
+		"cd server && go vet ./...",
 		"```",
 		"",
 	}, "\n")
@@ -2164,6 +2182,17 @@ func inferModulePath(description, root string) string {
 		return "arun-scenario"
 	}
 	return sanitizePackageName(name)
+}
+
+func inferServerModulePath(description, root string) string {
+	modulePath := strings.TrimSuffix(inferModulePath(description, root), "/")
+	if modulePath == "" {
+		return "arun-scenario/server"
+	}
+	if strings.HasSuffix(modulePath, "/server") {
+		return modulePath
+	}
+	return modulePath + "/server"
 }
 
 func githubModuleFromGitRemote(root string) string {
