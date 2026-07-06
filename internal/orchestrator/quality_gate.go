@@ -49,6 +49,8 @@ const qaValidationCommand = `sh -c 'if [ -f package.json ]; then PM=npm; [ -f pn
 
 const docsValidationCommand = `sh -c 'if [ -f docs/remediation_notes.md ] && grep -Eiq "human-led sprint|コード実装は行わず|計画段階|implementation is deferred|no code changes" docs/remediation_notes.md; then echo "documentation defers required implementation"; exit 1; fi; if [ -f main.go ] && ! grep -q "\"/health\"" main.go && grep -R --include="*.md" -E "/health endpoint|/health エンドポイント" README.md docs 2>/dev/null | grep -vq "/healthz"; then echo "documentation mentions /health but main.go does not serve it"; exit 1; fi; for dir in cmd web frontend internal; do if [ ! -d "$dir" ] && grep -R --include="*.md" -E "(^|[^[:alnum:]_./-])$dir/" README.md docs 2>/dev/null; then echo "documentation mentions missing $dir/ layout"; exit 1; fi; done'`
 
+const reportOnlyValidationCommand = `sh -c 'if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then changed=$(git diff --name-only -- client server Dockerfile charts k8s .github 2>/dev/null | head -n1); test -z "$changed" || { echo "report-only subtask modified implementation or deployment file: $changed"; exit 1; }; fi'`
+
 const goModuleLayoutValidationCommand = `sh -c 'if [ -f go.mod ] && [ -f server/go.mod ]; then root_go=$(find . -maxdepth 1 -name "*.go" -print -quit); test -n "$root_go" || { echo "root go.mod conflicts with canonical server/go.mod"; exit 1; }; fi'`
 
 const goTestValidationCommand = `sh -c 'moddir=.; [ -f server/go.mod ] && moddir=server; if command -v go >/dev/null 2>&1; then if [ "$moddir" = "." ] && [ -f go.mod ]; then nested=$(find . -path "./.git" -prune -o -mindepth 2 -name go.mod -print | head -n1); test -z "$nested" || { echo "nested Go module $nested hides packages from root go test ./..."; exit 1; }; fi; (cd "$moddir" && pkgs=$(go list ./...) && test -n "$pkgs" || { echo "go list ./... matched no packages in $moddir"; exit 1; }); (cd "$moddir" && go test ./...); else main=server/main.go; [ "$moddir" = "." ] && main=main.go; test -f "$moddir/go.mod" && test -f "$main" && grep -q "/healthz" "$main"; fi'`
@@ -151,7 +153,7 @@ func qualityGateForSubtask(subtask *Subtask) *QualityGate {
 		}
 	case "release-manager":
 		return &QualityGate{
-			RequiredFiles: []string{"CHANGELOG.md"},
+			ValidationCommands: []string{reportOnlyValidationCommand},
 			ContentChecks: []QualityContentCheck{{
 				File:     "CHANGELOG.md",
 				Contains: []string{"Changelog", "v"},

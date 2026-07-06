@@ -973,6 +973,9 @@ func recoverFrontendQA(root, description string) (string, error) {
 }
 
 func recoverFrontendRelease(root, description string) (string, error) {
+	if err := discardReportOnlyImplementationChanges(root); err != nil {
+		return "", err
+	}
 	if err := os.WriteFile(filepath.Join(root, "CHANGELOG.md"), []byte(frontendChangelog(description)), 0o600); err != nil {
 		return "", fmt.Errorf("write CHANGELOG.md: %w", err)
 	}
@@ -980,6 +983,36 @@ func recoverFrontendRelease(root, description string) (string, error) {
 		return "", err
 	}
 	return "Added CHANGELOG.md for the static frontend scaffold release.", nil
+}
+
+func discardReportOnlyImplementationChanges(root string) error {
+	if !commandAvailable("git") {
+		return nil
+	}
+	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
+	cmd.Dir = root
+	if err := cmd.Run(); err != nil {
+		return nil
+	}
+	targets := []string{"client", "server", "Dockerfile", "charts", "k8s", ".github"}
+	diffArgs := append([]string{"diff", "--name-only", "--"}, targets...)
+	cmd = exec.Command("git", diffArgs...)
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("inspect report-only implementation changes: %w", err)
+	}
+	changed := strings.Fields(string(out))
+	if len(changed) == 0 {
+		return nil
+	}
+	args := append([]string{"checkout", "--"}, changed...)
+	cmd = exec.Command("git", args...)
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("discard report-only implementation changes: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 func ensureGoServesRootFrontendAssets(root string) error {

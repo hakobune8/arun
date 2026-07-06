@@ -287,7 +287,7 @@ func TestApplyDefaultQualityGate_SpecializedBuiltIns(t *testing.T) {
 	}{
 		{"security", "SECURITY.md"},
 		{"frontend", ""},
-		{"release-manager", "CHANGELOG.md"},
+		{"release-manager", ""},
 		{"dependency-updater", filepath.Join("server", "go.mod")},
 		{"qa", ""},
 		{"docker", "Dockerfile"},
@@ -2708,6 +2708,55 @@ func TestRecoverBuiltInSubtask_StaticFrontendQAAndRelease(t *testing.T) {
 	}
 	if !strings.Contains(string(changelog), "v0.1.0") {
 		t.Fatalf("CHANGELOG.md missing version entry:\n%s", changelog)
+	}
+}
+
+func TestRecoverFrontendReleaseDiscardsImplementationChanges(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if _, err := recoverFrontendStaticApp(repo, "新規性のあるインベーダーゲームを作成する"); err != nil {
+		t.Fatalf("recoverFrontendStaticApp() error = %v", err)
+	}
+	if err := runCmd(context.Background(), repo, "git", "init", "-b", "main"); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+	if err := runCmd(context.Background(), repo, "git", "config", "user.email", "arun@example.com"); err != nil {
+		t.Fatalf("git config email: %v", err)
+	}
+	if err := runCmd(context.Background(), repo, "git", "config", "user.name", "ARUN"); err != nil {
+		t.Fatalf("git config name: %v", err)
+	}
+	if err := runCmd(context.Background(), repo, "git", "add", "."); err != nil {
+		t.Fatalf("git add: %v", err)
+	}
+	if err := runCmd(context.Background(), repo, "git", "commit", "-m", "baseline"); err != nil {
+		t.Fatalf("git commit: %v", err)
+	}
+	original, err := os.ReadFile(filepath.Join(repo, "client", "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "client", "index.html"), []byte("<!doctype html><title>Corrupted</title>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := recoverFrontendRelease(repo, "Sprint 1 reporting: summarize validation evidence."); err != nil {
+		t.Fatalf("recoverFrontendRelease() error = %v", err)
+	}
+	restored, err := os.ReadFile(filepath.Join(repo, "client", "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(restored) != string(original) {
+		t.Fatalf("client/index.html was not restored:\n%s", restored)
+	}
+	changelog, err := os.ReadFile(filepath.Join(repo, "CHANGELOG.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(changelog), "v0.1.0") {
+		t.Fatalf("CHANGELOG.md missing release entry:\n%s", changelog)
 	}
 }
 
