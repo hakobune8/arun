@@ -680,8 +680,8 @@ func recoverFrontendStaticApp(root, description string) (string, error) {
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --check client/src/main.js",
-    "build": "node --check client/src/main.js"
+    "test": "node --check src/main.js",
+    "build": "node --check src/main.js"
   }
 }
 `, sanitizePackageName(projectName))
@@ -961,7 +961,7 @@ restart();
 tick();
 `
 	files := map[string]string{
-		"package.json":                            packageJSON,
+		filepath.Join("client", "package.json"):   packageJSON,
 		filepath.Join("client", "index.html"):     indexHTML,
 		filepath.Join("client", "styles.css"):     stylesCSS,
 		filepath.Join("client", "src", "main.js"): mainJS,
@@ -1289,11 +1289,11 @@ func frontendReadme(title, description string) string {
 		"## Validate",
 		"",
 		"```sh",
-		"npm test",
-		"npm run build",
+		"npm --prefix client test",
+		"npm --prefix client run build",
 		"```",
 		"",
-		"Both scripts use `node --check` and do not require package installation.",
+		"Both scripts use `node --check` from `client/package.json` and do not require package installation.",
 		"",
 	}, "\n")
 }
@@ -1348,6 +1348,7 @@ func artifactContractDoc(title, modulePath string) string {
 		"## Frontend",
 		"",
 		"- Directory: `client/`.",
+		"- Package file: `client/package.json`.",
 		"- Entrypoint: `client/index.html`.",
 		"- Required local assets: `client/styles.css` and `client/src/main.js`.",
 		"- HTML must not reference local CSS or JavaScript files that are absent from the repository.",
@@ -1386,7 +1387,7 @@ func frontendSmokeTest(description string) string {
 		"5. Press Space while aligned on the same lane as the invader and confirm the score increases.",
 		"6. Let an invader reach the bottom and confirm lives decrement.",
 		"7. Click `Restart` and confirm score returns to 0, lives returns to 3, and gravity returns to Floor.",
-		"8. Run `npm test` and `npm run build`.",
+		"8. Run `npm --prefix client test` and `npm --prefix client run build`.",
 		"",
 		"## Product Coverage",
 		"",
@@ -1405,11 +1406,11 @@ func frontendTestingDoc(description string) string {
 		"Run the configured package scripts when a JavaScript runtime is available:",
 		"",
 		"```sh",
-		"npm test",
-		"npm run build",
+		"npm --prefix client test",
+		"npm --prefix client run build",
 		"```",
 		"",
-		"The generated scaffold keeps both commands dependency-free by using syntax checks for `client/src/main.js`.",
+		"The generated scaffold keeps both commands dependency-free by using syntax checks from `client/package.json`.",
 		"",
 		"## Manual smoke check",
 		"",
@@ -1443,7 +1444,7 @@ func frontendChangelog(description string) string {
 		"## Release readiness",
 		"",
 		"- Review the generated static files before publishing.",
-		"- Run `npm test` and `npm run build` when a JavaScript runtime is available.",
+		"- Run `npm --prefix client test` and `npm --prefix client run build` when a JavaScript runtime is available.",
 		"- Perform the manual browser smoke check documented in `docs/testing.md`.",
 		"",
 	}, "\n")
@@ -1451,6 +1452,9 @@ func frontendChangelog(description string) string {
 
 func cleanupGeneratedArtifactHygiene(root string) error {
 	if err := repairGeneratedGoModuleLayout(root); err != nil {
+		return err
+	}
+	if err := repairGeneratedFrontendPackageLayout(root); err != nil {
 		return err
 	}
 	if err := migrateGeneratedRootAppLayout(root); err != nil {
@@ -1589,7 +1593,10 @@ func migrateGeneratedRootAppLayout(root string) error {
 }
 
 func rewriteGeneratedPackageJSONForStaticLayout(root string) error {
-	path := filepath.Join(root, "package.json")
+	path := filepath.Join(root, "client", "package.json")
+	if !fileExists(path) {
+		path = filepath.Join(root, "package.json")
+	}
 	if !fileExists(path) {
 		return nil
 	}
@@ -1597,11 +1604,36 @@ func rewriteGeneratedPackageJSONForStaticLayout(root string) error {
 	if err != nil {
 		return err
 	}
-	updated := strings.ReplaceAll(string(data), "node --check src/main.js", "node --check client/src/main.js")
+	updated := strings.ReplaceAll(string(data), "node --check client/src/main.js", "node --check src/main.js")
 	if updated == string(data) {
 		return nil
 	}
 	return os.WriteFile(path, []byte(updated), 0o600)
+}
+
+func repairGeneratedFrontendPackageLayout(root string) error {
+	rootPkg := filepath.Join(root, "package.json")
+	if !fileExists(rootPkg) || !fileExists(filepath.Join(root, "client", "index.html")) {
+		return nil
+	}
+	data, err := os.ReadFile(rootPkg)
+	if err != nil {
+		return err
+	}
+	content := strings.ReplaceAll(string(data), "node --check client/src/main.js", "node --check src/main.js")
+	clientPkg := filepath.Join(root, "client", "package.json")
+	if err := os.MkdirAll(filepath.Dir(clientPkg), 0o755); err != nil {
+		return err
+	}
+	if !fileExists(clientPkg) {
+		if err := os.WriteFile(clientPkg, []byte(content), 0o600); err != nil {
+			return err
+		}
+	}
+	if err := os.Remove(rootPkg); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 func referencedRootFrontendAssets(indexPath string) ([]string, error) {
