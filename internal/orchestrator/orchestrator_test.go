@@ -1477,6 +1477,46 @@ func main() {
 	}
 }
 
+func TestFrontendQualityGateFailsForUnreferencedGeneratedClientAsset(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	files := map[string]string{
+		"README.md": "# One-Button Invaders\n",
+		filepath.Join("docs", "product-brief.md"):     "# One-Button Invaders\n",
+		filepath.Join("docs", "artifact-contract.md"): "# Contract\n\n## Primary route\n/\n\n## Frontend\n- Entrypoint: `client/index.html`.\n- Required local assets: `client/styles.css` and `client/src/main.js`.\n\n## Backend\n- Go module: `github.com/hakobune8/arun-test/server`.\n\n## Validation\n- `npm --prefix client test`.\n",
+		filepath.Join("client", "index.html"):         `<!doctype html><title>One-Button Invaders</title><link rel="stylesheet" href="./styles.css"><script src="./src/main.js"></script>`,
+		filepath.Join("client", "styles.css"):         `body { color: white; }`,
+		filepath.Join("client", "style.css"):          `.unused { color: red; }`,
+		filepath.Join("client", "src", "main.js"):     `console.log("ok");`,
+		filepath.Join("client", "package.json"):       `{"scripts":{"test":"node --check src/main.js","build":"node --check src/main.js"}}`,
+		filepath.Join("server", "main.go"): `package main
+
+import "net/http"
+
+func main() {
+	http.Handle("/", http.FileServer(http.Dir("../client")))
+}
+`,
+	}
+	for path, content := range files {
+		full := filepath.Join(repo, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "frontend",
+		Description: "Add a browser game UI.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed with unreferenced generated asset: %+v", status)
+	}
+}
+
 func TestUnservedRootFrontendAssetsExist(t *testing.T) {
 	t.Parallel()
 
@@ -1584,6 +1624,147 @@ func main() {
 	}
 }
 
+func TestGeneratedArtifactHygieneFailsForEmptyGeneratedFiles(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	emptyChart := filepath.Join(repo, "charts", "invader-game")
+	if err := os.MkdirAll(filepath.Join(emptyChart, "templates"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range []string{
+		filepath.Join(emptyChart, "Chart.yaml"),
+		filepath.Join(emptyChart, "values.yaml"),
+		filepath.Join(emptyChart, "templates", "deployment.yaml"),
+		filepath.Join(emptyChart, "templates", "service.yaml"),
+	} {
+		if err := os.WriteFile(file, nil, 0o600); err != nil {
+			t.Fatalf("write %s: %v", file, err)
+		}
+	}
+
+	status := validateQualityGate(context.Background(), repo, &QualityGate{
+		ValidationCommands: []string{generatedArtifactHygieneValidationCommand},
+	})
+	if status.Passed {
+		t.Fatalf("quality gate passed with empty generated chart files: %+v", status)
+	}
+	if err := cleanupGeneratedArtifactHygiene(repo); err != nil {
+		t.Fatalf("cleanupGeneratedArtifactHygiene() error = %v", err)
+	}
+	if _, err := os.Stat(emptyChart); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("empty chart directory still exists or unexpected error: %v", err)
+	}
+}
+
+func TestGeneratedArtifactHygieneRemovesDuplicateCIWorkflowName(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	workflowDir := filepath.Join(repo, ".github", "workflows")
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "client"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "client", "package.json"), []byte(`{"scripts":{"test":"node --check src/main.js","build":"node --check src/main.js"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, "ci.yml"), []byte("name: CI\non: [push]\njobs: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	goWorkflow := `name: CI
+on: [push]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - run: go test ./...
+      - run: go vet ./...
+      - run: npm --prefix client test
+      - run: npm --prefix client run build
+`
+	if err := os.WriteFile(filepath.Join(workflowDir, "go.yml"), []byte(goWorkflow), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	status := validateQualityGate(context.Background(), repo, &QualityGate{
+		ValidationCommands: []string{generatedArtifactHygieneValidationCommand},
+	})
+	if status.Passed {
+		t.Fatalf("quality gate passed with duplicate CI workflow name: %+v", status)
+	}
+	if err := cleanupGeneratedArtifactHygiene(repo); err != nil {
+		t.Fatalf("cleanupGeneratedArtifactHygiene() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workflowDir, "ci.yml")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("duplicate ci.yml still exists or unexpected error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workflowDir, "go.yml")); err != nil {
+		t.Fatalf("go.yml was removed unexpectedly: %v", err)
+	}
+}
+
+func TestGeneratedArtifactHygieneRemovesStrayRootHelmChartMetadata(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	files := map[string]string{
+		filepath.Join("charts", "Chart.yaml"):               "apiVersion: v2\nname: arun-test\ntype: application\nversion: 0.1.0\n",
+		filepath.Join("charts", "arun-test", "Chart.yaml"):  "apiVersion: v2\nname: arun-test\ntype: application\nversion: 0.1.0\n",
+		filepath.Join("charts", "arun-test", "values.yaml"): "replicaCount: 1\n",
+		filepath.Join("charts", "arun-test", "templates", "deployment.yaml"): `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arun-test
+spec:
+  selector:
+    matchLabels:
+      app: arun-test
+  template:
+    metadata:
+      labels:
+        app: arun-test
+    spec:
+      containers:
+        - name: arun-test
+          image: nginx
+`,
+		filepath.Join("charts", "arun-test", "templates", "service.yaml"): `apiVersion: v1
+kind: Service
+metadata:
+  name: arun-test
+spec:
+  selector:
+    app: arun-test
+  ports:
+    - port: 80
+`,
+	}
+	for path, content := range files {
+		full := filepath.Join(repo, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, &QualityGate{
+		ValidationCommands: []string{generatedArtifactHygieneValidationCommand},
+	})
+	if status.Passed {
+		t.Fatalf("quality gate passed with stray root chart metadata: %+v", status)
+	}
+	if err := cleanupGeneratedArtifactHygiene(repo); err != nil {
+		t.Fatalf("cleanupGeneratedArtifactHygiene() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "charts", "Chart.yaml")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stray charts/Chart.yaml still exists or unexpected error: %v", err)
+	}
+}
+
 func TestDocsQualityGateFailsForDeferredRemediationNotes(t *testing.T) {
 	t.Parallel()
 
@@ -1600,6 +1781,32 @@ func TestDocsQualityGateFailsForDeferredRemediationNotes(t *testing.T) {
 	}))
 	if status.Passed {
 		t.Fatalf("quality gate passed with deferred remediation notes: %+v", status)
+	}
+}
+
+func TestDocsQualityGateFailsForSprintRemediationPlanOnlyNotes(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := "# Sprint 2 調整計画: 修正ノート\n\n本ドキュメントは計画段階のものであり、コード実装は含まれません。\n\n`.github/workflows/ci.yml` を更新します。\n"
+	if err := os.WriteFile(filepath.Join(repo, "docs", "sprint-2-remediation-notes.md"), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "docs",
+		Description: "Sprint 3 documentation for generated product.",
+	}))
+	if status.Passed {
+		t.Fatalf("quality gate passed with plan-only sprint remediation notes: %+v", status)
+	}
+	if err := cleanupGeneratedArtifactHygiene(repo); err != nil {
+		t.Fatalf("cleanupGeneratedArtifactHygiene() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "docs", "sprint-2-remediation-notes.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("plan-only remediation notes still exist or unexpected error: %v", err)
 	}
 }
 
@@ -2066,6 +2273,64 @@ func main() {
 	}
 	if !strings.Contains(string(mainGo), "staticAssetPath") {
 		t.Fatalf("server/main.go did not gain static asset serving:\n%s", mainGo)
+	}
+}
+
+func TestRecoverBuiltInSubtask_FrontendValidationRecoversUnservedClientAssets(t *testing.T) {
+	t.Parallel()
+	if !commandAvailable("go") {
+		t.Skip("go toolchain unavailable")
+	}
+
+	repo := t.TempDir()
+	files := map[string]string{
+		filepath.Join("docs", "artifact-contract.md"): "# Contract\n\n## Primary route\n/\n\n## Frontend\nclient/\n\n## Backend\nserver/\n\n## Validation\ngo test\n",
+		filepath.Join("client", "index.html"):         `<!doctype html><title>Phase Invaders</title><link rel="stylesheet" href="style.css"><script src="app.js"></script>`,
+		filepath.Join("client", "style.css"):          `body { color: black; }`,
+		filepath.Join("client", "app.js"):             `console.log("phase");`,
+		filepath.Join("server", "go.mod"):             "module github.com/hakobune8/arun-test/server\n\ngo 1.22\n",
+		filepath.Join("server", "main.go"):            frontendServingGoMain(),
+	}
+	for name, content := range files {
+		full := filepath.Join(repo, name)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	if !unservedClientFrontendAssetsExist(repo) {
+		t.Fatalf("unservedClientFrontendAssetsExist() = false, want true")
+	}
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-client-assets-step"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"frontend": &recordingAgent{name: "frontend"}},
+		&runtime.Config{},
+	)
+	subtask := &Subtask{
+		ID:          "sprint-1-frontend",
+		AgentName:   "frontend",
+		Description: "Sprint 1 coding: create or connect a minimal user-facing frontend/static experience.",
+	}
+	applyDefaultQualityGate(subtask)
+
+	result, ok := o.recoverBuiltInSubtask(context.Background(), subtask, runSandbox, errors.New("validation failed after 3 retries: tests"))
+	if !ok || !result.Success {
+		t.Fatalf("recoverBuiltInSubtask() = (%+v, %v), want success", result, ok)
+	}
+	if result.QualityGate == nil || !result.QualityGate.Passed {
+		t.Fatalf("quality gate = %+v, want passed", result.QualityGate)
+	}
+	for _, removed := range []string{filepath.Join("client", "style.css"), filepath.Join("client", "app.js")} {
+		if _, err := os.Stat(filepath.Join(repo, removed)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%s still exists or unexpected error: %v", removed, err)
+		}
 	}
 }
 
@@ -2884,6 +3149,73 @@ func TestRecoverGoCI_CreatesWorkflowAndTests(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
 			t.Fatalf("%s not created: %v", file, err)
 		}
+	}
+}
+
+func TestRecoverGoCI_IncludesClientValidationWhenClientPackageExists(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if _, err := recoverFrontendStaticApp(repo, "新規性のあるインベーダーゲームを作成する"); err != nil {
+		t.Fatalf("recoverFrontendStaticApp() error = %v", err)
+	}
+	if _, err := recoverGoBackend(context.Background(), repo, "create /healthz with Go HTTP server"); err != nil {
+		t.Fatalf("recoverGoBackend() error = %v", err)
+	}
+	if _, err := recoverGoCI(context.Background(), repo); err != nil {
+		t.Fatalf("recoverGoCI() error = %v", err)
+	}
+	workflow, err := os.ReadFile(filepath.Join(repo, ".github", "workflows", "go.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"actions/setup-node@v4", "npm --prefix client test", "npm --prefix client run build"} {
+		if !strings.Contains(string(workflow), want) {
+			t.Fatalf("workflow missing %q:\n%s", want, workflow)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, qualityGateForSubtask(&Subtask{
+		AgentName:   "devops",
+		Description: "Sprint 3 coding: add or improve GitHub Actions CI so future pull requests can continuously run checks.",
+	}))
+	if !status.Passed {
+		t.Fatalf("devops quality gate failed after CI recovery: %+v", status)
+	}
+}
+
+func TestRecoverNoOpDevopsCreatesMissingCIWorkflow(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("ARUN_HOME", filepath.Join(t.TempDir(), "arun-home"))
+	if _, err := recoverFrontendStaticApp(repo, "新規性のあるインベーダーゲームを作成する"); err != nil {
+		t.Fatalf("recoverFrontendStaticApp() error = %v", err)
+	}
+	if _, err := recoverGoBackend(context.Background(), repo, "create /healthz with Go HTTP server"); err != nil {
+		t.Fatalf("recoverGoBackend() error = %v", err)
+	}
+	runSandbox := sandbox.NewLocalSandbox(repo)
+	if err := runSandbox.PrepareRun("run-devops-ci"); err != nil {
+		t.Fatalf("PrepareRun() error = %v", err)
+	}
+	o := NewOrchestrator(
+		llm.NewMockLLMClient(nil),
+		sandbox.NewLocalSandbox(repo),
+		map[string]runtime.Agent{"devops": &recordingAgent{name: "devops"}},
+		&runtime.Config{},
+	)
+
+	result, ok := o.recoverNoOpBuiltInSubtask(context.Background(), &Subtask{
+		ID:          "sprint-3-devops",
+		AgentName:   "devops",
+		Description: "Sprint 3 coding: add or improve GitHub Actions CI so future pull requests can continuously run the available backend/frontend/container checks.",
+	}, runSandbox)
+	if !ok || !result.Success {
+		t.Fatalf("recoverNoOpBuiltInSubtask() = (%+v, %v), want success", result, ok)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".github", "workflows", "go.yml")); err != nil {
+		t.Fatalf("workflow not created: %v", err)
+	}
+	if result.QualityGate == nil || !result.QualityGate.Passed {
+		t.Fatalf("quality gate = %+v, want passed", result.QualityGate)
 	}
 }
 

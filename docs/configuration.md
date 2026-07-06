@@ -216,6 +216,8 @@ MCP server commands inherit the ARUN environment variables, including `LITELLM_A
 | `GITHUB_OAUTH_CLIENT_ID` | `""` | GitHub OAuth App client ID |
 | `GITHUB_OAUTH_CLIENT_SECRET` | `""` | GitHub OAuth App client secret |
 | `GITHUB_OAUTH_CALLBACK_URL` | `""` | OAuth callback URL, for example `/auth/callback` on the public host |
+| `GITHUB_OAUTH_SCOPE` | `read:user repo workflow` | GitHub OAuth scopes requested by browser and device-flow login |
+| `GITHUB_OAUTH_DEVICE_CODE_URL` | `https://github.com/login/device/code` | GitHub OAuth device-code endpoint |
 | `ARUN_SESSION_SECRET` | `""` | HMAC secret for signed Web UI session cookies |
 
 When `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, and either
@@ -227,9 +229,12 @@ The fallback personal access token requires the following scopes:
 - `repo` — for private repositories
 - `public_repo` — for public repositories only
 
-GitHub login uses OAuth `read:user` to identify the UI user. Repository cloning
-and GitHub API access use server-side GitHub App or token credentials; user
-scoped repository credentials are a later auth-aware extension.
+GitHub login uses OAuth to identify the UI user and, when available, uses the
+user-scoped token for repository picker and orchestration publish operations.
+The default `read:user repo workflow` scope lets ARUN create Issues, push
+branches, open PRs, and publish generated GitHub Actions workflow files. OAuth
+Apps must have device flow enabled before `/api/auth/device/start` can be used
+for browserless authorization.
 
 ### Artifact Language and Templates
 

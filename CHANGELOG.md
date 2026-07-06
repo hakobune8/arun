@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [v1.5.31] - 2026-07-07
+
+### Fixed
+- Failed generated artifact quality gates when implementation-heavy scrum runs
+  leave empty generated files, duplicate CI workflow names, stray root Helm
+  chart metadata, or plan-only remediation documents in generated repositories.
+- Recovered generated frontend output by removing stale unreferenced assets and
+  by retrying when the Go entrypoint does not serve the same CSS/JS referenced
+  by `client/index.html`.
+- Recovered generated CI output so GitHub Actions workflows include Go
+  validation and client validation when a generated `client/package.json`
+  exists.
+
+### Changed
+- Added GitHub OAuth device-flow API endpoints and a `scripts/device-login.sh`
+  helper for repeatable authenticated runs outside the Web UI.
+- Requested `repo workflow` OAuth scope by default so generated GitHub Actions
+  workflows can be pushed by authenticated orchestration runs.
+- Preserved validation deployments on live validation failures so failed runs
+  can be inspected and retried without rebuilding the verification path.
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.31.
+
 ## [v1.5.30] - 2026-07-06
 
 ### Fixed

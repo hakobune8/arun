@@ -71,6 +71,18 @@ namespace Secret as `GITHUB_TOKEN`. Use this for non-WebUI validation runs that
 must create Issues, push branches, and create PRs without a browser OAuth
 session. Alternatively set `VALIDATION_GITHUB_TOKEN` explicitly.
 
+For user-scoped validation with GitHub OAuth, enable device flow on the OAuth
+App and run:
+
+```bash
+ARUN_BASE_URL=https://arun.hakobune8.com scripts/device-login.sh
+```
+
+The script stores a signed ARUN session cookie in
+`~/.arun/device-session.cookie`. Use that cookie jar with authenticated API
+requests when validation must publish generated GitHub Actions workflow files
+with the user's `workflow` scope.
+
 Set `RUN_EVALS=1` to also run the built-in orchestration evals:
 
 ```bash
@@ -123,9 +135,8 @@ scripts/live-validate-orchestrate.sh
 The script relies on the deployment's existing runtime environment, including
 `GITHUB_TOKEN`, LiteLLM presets, and persistent `ARUN_HOME`, so it exercises the
 same server orchestration path as the Web UI without requiring a browser
-session. GitHub OAuth device flow is not required for this smoke path. Device
-flow is only needed if the validation must run with a user-scoped OAuth token
-while keeping the public authenticated API enabled.
+session. Use device flow when the validation must run with a user-scoped OAuth
+token while keeping the public authenticated API enabled.
 
 Useful overrides:
 

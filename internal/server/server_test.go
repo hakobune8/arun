@@ -940,6 +940,90 @@ func TestServer_AuthSessionDoesNotExposeAccessToken(t *testing.T) {
 	}
 }
 
+func TestServer_AuthDeviceFlowCreatesSessionWithWorkflowScope(t *testing.T) {
+	var tokenPolls int
+	var sawDeviceScope string
+	oauth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/login/device/code":
+			if err := r.ParseForm(); err != nil {
+				t.Fatal(err)
+			}
+			sawDeviceScope = r.Form.Get("scope")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"device_code":"device-123","user_code":"ABCD-1234","verification_uri":"https://github.com/login/device","verification_uri_complete":"https://github.com/login/device?user_code=ABCD-1234","expires_in":900,"interval":1}`))
+		case "/login/oauth/access_token":
+			tokenPolls++
+			if err := r.ParseForm(); err != nil {
+				t.Fatal(err)
+			}
+			if got := r.Form.Get("grant_type"); got != "urn:ietf:params:oauth:grant-type:device_code" {
+				t.Fatalf("grant_type = %q", got)
+			}
+			if got := r.Form.Get("device_code"); got != "device-123" {
+				t.Fatalf("device_code = %q", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			if tokenPolls == 1 {
+				_, _ = w.Write([]byte(`{"error":"authorization_pending","error_description":"waiting"}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"access_token":"device-token","token_type":"bearer","scope":"read:user,repo,workflow"}`))
+		case "/user":
+			if got := r.Header.Get("Authorization"); got != "Bearer device-token" {
+				t.Fatalf("Authorization = %q", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"login":"alice","name":"Alice","avatar_url":"https://example.com/a.png","html_url":"https://github.com/alice"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer oauth.Close()
+
+	t.Setenv("ARUN_AUTH_REQUIRED", "true")
+	t.Setenv("ARUN_SESSION_SECRET", "test-secret")
+	t.Setenv("GITHUB_OAUTH_CLIENT_ID", "client-id")
+	t.Setenv("GITHUB_OAUTH_DEVICE_CODE_URL", oauth.URL+"/login/device/code")
+	t.Setenv("GITHUB_OAUTH_TOKEN_URL", oauth.URL+"/login/oauth/access_token")
+	t.Setenv("GITHUB_OAUTH_USER_URL", oauth.URL+"/user")
+	s := NewServer(0)
+
+	start := serveRequest(s, "POST", "/api/auth/device/start", nil)
+	assertStatus(t, start.Code, http.StatusOK)
+	if !strings.Contains(start.Body.String(), `"userCode":"ABCD-1234"`) {
+		t.Fatalf("start response = %s", start.Body.String())
+	}
+	if !strings.Contains(sawDeviceScope, "workflow") {
+		t.Fatalf("scope = %q, want workflow", sawDeviceScope)
+	}
+
+	pending := serveRequest(s, "POST", "/api/auth/device/poll", []byte(`{"deviceCode":"device-123"}`))
+	assertStatus(t, pending.Code, http.StatusAccepted)
+	if !strings.Contains(pending.Body.String(), `"status":"pending"`) {
+		t.Fatalf("pending response = %s", pending.Body.String())
+	}
+
+	done := serveRequest(s, "POST", "/api/auth/device/poll", []byte(`{"deviceCode":"device-123"}`))
+	assertStatus(t, done.Code, http.StatusOK)
+	if !strings.Contains(done.Body.String(), `"status":"authenticated"`) || strings.Contains(done.Body.String(), "device-token") {
+		t.Fatalf("authenticated response = %s", done.Body.String())
+	}
+	if len(done.Result().Cookies()) == 0 {
+		t.Fatal("missing session cookie")
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/session", http.NoBody)
+	for _, cookie := range done.Result().Cookies() {
+		req.AddCookie(cookie)
+	}
+	w := httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+	assertStatus(t, w.Code, http.StatusOK)
+	if !strings.Contains(w.Body.String(), `"login":"alice"`) || strings.Contains(w.Body.String(), "device-token") {
+		t.Fatalf("session response = %s", w.Body.String())
+	}
+}
+
 func TestServer_FetchGitHubUserRetriesUnauthorizedBearerWithTokenScheme(t *testing.T) {
 	var calls int
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

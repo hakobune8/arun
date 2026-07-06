@@ -112,6 +112,8 @@ func NewServer(port int) *Server {
 	}
 
 	mux.HandleFunc("/api/auth/session", s.handleAuthSession)
+	mux.HandleFunc("/api/auth/device/start", s.handleAuthDeviceStart)
+	mux.HandleFunc("/api/auth/device/poll", s.handleAuthDevicePoll)
 	mux.HandleFunc("/auth/login", s.handleAuthLogin)
 	mux.HandleFunc("/auth/callback", s.handleAuthCallback)
 	mux.HandleFunc("/auth/logout", s.handleAuthLogout)

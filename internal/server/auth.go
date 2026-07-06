@@ -36,8 +36,10 @@ type authConfig struct {
 	ClientSecret  string
 	RedirectURL   string
 	SessionSecret string
+	OAuthScope    string
 	AuthorizeURL  string
 	TokenURL      string
+	DeviceCodeURL string
 	UserURL       string
 	AdminUsers    map[string]bool
 }
@@ -67,6 +69,38 @@ type githubTokenResponse struct {
 	Description string `json:"error_description"`
 }
 
+type githubDeviceCodeResponse struct {
+	DeviceCode              string `json:"device_code"`
+	UserCode                string `json:"user_code"`
+	VerificationURI         string `json:"verification_uri"`
+	VerificationURIComplete string `json:"verification_uri_complete"`
+	ExpiresIn               int    `json:"expires_in"`
+	Interval                int    `json:"interval"`
+	Error                   string `json:"error"`
+	Description             string `json:"error_description"`
+}
+
+type authDeviceStartResponse struct {
+	DeviceCode              string `json:"deviceCode"`
+	UserCode                string `json:"userCode"`
+	VerificationURI         string `json:"verificationUri"`
+	VerificationURIComplete string `json:"verificationUriComplete,omitempty"`
+	ExpiresIn               int    `json:"expiresIn"`
+	Interval                int    `json:"interval"`
+	Scope                   string `json:"scope"`
+}
+
+type authDevicePollRequest struct {
+	DeviceCode string `json:"deviceCode"`
+}
+
+type authDevicePollResponse struct {
+	Status   string    `json:"status"`
+	Message  string    `json:"message,omitempty"`
+	Interval int       `json:"interval,omitempty"`
+	User     *authUser `json:"user,omitempty"`
+}
+
 type githubUserResponse struct {
 	Login     string `json:"login"`
 	Name      string `json:"name"`
@@ -80,8 +114,10 @@ func loadAuthConfig() authConfig {
 		ClientSecret:  os.Getenv("GITHUB_OAUTH_CLIENT_SECRET"),
 		RedirectURL:   strings.TrimSpace(os.Getenv("GITHUB_OAUTH_CALLBACK_URL")),
 		SessionSecret: os.Getenv("ARUN_SESSION_SECRET"),
+		OAuthScope:    envOrDefault("GITHUB_OAUTH_SCOPE", "read:user repo workflow"),
 		AuthorizeURL:  envOrDefault("GITHUB_OAUTH_AUTHORIZE_URL", "https://github.com/login/oauth/authorize"),
 		TokenURL:      envOrDefault("GITHUB_OAUTH_TOKEN_URL", "https://github.com/login/oauth/access_token"),
+		DeviceCodeURL: envOrDefault("GITHUB_OAUTH_DEVICE_CODE_URL", "https://github.com/login/device/code"),
 		UserURL:       envOrDefault("GITHUB_OAUTH_USER_URL", "https://api.github.com/user"),
 		AdminUsers:    parseAdminUsers(os.Getenv("ARUN_ADMIN_USERS")),
 	}
@@ -98,6 +134,10 @@ func (c *authConfig) enabled() bool {
 
 func (c *authConfig) oauthConfigured() bool {
 	return c.ClientID != "" && c.ClientSecret != "" && c.RedirectURL != "" && c.SessionSecret != ""
+}
+
+func (c *authConfig) deviceFlowConfigured() bool {
+	return c.ClientID != "" && c.DeviceCodeURL != "" && c.TokenURL != "" && c.UserURL != "" && c.SessionSecret != ""
 }
 
 func parseAdminUsers(raw string) map[string]bool {
@@ -199,10 +239,92 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	q := u.Query()
 	q.Set("client_id", s.auth.ClientID)
 	q.Set("redirect_uri", s.auth.RedirectURL)
-	q.Set("scope", "read:user repo")
+	q.Set("scope", s.auth.OAuthScope)
 	q.Set("state", state)
 	u.RawQuery = q.Encode()
 	http.Redirect(w, r, u.String(), http.StatusFound)
+}
+
+func (s *Server) handleAuthDeviceStart(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.auth.enabled() {
+		http.Error(w, "authentication is not required", http.StatusBadRequest)
+		return
+	}
+	if !s.auth.deviceFlowConfigured() {
+		http.Error(w, "GitHub OAuth device flow is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	device, err := s.requestGitHubDeviceCode(r.Context())
+	if err != nil {
+		http.Error(w, "request GitHub device code: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	interval := device.Interval
+	if interval <= 0 {
+		interval = 5
+	}
+	_ = json.NewEncoder(w).Encode(authDeviceStartResponse{
+		DeviceCode:              device.DeviceCode,
+		UserCode:                device.UserCode,
+		VerificationURI:         device.VerificationURI,
+		VerificationURIComplete: device.VerificationURIComplete,
+		ExpiresIn:               device.ExpiresIn,
+		Interval:                interval,
+		Scope:                   s.auth.OAuthScope,
+	}) //nolint:errcheck // best-effort response
+}
+
+func (s *Server) handleAuthDevicePoll(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.auth.enabled() {
+		http.Error(w, "authentication is not required", http.StatusBadRequest)
+		return
+	}
+	if !s.auth.deviceFlowConfigured() {
+		http.Error(w, "GitHub OAuth device flow is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	var req authDevicePollRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	token, pending, interval, err := s.exchangeGitHubDeviceCode(r.Context(), strings.TrimSpace(req.DeviceCode))
+	if pending {
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(authDevicePollResponse{Status: "pending", Message: err.Error(), Interval: interval}) //nolint:errcheck // best-effort response
+		return
+	}
+	if err != nil {
+		http.Error(w, "exchange GitHub device code: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	user, err := s.fetchGitHubUser(r.Context(), token)
+	if err != nil {
+		http.Error(w, "fetch GitHub user: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	user.AccessToken = token
+	user.ExpiresAt = time.Now().UTC().Add(24 * time.Hour)
+	session, err := json.Marshal(user)
+	if err != nil {
+		http.Error(w, "create session", http.StatusInternalServerError)
+		return
+	}
+	http.SetCookie(w, signedCookie(sessionCookieName, string(session), 24*time.Hour, s.auth.SessionSecret))
+	_ = json.NewEncoder(w).Encode(authDevicePollResponse{
+		Status: "authenticated",
+		User:   publicAuthUser(user),
+	}) //nolint:errcheck // best-effort response
 }
 
 func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
@@ -321,6 +443,87 @@ func (s *Server) exchangeGitHubCode(ctx context.Context, code string) (string, e
 	}
 	slog.Info("GitHub OAuth token exchanged", "scope", token.Scope, "token_type", token.TokenType)
 	return token.AccessToken, nil
+}
+
+func (s *Server) requestGitHubDeviceCode(ctx context.Context) (*githubDeviceCodeResponse, error) {
+	form := url.Values{}
+	form.Set("client_id", s.auth.ClientID)
+	form.Set("scope", s.auth.OAuthScope)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.auth.DeviceCodeURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
+	}
+	var device githubDeviceCodeResponse
+	if err := json.Unmarshal(data, &device); err != nil {
+		return nil, err
+	}
+	if device.Error != "" {
+		return nil, fmt.Errorf("%s: %s", device.Error, device.Description)
+	}
+	if device.DeviceCode == "" || device.UserCode == "" || device.VerificationURI == "" {
+		return nil, fmt.Errorf("device code response missing required fields")
+	}
+	return &device, nil
+}
+
+func (s *Server) exchangeGitHubDeviceCode(ctx context.Context, deviceCode string) (token string, pending bool, interval int, err error) {
+	if deviceCode == "" {
+		return "", false, 0, fmt.Errorf("missing device code")
+	}
+	form := url.Values{}
+	form.Set("client_id", s.auth.ClientID)
+	form.Set("device_code", deviceCode)
+	form.Set("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.auth.TokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", false, 0, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", false, 0, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", false, 0, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", false, 0, fmt.Errorf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
+	}
+	var parsed githubTokenResponse
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return "", false, 0, err
+	}
+	switch parsed.Error {
+	case "":
+	case "authorization_pending":
+		return "", true, 0, fmt.Errorf("authorization pending")
+	case "slow_down":
+		return "", true, 5, fmt.Errorf("slow down")
+	default:
+		return "", false, 0, fmt.Errorf("%s: %s", parsed.Error, parsed.Description)
+	}
+	if parsed.AccessToken == "" {
+		return "", false, 0, fmt.Errorf("missing access token")
+	}
+	slog.Info("GitHub OAuth device token exchanged", "scope", parsed.Scope, "token_type", parsed.TokenType)
+	return parsed.AccessToken, false, 0, nil
 }
 
 func (s *Server) fetchGitHubUser(ctx context.Context, token string) (*authUser, error) {
