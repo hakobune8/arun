@@ -262,6 +262,8 @@ release that changes `charts/arun/**`, update both `version` and
 `appVersion` in `charts/arun/Chart.yaml` intentionally so chart-releaser can
 publish a new immutable chart release.
 
+- [v1.5.30 release notes](docs/release-v1.5.30.md) — Generated artifact
+  contract and client package layout hardening.
 - [v1.5.29 release notes](docs/release-v1.5.29.md) — Missing generated
   frontend asset recovery.
 - [v1.5.28 release notes](docs/release-v1.5.28.md) — Generated module path,

@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [v1.5.30] - 2026-07-06
+
+### Fixed
+- Failed generated app validation when `client/index.html` is served by the Go
+  backend but referenced local CSS or JavaScript assets are not available from
+  the runtime server, catching static asset packaging drift before orchestrate
+  completion.
+- Recovered generated frontend package layout by moving root `package.json`
+  into `client/package.json` for separated `server/` and `client/` generated
+  repositories.
+- Added deterministic recovery for missing generated frontend assets before
+  Docker packaging so container artifacts package the same UI that local server
+  smoke checks exercise.
+- Stabilized Windows CI by skipping the Unix-style runtime server smoke there
+  while preserving the check on Linux/macOS and in live validation.
+
+### Changed
+- Strengthened implementation-heavy scrum artifact contract guidance around
+  product brief consistency, `server/` Go modules, `client/` browser assets,
+  Docker/Helm packaging, and validation commands.
+- Added live validation helper scripts for building validation images in the
+  cluster and running full orchestrate checks against the validation release.
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.30.
+
 ## [v1.5.29] - 2026-07-06
 
 ### Fixed
