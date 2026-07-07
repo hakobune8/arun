@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [v1.5.33] - 2026-07-07
+
+### Fixed
+- Failed generated artifact hygiene when Helm charts use placeholder names such
+  as `charts/name` or `name: name`, preventing syntactically valid but
+  non-mergeable deployment artifacts from completing silently.
+- Recovered placeholder Helm and Kubernetes directory names to repository-derived
+  names before checkpoint commits, including generated deployment docs.
+
+### Changed
+- Updated deterministic Helm fallback to prefer repository-derived chart names
+  and container image repositories when a GitHub remote is available.
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.33.
+
 ## [v1.5.32] - 2026-07-07
 
 ### Fixed

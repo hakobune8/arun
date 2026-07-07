@@ -1657,6 +1657,93 @@ func TestGeneratedArtifactHygieneFailsForEmptyGeneratedFiles(t *testing.T) {
 	}
 }
 
+func TestGeneratedArtifactHygieneRepairsPlaceholderHelmChartNames(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if commandAvailable("git") {
+		if err := runCmd(context.Background(), repo, "git", "init"); err != nil {
+			t.Fatalf("git init: %v", err)
+		}
+		if err := runCmd(context.Background(), repo, "git", "remote", "add", "origin", "git@github.com:hakobune8/arun-test.git"); err != nil {
+			t.Fatalf("git remote add: %v", err)
+		}
+	}
+	chartDir := filepath.Join(repo, "charts", "name")
+	if err := os.MkdirAll(filepath.Join(chartDir, "templates"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join(chartDir, "Chart.yaml"):  "apiVersion: v2\nname: name\ntype: application\nversion: 0.1.0\n",
+		filepath.Join(chartDir, "values.yaml"): "image:\n  repository: ghcr.io/example/app\n  tag: latest\n",
+		filepath.Join(chartDir, "templates", "deployment.yaml"): `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: placeholder
+`,
+		filepath.Join(chartDir, "templates", "service.yaml"): `apiVersion: v1
+kind: Service
+metadata:
+  name: placeholder
+`,
+		filepath.Join(repo, "k8s", "name", "README.md"):     "Render with Helm.\n",
+		filepath.Join(repo, "docs", "kubernetes-deploy.md"): "# Kubernetes Deploy\n\nUse `helm upgrade --install name charts/name` after setting an image tag.\n",
+	}
+	for path, content := range files {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	status := validateQualityGate(context.Background(), repo, &QualityGate{
+		ValidationCommands: []string{generatedArtifactHygieneValidationCommand},
+	})
+	if status.Passed {
+		t.Fatalf("quality gate passed with placeholder Helm chart name: %+v", status)
+	}
+	if err := cleanupGeneratedArtifactHygiene(repo); err != nil {
+		t.Fatalf("cleanupGeneratedArtifactHygiene() error = %v", err)
+	}
+	for _, file := range []string{
+		filepath.Join("charts", "arun-test", "Chart.yaml"),
+		filepath.Join("charts", "arun-test", "values.yaml"),
+		filepath.Join("k8s", "arun-test", "README.md"),
+	} {
+		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
+			t.Fatalf("%s not repaired: %v", file, err)
+		}
+	}
+	chart, err := os.ReadFile(filepath.Join(repo, "charts", "arun-test", "Chart.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(chart), "name: arun-test") {
+		t.Fatalf("chart name not repaired:\n%s", chart)
+	}
+	values, err := os.ReadFile(filepath.Join(repo, "charts", "arun-test", "values.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(values), "ghcr.io/hakobune8/arun-test") {
+		t.Fatalf("image repository not repaired:\n%s", values)
+	}
+	doc, err := os.ReadFile(filepath.Join(repo, "docs", "kubernetes-deploy.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(doc), "charts/name") || !strings.Contains(string(doc), "charts/arun-test") {
+		t.Fatalf("deploy doc not repaired:\n%s", doc)
+	}
+	status = validateQualityGate(context.Background(), repo, &QualityGate{
+		ValidationCommands: []string{generatedArtifactHygieneValidationCommand},
+	})
+	if !status.Passed {
+		t.Fatalf("quality gate failed after placeholder repair: %+v", status)
+	}
+}
+
 func TestGeneratedArtifactHygieneRemovesDuplicateCIWorkflowName(t *testing.T) {
 	t.Parallel()
 

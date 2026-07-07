@@ -262,8 +262,8 @@ release that changes `charts/arun/**`, update both `version` and
 `appVersion` in `charts/arun/Chart.yaml` intentionally so chart-releaser can
 publish a new immutable chart release.
 
-- [v1.5.32 release notes](docs/release-v1.5.32.md) — Generated chart fragment
-  hygiene for human-mergeable PRs.
+- [v1.5.33 release notes](docs/release-v1.5.33.md) — Generated Helm chart
+  placeholder-name hygiene and recovery.
 - [v1.5.31 release notes](docs/release-v1.5.31.md) — Device-flow login and
   generated artifact hygiene recovery.
 - [v1.5.30 release notes](docs/release-v1.5.30.md) — Generated artifact
