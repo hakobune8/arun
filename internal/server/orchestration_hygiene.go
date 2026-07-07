@@ -34,6 +34,11 @@ func scrubRepositoryArtifacts(root string) (repositoryHygieneResult, error) {
 	if root == "" {
 		return result, fmt.Errorf("missing repository workspace")
 	}
+	if changed, err := ensureRepositoryGitignore(root); err != nil {
+		return result, err
+	} else if changed {
+		result.Updated = append(result.Updated, ".gitignore")
+	}
 	if err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -79,6 +84,85 @@ func scrubRepositoryArtifacts(root string) (repositoryHygieneResult, error) {
 		return result, err
 	}
 	return result, nil
+}
+
+func ensureRepositoryGitignore(root string) (bool, error) {
+	if !generatedRepositoryNeedsGitignore(root) {
+		return false, nil
+	}
+	path := filepath.Join(root, ".gitignore")
+	var existing string
+	if data, err := os.ReadFile(path); err == nil {
+		existing = string(data)
+	} else if !os.IsNotExist(err) {
+		return false, err
+	}
+	lines := gitignoreLineSet(existing)
+	patterns := []string{
+		"server/server",
+		"tmp/",
+		"dist/",
+		"node_modules/",
+		"client/node_modules/",
+		"client/dist/",
+		"run.log",
+		"run_state.json",
+		"tool_log.jsonl",
+	}
+	var missing []string
+	for _, pattern := range patterns {
+		if !lines[pattern] {
+			missing = append(missing, pattern)
+		}
+	}
+	if len(missing) == 0 {
+		return false, nil
+	}
+	var b strings.Builder
+	trimmed := strings.TrimRight(existing, "\n")
+	if trimmed != "" {
+		b.WriteString(trimmed)
+		b.WriteString("\n\n")
+	}
+	b.WriteString("# Local build and ARUN run artifacts\n")
+	for _, pattern := range missing {
+		b.WriteString(pattern)
+		b.WriteByte('\n')
+	}
+	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func generatedRepositoryNeedsGitignore(root string) bool {
+	for _, rel := range []string{
+		"go.mod",
+		"package.json",
+		"server",
+		"client",
+		filepath.Join("server", "go.mod"),
+		filepath.Join("client", "package.json"),
+		"Dockerfile",
+		"charts",
+	} {
+		if _, err := os.Stat(filepath.Join(root, rel)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func gitignoreLineSet(content string) map[string]bool {
+	lines := make(map[string]bool)
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		lines[line] = true
+	}
+	return lines
 }
 
 func isGeneratedArtifactNoise(path string, entry fs.DirEntry, rel string) bool {

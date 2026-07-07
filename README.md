@@ -262,6 +262,8 @@ release that changes `charts/arun/**`, update both `version` and
 `appVersion` in `charts/arun/Chart.yaml` intentionally so chart-releaser can
 publish a new immutable chart release.
 
+- [v1.5.35 release notes](docs/release-v1.5.35.md) — Generated repository
+  `.gitignore` recovery and prompt-leak-free planning fallback.
 - [v1.5.34 release notes](docs/release-v1.5.34.md) — Generated empty artifact
   and build-output hygiene before checkpoint publication.
 - [v1.5.31 release notes](docs/release-v1.5.31.md) — Device-flow login and

@@ -56,14 +56,23 @@ func TestScrubRepositoryArtifacts_RemovesBinaryAndPromptBlocks(t *testing.T) {
 	if strings.Join(result.Removed, ",") != "app,server/server" {
 		t.Fatalf("removed = %+v, want app and server/server", result.Removed)
 	}
-	if len(result.Updated) != 2 {
-		t.Fatalf("updated = %+v, want two markdown files", result.Updated)
+	if len(result.Updated) != 3 {
+		t.Fatalf("updated = %+v, want gitignore plus two markdown files", result.Updated)
 	}
 	if _, err := os.Stat(filepath.Join(repo, "app")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("binary stat err = %v, want not exist", err)
 	}
 	if _, err := os.Stat(filepath.Join(repo, "server", "server")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("empty executable stat err = %v, want not exist", err)
+	}
+	gitignore, err := os.ReadFile(filepath.Join(repo, ".gitignore"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"server/server", "tmp/", "dist/", "node_modules/", "client/node_modules/", "client/dist/"} {
+		if !strings.Contains(string(gitignore), want) {
+			t.Fatalf(".gitignore missing %q:\n%s", want, gitignore)
+		}
 	}
 	for _, file := range []string{"README.md", filepath.Join("docs", "testing.md")} {
 		data, err := os.ReadFile(filepath.Join(repo, file))

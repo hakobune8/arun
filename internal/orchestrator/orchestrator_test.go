@@ -3614,6 +3614,11 @@ Target baseline:
 			t.Fatalf("planning artifact missing %q:\n%s", want, body)
 		}
 	}
+	for _, blocked := range []string{"Parent task:", "Do not create product/design.md", "Artifact hygiene:", "Expected output:"} {
+		if strings.Contains(string(body), blocked) {
+			t.Fatalf("planning artifact leaked prompt fragment %q:\n%s", blocked, body)
+		}
+	}
 	for _, file := range []string{filepath.Join("docs", "product-brief.md"), filepath.Join("docs", "artifact-contract.md")} {
 		if _, err := os.Stat(filepath.Join(repo, file)); err != nil {
 			t.Fatalf("%s not created: %v", file, err)

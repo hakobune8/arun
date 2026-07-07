@@ -1728,6 +1728,13 @@ func TestCommitScrumSprintCheckpoint_ScrubsGeneratedArtifacts(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(repo, "server", "server")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("empty generated artifact stat err = %v, want not exist", err)
 	}
+	gitignore, err := os.ReadFile(filepath.Join(repo, ".gitignore"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(gitignore), "server/server") || !strings.Contains(string(gitignore), "node_modules/") {
+		t.Fatalf(".gitignore missing generated artifact patterns:\n%s", gitignore)
+	}
 	cleaned, err := os.ReadFile(filepath.Join(repo, "README.md"))
 	if err != nil {
 		t.Fatal(err)

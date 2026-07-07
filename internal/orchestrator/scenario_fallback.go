@@ -252,12 +252,38 @@ func recoverScrumPlanning(root string, subtask *Subtask) (string, error) {
 			"- Run `cd server && go vet ./...` when the Go toolchain is available.\n"+
 			"- Record smoke-test evidence in repository documentation.\n",
 		strings.TrimSpace(subtask.ID),
-		strings.TrimSpace(subtask.Description),
+		planningRecoveryScope(subtask.Description),
 	)
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		return "", fmt.Errorf("write planning artifact: %w", err)
 	}
 	return fmt.Sprintf("Recovered analyst planning, product brief, and artifact contract by writing %s", filepath.ToSlash(filepath.Join("docs", "sprint-planning", safeID+".md"))), nil
+}
+
+func planningRecoveryScope(description string) string {
+	lines := strings.Split(strings.ReplaceAll(description, "\r\n", "\n"), "\n")
+	var bullets []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- ") {
+			bullets = append(bullets, trimmed)
+		}
+	}
+	if len(bullets) > 0 {
+		if len(bullets) > 5 {
+			bullets = bullets[:5]
+		}
+		return "Create a concise product plan and artifact contract for the requested implementation slice.\n\nKey recovered requirements:\n" + strings.Join(bullets, "\n")
+	}
+	desc := strings.ToLower(description)
+	switch {
+	case requestsInvaderExperience(description):
+		return "Create a concise product plan and artifact contract for a reviewable invader-style browser game with one implemented differentiating mechanic."
+	case strings.Contains(desc, "net/http") || strings.Contains(desc, "healthz"):
+		return "Create a concise product plan and artifact contract for a reviewable Go net/http service with `/healthz`, tests, and fresh-checkout validation."
+	default:
+		return "Create a concise product plan and artifact contract for the requested implementation slice. Keep repository docs focused on product intent, artifact connections, and validation evidence."
+	}
 }
 
 func fallbackRecoveryContext() (context.Context, context.CancelFunc) {
