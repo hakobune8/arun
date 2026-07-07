@@ -7,7 +7,7 @@ replicaCount: 1
 # Container image
 image:
   repository: ghcr.io/hakobune8/arun
-  tag: "v1.5.31"
+  tag: "v1.5.32"
   pullPolicy: IfNotPresent
 
 podSecurityContext:

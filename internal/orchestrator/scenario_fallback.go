@@ -1314,11 +1314,14 @@ func frontendReadme(title, description string) string {
 		"## Validate",
 		"",
 		"```sh",
+		"cd server && go test ./...",
+		"cd server && go vet ./...",
 		"npm --prefix client test",
 		"npm --prefix client run build",
+		"for chart in charts/*; do [ -f \"$chart/Chart.yaml\" ] && helm lint \"$chart\" && helm template arun-validation \"$chart\" >/tmp/arun-validation.yaml; done",
 		"```",
 		"",
-		"Both scripts use `node --check` from `client/package.json` and do not require package installation.",
+		"The client scripts use `node --check` from `client/package.json` and do not require package installation. Run the Helm commands after the chart is present.",
 		"",
 	}, "\n")
 }
@@ -1431,11 +1434,14 @@ func frontendTestingDoc(description string) string {
 		"Run the configured package scripts when a JavaScript runtime is available:",
 		"",
 		"```sh",
+		"cd server && go test ./...",
+		"cd server && go vet ./...",
 		"npm --prefix client test",
 		"npm --prefix client run build",
+		"for chart in charts/*; do [ -f \"$chart/Chart.yaml\" ] && helm lint \"$chart\" && helm template arun-validation \"$chart\" >/tmp/arun-validation.yaml; done",
 		"```",
 		"",
-		"The generated scaffold keeps both commands dependency-free by using syntax checks from `client/package.json`.",
+		"The generated client checks are dependency-free syntax checks from `client/package.json`. Run Helm validation after deployment artifacts are present.",
 		"",
 		"## Manual smoke check",
 		"",
@@ -1491,7 +1497,7 @@ func cleanupGeneratedArtifactHygiene(root string) error {
 	if err := removeIncompleteHelmCharts(root); err != nil {
 		return err
 	}
-	if err := removeStrayRootHelmMetadata(root); err != nil {
+	if err := removeStrayRootHelmMetadataFragments(root); err != nil {
 		return err
 	}
 	if err := removeEmptyGeneratedArtifactFiles(root); err != nil {
@@ -1966,11 +1972,7 @@ func removeIncompleteHelmCharts(root string) error {
 	return nil
 }
 
-func removeStrayRootHelmMetadata(root string) error {
-	rootChart := filepath.Join(root, "charts", "Chart.yaml")
-	if !fileExists(rootChart) {
-		return nil
-	}
+func removeStrayRootHelmMetadataFragments(root string) error {
 	nested, err := filepath.Glob(filepath.Join(root, "charts", "*", "Chart.yaml"))
 	if err != nil {
 		return err
@@ -1978,8 +1980,14 @@ func removeStrayRootHelmMetadata(root string) error {
 	if len(nested) == 0 {
 		return nil
 	}
-	if err := os.Remove(rootChart); err != nil {
-		return fmt.Errorf("remove stray root Helm metadata: %w", err)
+	for _, name := range []string{"Chart.yaml", "values.yaml", "values.schema.json", "Chart.lock", ".helmignore"} {
+		path := filepath.Join(root, "charts", name)
+		if !fileExists(path) {
+			continue
+		}
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("remove stray root Helm metadata %s: %w", name, err)
+		}
 	}
 	return nil
 }
