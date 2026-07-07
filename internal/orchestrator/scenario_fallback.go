@@ -1500,6 +1500,9 @@ func cleanupGeneratedArtifactHygiene(root string) error {
 	if err := removeStrayRootHelmMetadataFragments(root); err != nil {
 		return err
 	}
+	if err := repairPlaceholderHelmChartNames(root); err != nil {
+		return err
+	}
 	if err := removeEmptyGeneratedArtifactFiles(root); err != nil {
 		return err
 	}
@@ -1992,6 +1995,110 @@ func removeStrayRootHelmMetadataFragments(root string) error {
 	return nil
 }
 
+func repairPlaceholderHelmChartNames(root string) error {
+	projectName := inferProjectName("", root)
+	if isPlaceholderProjectName(projectName) {
+		projectName = "arun-sprint-app"
+	}
+	targetChartDir := filepath.Join(root, "charts", projectName)
+	for _, placeholder := range []string{"name", "app", "chart", "sample", "example"} {
+		chartDir := filepath.Join(root, "charts", placeholder)
+		if !fileExists(filepath.Join(chartDir, "Chart.yaml")) {
+			continue
+		}
+		if chartDir == targetChartDir {
+			continue
+		}
+		if dirExists(targetChartDir) {
+			if err := os.RemoveAll(chartDir); err != nil {
+				return fmt.Errorf("remove placeholder Helm chart %s: %w", placeholder, err)
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(targetChartDir), 0o755); err != nil {
+			return err
+		}
+		if err := os.Rename(chartDir, targetChartDir); err != nil {
+			return fmt.Errorf("move placeholder Helm chart %s to %s: %w", placeholder, projectName, err)
+		}
+	}
+	if fileExists(filepath.Join(targetChartDir, "Chart.yaml")) {
+		if err := rewriteHelmChartName(filepath.Join(targetChartDir, "Chart.yaml"), projectName); err != nil {
+			return err
+		}
+		valuesPath := filepath.Join(targetChartDir, "values.yaml")
+		if fileExists(valuesPath) {
+			if err := replaceFileString(valuesPath, "ghcr.io/example/app", inferContainerImageRepository(root, projectName)); err != nil {
+				return err
+			}
+		}
+	}
+	for _, placeholder := range []string{"name", "app", "chart", "sample", "example"} {
+		dir := filepath.Join(root, "k8s", placeholder)
+		if !dirExists(dir) {
+			continue
+		}
+		target := filepath.Join(root, "k8s", projectName)
+		if dirExists(target) {
+			if err := os.RemoveAll(dir); err != nil {
+				return fmt.Errorf("remove placeholder k8s dir %s: %w", placeholder, err)
+			}
+			continue
+		}
+		if err := os.Rename(dir, target); err != nil {
+			return fmt.Errorf("move placeholder k8s dir %s to %s: %w", placeholder, projectName, err)
+		}
+	}
+	deployDoc := filepath.Join(root, "docs", "kubernetes-deploy.md")
+	if fileExists(deployDoc) {
+		if err := rewriteKubernetesDeployDoc(deployDoc, projectName); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rewriteHelmChartName(path, projectName string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(data), "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "name:") {
+			lines[i] = "name: " + projectName
+			return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o600)
+		}
+	}
+	return nil
+}
+
+func replaceFileString(path, old, replacement string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	updated := strings.ReplaceAll(string(data), old, replacement)
+	if updated == string(data) {
+		return nil
+	}
+	return os.WriteFile(path, []byte(updated), 0o600)
+}
+
+func rewriteKubernetesDeployDoc(path, projectName string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	content := string(data)
+	for _, placeholder := range []string{"name", "app", "chart", "sample", "example"} {
+		content = strings.ReplaceAll(content, "helm upgrade --install "+placeholder+" charts/"+placeholder, "helm upgrade --install "+projectName+" charts/"+projectName)
+		content = strings.ReplaceAll(content, "helm install "+placeholder+" charts/"+placeholder, "helm install "+projectName+" charts/"+projectName)
+		content = strings.ReplaceAll(content, "charts/"+placeholder, "charts/"+projectName)
+	}
+	return os.WriteFile(path, []byte(content), 0o600)
+}
+
 func removeGeneratedDocsWithInvalidRepositoryClaims(root string) error {
 	for _, rel := range generatedReportDocCandidates(root) {
 		path := filepath.Join(root, rel)
@@ -2474,10 +2581,11 @@ type: application
 version: 0.1.0
 appVersion: "0.1.0"
 `, projectName)
-	values := `replicaCount: 1
+	imageRepository := inferContainerImageRepository(root, projectName)
+	values := fmt.Sprintf(`replicaCount: 1
 
 image:
-  repository: ghcr.io/example/app
+  repository: %s
   tag: latest
   pullPolicy: IfNotPresent
 
@@ -2486,7 +2594,7 @@ service:
   port: 80
 
 containerPort: 8080
-`
+`, imageRepository)
 	deployment := `apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -2667,6 +2775,15 @@ func githubModuleFromGitRemote(root string) string {
 }
 
 func inferProjectName(description, root string) string {
+	if modulePath := githubModuleFromGitRemote(root); modulePath != "" {
+		parts := strings.Split(modulePath, "/")
+		if len(parts) >= 3 && parts[2] != "" {
+			name := sanitizePackageName(parts[2])
+			if !isPlaceholderProjectName(name) {
+				return name
+			}
+		}
+	}
 	for _, token := range strings.Fields(description) {
 		repo := strings.Trim(token, " \t\r\n.,;:()[]{}<>\"'`")
 		repo = strings.TrimPrefix(repo, "https://github.com/")
@@ -2674,14 +2791,43 @@ func inferProjectName(description, root string) string {
 		repo = strings.TrimSuffix(repo, ".git")
 		parts := strings.Split(repo, "/")
 		if len(parts) >= 2 && parts[0] != "" && parts[1] != "" {
-			return sanitizePackageName(parts[1])
+			name := sanitizePackageName(parts[1])
+			if !isPlaceholderProjectName(name) {
+				return name
+			}
 		}
 	}
 	name := filepath.Base(root)
 	if name == "." || name == string(filepath.Separator) || name == "" {
 		return "arun-sprint-app"
 	}
-	return sanitizePackageName(name)
+	name = sanitizePackageName(name)
+	if isPlaceholderProjectName(name) {
+		return "arun-sprint-app"
+	}
+	return name
+}
+
+func inferContainerImageRepository(root, projectName string) string {
+	if modulePath := githubModuleFromGitRemote(root); modulePath != "" {
+		parts := strings.Split(modulePath, "/")
+		if len(parts) >= 3 && parts[0] == "github.com" && parts[1] != "" && parts[2] != "" {
+			return "ghcr.io/" + strings.ToLower(parts[1]) + "/" + sanitizePackageName(parts[2])
+		}
+	}
+	if projectName == "" {
+		projectName = "arun-sprint-app"
+	}
+	return "ghcr.io/example/" + sanitizePackageName(projectName)
+}
+
+func isPlaceholderProjectName(name string) bool {
+	switch sanitizePackageName(name) {
+	case "name", "app", "chart", "sample", "example":
+		return true
+	default:
+		return false
+	}
 }
 
 func requestsInvaderExperience(description string) bool {
@@ -2778,6 +2924,11 @@ func ciCoversScenario(root string) bool {
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
 
 func repositoryIsEffectivelyEmpty(root string) bool {
