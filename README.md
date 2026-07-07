@@ -262,150 +262,30 @@ release that changes `charts/arun/**`, update both `version` and
 `appVersion` in `charts/arun/Chart.yaml` intentionally so chart-releaser can
 publish a new immutable chart release.
 
-- [v1.5.35 release notes](docs/release-v1.5.35.md) — Generated repository
-  `.gitignore` recovery and prompt-leak-free planning fallback.
-- [v1.5.34 release notes](docs/release-v1.5.34.md) — Generated empty artifact
-  and build-output hygiene before checkpoint publication.
-- [v1.5.31 release notes](docs/release-v1.5.31.md) — Device-flow login and
-  generated artifact hygiene recovery.
-- [v1.5.30 release notes](docs/release-v1.5.30.md) — Generated artifact
-  contract and client package layout hardening.
-- [v1.5.29 release notes](docs/release-v1.5.29.md) — Missing generated
-  frontend asset recovery.
-- [v1.5.28 release notes](docs/release-v1.5.28.md) — Generated module path,
-  issue body, and frontend consistency gates.
-- [v1.5.27 release notes](docs/release-v1.5.27.md) — Generated client/server
-  layout hygiene.
-- [v1.5.26 release notes](docs/release-v1.5.26.md) — Duplicate docs product
-  brief hygiene for generated repositories
-- [v1.5.25 release notes](docs/release-v1.5.25.md) — Duplicate product brief
-  hygiene for generated repositories
-- [v1.5.24 release notes](docs/release-v1.5.24.md) — Generated artifact
-  consistency gates and recovery for stale sprint reports
-- [v1.5.23 release notes](docs/release-v1.5.23.md) — Generated artifact
-  hygiene for alternate UI trees and incomplete charts
-- [v1.5.22 release notes](docs/release-v1.5.22.md) — Generated static asset
-  serving recovery and concise PR summaries
-- [v1.5.21 release notes](docs/release-v1.5.21.md) — Frontend artifact
-  recovery and validation model guidance
-- [v1.5.20 release notes](docs/release-v1.5.20.md) — Generated PR quality
-  gates and PR body hygiene
-- [v1.5.19 release notes](docs/release-v1.5.19.md) — Explicit checkpoint
-  publish leases and generated UI gates
-- [v1.5.18 release notes](docs/release-v1.5.18.md) — Scrum publish and
-  generated artifact gates
-- [v1.5.17 release notes](docs/release-v1.5.17.md) — Generated app container
-  and product coherence gates
-- [v1.5.16 release notes](docs/release-v1.5.16.md) — Checkpoint branch
-  force-with-lease ref refresh
-- [v1.5.15 release notes](docs/release-v1.5.15.md) — Generated product brief
-  and served UI coherence
-- [v1.5.14 release notes](docs/release-v1.5.14.md) — Checkpoint publish timing
-  and Web UI list payloads
-- [v1.5.13 release notes](docs/release-v1.5.13.md) — Early scrum
-  checkpoint publishing
-- [v1.5.12 release notes](docs/release-v1.5.12.md) — Product coherence
-  guidance
-- [v1.5.11 release notes](docs/release-v1.5.11.md) — Generated artifact hygiene
-- [v1.5.10 release notes](docs/release-v1.5.10.md) — PR body cap and planning
-
-- [v1.5.9 release notes](docs/release-v1.5.9.md) — Heavy scrum duration
-  and output quality
-- [v1.5.8 release notes](docs/release-v1.5.8.md) — Task/run readability
-  and dependency timeline
-- [v1.5.7 release notes](docs/release-v1.5.7.md) — Heavy scrum duration
-- [v1.5.6 release notes](docs/release-v1.5.6.md) — Runtime npm validation
-- [v1.5.5 release notes](docs/release-v1.5.5.md) — Go-service frontend
-  validation recovery.
-- [v1.5.4 release notes](docs/release-v1.5.4.md) — Japanese scrum Go QA
-  recovery detection.
-- [v1.5.3 release notes](docs/release-v1.5.3.md) — empty scrum planning output
-  recovery hardening.
-- [v1.5.2 release notes](docs/release-v1.5.2.md) — implementation-heavy Go QA
-  recovery hardening.
-- [v1.5.1 release notes](docs/release-v1.5.1.md) — Japanese Web UI task
-  template and agent description localization
+- [v1.6.0 release notes](docs/release-v1.6.0.md) — Rerun reliability,
+  interrupted orchestration recovery, and device-flow audit evidence.
 - [v1.5.0 release notes](docs/release-v1.5.0.md) — repository transfer to
-  `hakobune8/arun`, Japanese Web UI language support, and staged rename
-  compatibility
+  `hakobune8/arun` and Japanese Web UI language support.
 - [v1.4.1 release notes](docs/release-v1.4.1.md) — Web UI polish,
-  implementation-heavy scrum hardening, and changes since v1.4.0
-- [v1.4.0 release notes](docs/release-v1.4.0.md) — Governance limits, storage
-  retention and cleanup, and orchestration evals
+  implementation-heavy scrum hardening, and changes since v1.4.0.
 
 ## Roadmap
 
-### v1.5+ — Scale, Integrations, and Productization
-- [x] Release v1.5.0 from the transferred repository while preserving v1.4.x-compatible package, chart, CLI, and runtime identifiers
-- [x] Decide whether the product rename proceeds after the repository transfer, using the staged migration plan in [#271](docs/product-rename-migration-plan.md)
-- [ ] Continue staged rename implementation beyond repository, release, image, and public documentation surfaces
-- [ ] Broaden operational evaluation matrices across repositories, clusters, and model presets
-- [ ] Promote proven LiteLLM presets and scenario suites into release gates
-- [ ] Continue hardening release automation, deployment safety, and rollback evidence capture
+### Near Term
+- [x] Repository transfer and ARUN rename foundation.
+- [x] Implementation-heavy scrum generation hardening for mergeable PRs.
+- [x] Device-flow login and operational E2E eval foundations.
+- [x] Interrupted orchestration recovery after server restarts.
+- [ ] Continue staged rename cleanup beyond public surfaces.
+- [ ] Promote proven eval suites and LiteLLM presets into release gates.
+- [ ] Continue release automation, deployment safety, and rollback hardening.
 
-### v1.4.x — Operational Flow Hardening
-- [x] v1.4.1 patch release for implementation-heavy scrum completion,
-  production Web UI flow verification, Stage Presets readability, and
-  completed-subtask pass counts
-- [ ] Authenticated Web UI E2E smoke coverage
-- [ ] Live GitHub issue and pull request workflow scenarios
-- [ ] Live Kubernetes rollout and rollback scenarios
-- [ ] Schedule execution to notification E2E scenarios
-- [ ] Storage cleanup dry-run and execution scenarios against realistic data
-- [ ] Real LLM orchestration smoke scenarios
-- [ ] Recommended LiteLLM preset tuning across common coding, review, reporting, and operations workflows
-- [ ] Three-sprint agile scrum simulation to evaluate planning, backlog refinement, sprint execution, review, and retrospective flows
-
-### v1.4.0 — Governance Scale & Evals
-- [x] Governance execution limits for duration, subtask count, retries, repository concurrency, organization concurrency, LLM token budgets, and GitHub request budgets
-- [x] Storage retention policy, usage reporting, dry-run cleanup, archive-before-delete, cleanup reports, and safe skips for active or GitHub-linked records
-- [x] Orchestration regression and scenario evaluation suite with deterministic coverage, functional coverage reports, JSON/Markdown output, and opt-in live smoke checks
-- [x] Mobile storage cleanup UX for preview-before-cleanup behavior and non-overlapping bottom navigation labels
-
-### v1.3 — Scheduled Operations & Reporting
-- [x] Built-in Docker, Helm, and Kubernetes operations agents
-- [x] Analyst and reporter agents for investigation workflows
-- [x] Log and data sources for investigation agents
-- [x] Recurring orchestration jobs
-- [x] Built-in maintenance and reporting workflow templates
-- [x] Outcome notifications for scheduled orchestrations
-
-### v1.2 — Agent Expansion & Repository Context
-- [x] Expanded built-in agent registry for broader repository workflows
-- [x] Convention-aware built-in agent guidance and specialist routing
-- [x] Repository-defined custom agent profiles
-- [x] Reusable built-in and repository scenario templates
-- [x] Built-in frontend application agent
-- [x] Repository-scoped continuous improvement memory
-- [x] Repository-specific guideline management and retrieval
-- [x] Repository-scoped context discovery UX
-- [x] React and Tailwind CSS Web UI migration
-
-### v1.1 — GitHub Automation & Run UX
-- [x] GitHub App installation tokens for repository write operations
-- [x] Issue-triggered orchestration and source issue comments
-- [x] Pull request creation from orchestration records
-- [x] Close policies, quality gates, and human approval controls
-- [x] RBAC checks, audit logging, and centralized secret redaction
-- [x] Live orchestration progress, timeline, cancellation, and recommendations
-
-### Earlier Foundations
-- [x] Runtime Agent interface, standardized tools, lifecycle hooks, and retry/review loop
-- [x] Built-in agent registry, versioned Agent Definition schema, profiles, and Agent Factory
-- [x] Multi-agent orchestration with sequential and parallel execution
-- [x] Event bus, run persistence, audit-ready artifacts, and JSONL logs
-- [x] Local sandbox interface with Docker backend extension point
-- [x] Vector search, embeddings, memory, guidelines, and unified search
-- [x] GitHub issue, PR, CI checks, and CI-fix workflows
-- [x] MCP client and tool adapter integration
-- [x] Helm chart and Web UI foundation
-- [x] Task YAML loading
-- [x] Profile YAML loading
-- [x] LLM-based planning
-- [x] Tool execution (file, search, shell, git, test)
-- [x] Test/lint with retry
-- [x] Run artifact persistence
-- [x] Safety policies
+### Completed Foundations
+- [x] GitHub issue/PR automation, quality gates, audit logging, and run UX.
+- [x] Repository memory, guidelines, custom agents, and reusable scenarios.
+- [x] Scheduled operations, notifications, storage cleanup, and governance limits.
+- [x] Docker, Helm, Kubernetes, frontend, docs, QA, reviewer, and reporting agents.
+- [x] Web UI, Helm chart, CLI, eval suite, and release workflow foundations.
 
 ## License
 

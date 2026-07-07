@@ -160,6 +160,9 @@ func NewServer(port int) *Server {
 // Start starts the HTTP server and blocks until Shutdown is called.
 func (s *Server) Start() error {
 	slog.Info("ARUN Web UI starting", "port", s.port)
+	if err := s.reconcileInterruptedOrchestrations("server startup"); err != nil {
+		slog.Warn("reconcile interrupted orchestrations failed", "error", err)
+	}
 	s.startScheduler()
 	return s.server.ListenAndServe()
 }
@@ -1580,7 +1583,18 @@ func (s *Server) handleOrchestrateCancel(w http.ResponseWriter, r *http.Request,
 	}
 	cancelRun, ok := s.prepareCancelActiveOrchestration(id)
 	if !ok {
-		http.Error(w, "orchestration is not active on this server", http.StatusConflict)
+		appendOrchestrationEvent(record, "cancel.requested", "", "Cancel requested for persisted orchestration that is not active on this server")
+		record.Status = "canceled"
+		record.Error = "canceled"
+		appendOrchestrationEvent(record, "canceled", "", "Persisted orchestration canceled without an active worker on this server")
+		record.UpdatedAt = time.Now().UTC()
+		updateGovernanceUsage(record)
+		if err := saveOrchestrationRecord(record); err != nil {
+			http.Error(w, "save orchestration: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		s.postSourceIssueFinalComment(record)
+		_ = json.NewEncoder(w).Encode(record) //nolint:errcheck // best-effort response
 		return
 	}
 	record.Status = "canceled"
@@ -1588,6 +1602,7 @@ func (s *Server) handleOrchestrateCancel(w http.ResponseWriter, r *http.Request,
 	appendOrchestrationEvent(record, "cancel.requested", "", "Cancel requested")
 	appendOrchestrationEvent(record, "canceled", "", "Orchestration canceled")
 	record.UpdatedAt = time.Now().UTC()
+	updateGovernanceUsage(record)
 	if err := saveOrchestrationRecord(record); err != nil {
 		cancelRun()
 		http.Error(w, "save orchestration: "+err.Error(), http.StatusInternalServerError)
@@ -1620,6 +1635,41 @@ func (s *Server) cancelActiveOrchestration(id string) bool {
 	return true
 }
 
+func (s *Server) reconcileInterruptedOrchestrations(reason string) error {
+	records, err := listOrchestrationRecords()
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "server startup"
+	}
+	for _, record := range records {
+		if record == nil || !orchestrationInProgress(record.Status) || s.isActiveOrchestration(record.ID) {
+			continue
+		}
+		record.Status = "interrupted"
+		record.Error = "interrupted: ARUN server restarted before this orchestration could finish"
+		for i := range record.Subtasks {
+			if strings.EqualFold(strings.TrimSpace(record.Subtasks[i].Status), "running") {
+				record.Subtasks[i].Status = "interrupted"
+				finished := now
+				record.Subtasks[i].FinishedAt = &finished
+			}
+		}
+		appendOrchestrationEvent(record, "interrupted", "", "Orchestration marked interrupted during "+reason+" because no active worker was registered on this server")
+		record.UpdatedAt = now
+		updateGovernanceUsage(record)
+		if err := saveOrchestrationRecord(record); err != nil {
+			return err
+		}
+		s.auditOrchestrationOutcome(record, auditOutcomeFailure, record.Error)
+		s.notifyScheduledRun(record)
+	}
+	return nil
+}
+
 func (s *Server) prepareCancelActiveOrchestration(id string) (context.CancelFunc, bool) {
 	s.activeMu.Lock()
 	cancel := s.activeRuns[id]
@@ -1637,6 +1687,12 @@ func (s *Server) isOrchestrationCanceled(id string) bool {
 	s.activeMu.Lock()
 	defer s.activeMu.Unlock()
 	return s.canceledRun[id]
+}
+
+func (s *Server) isActiveOrchestration(id string) bool {
+	s.activeMu.Lock()
+	defer s.activeMu.Unlock()
+	return s.activeRuns[id] != nil
 }
 
 func (s *Server) stopCanceledOrchestration(record *orchestrationRecord, message string) bool {

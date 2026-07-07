@@ -123,9 +123,12 @@ always marked `Secure`, so GitHub login should be served over HTTPS.
 For browserless authorization, enable **Device flow** on the same GitHub OAuth
 App. ARUN exposes `POST /api/auth/device/start` to request a user code and
 verification URL, then `POST /api/auth/device/poll` to exchange the approved
-device code for a signed ARUN session cookie. Device flow does not require the
-OAuth client secret, but ARUN still requires `ARUN_SESSION_SECRET` so it can
-sign the resulting session.
+device code for a signed ARUN session cookie. Successful poll responses include
+the requested OAuth scope, while the GitHub token remains inside the signed
+session and is never returned as JSON. Device-flow start, success, failure, and
+logout token-removal events are written to the audit log. Device flow does not
+require the OAuth client secret, but ARUN still requires `ARUN_SESSION_SECRET`
+so it can sign the resulting session.
 
 ### LLM Presets
 

@@ -407,11 +407,22 @@ Content-Type: application/json
 ```
 
 `202 Accepted` means authorization is still pending. `200 OK` sets the same
-`arun_session` cookie used by the Web UI. The access token is stored inside the
-signed session and is never returned in the JSON response.
+`arun_session` cookie used by the Web UI and includes the requested OAuth
+`scope` so operators can confirm that `repo` and `workflow` were requested.
+The access token is stored inside the signed session and is never returned in
+the JSON response.
+
+Device-flow start, success, failure, and logout token-removal events are
+recorded in the audit log. Use `GET /auth/logout` to forget the signed session
+token from the browser or browserless client.
 
 Issue-sourced orchestrations can require human approval before closing their
 source Issue:
+
+Orchestration records can also end with `interrupted`. This means ARUN found a
+persisted `planning` or `running` record during server startup, but no active
+worker was registered in the current process. Treat it as terminal operational
+evidence: review the branch/PR if one exists, then rerun intentionally.
 
 ```http
 POST /api/orchestrates/{id}/approval

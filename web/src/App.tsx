@@ -524,7 +524,7 @@ function Status({ value }: { value?: string | boolean }) {
   const text = String(value ?? 'pending')
   const tone = text.toLowerCase()
   const color =
-    tone.includes('fail') || tone.includes('denied') || tone.includes('reject')
+    tone.includes('fail') || tone.includes('denied') || tone.includes('reject') || tone.includes('interrupt') || tone.includes('cancel')
       ? 'border-red-os/50 bg-red-os/10 text-red-os'
       : tone.includes('complete') || tone.includes('success') || tone.includes('pass') || tone === 'open'
         ? 'border-green-os/50 bg-green-os/10 text-green-os'
@@ -842,7 +842,7 @@ function App() {
             </div>
             <div className="hidden min-w-0 text-left sm:block">
               <div className="text-sm font-semibold tracking-wide text-ink">ARUN</div>
-              <div className="text-[11px] text-soft">v1.5.35 workspace</div>
+              <div className="text-[11px] text-soft">v1.6.0 workspace</div>
             </div>
           </button>
           <nav className="hidden gap-1 md:flex">
