@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [v1.6.0] - 2026-07-07
+
+### Fixed
+- Mark stale `planning` or `running` orchestration records as `interrupted`
+  during server startup when no active worker is registered, preventing dead
+  runs from blocking repository concurrency after pod restarts.
+- Allow canceling persisted running orchestrations even when the original
+  worker disappeared from the current server process.
+
+### Changed
+- Treat `interrupted` orchestrations as terminal for governance usage,
+  notifications, and list responsiveness.
+- Added device-flow audit events for authorization start, successful
+  authentication, failures, and logout token removal, and return the requested
+  OAuth scope in successful device-flow poll responses.
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.6.0.
+
 ## [v1.5.35] - 2026-07-07
 
 ### Fixed

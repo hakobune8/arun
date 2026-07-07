@@ -98,6 +98,7 @@ type authDevicePollResponse struct {
 	Status   string    `json:"status"`
 	Message  string    `json:"message,omitempty"`
 	Interval int       `json:"interval,omitempty"`
+	Scope    string    `json:"scope,omitempty"`
 	User     *authUser `json:"user,omitempty"`
 }
 
@@ -256,11 +257,13 @@ func (s *Server) handleAuthDeviceStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.auth.deviceFlowConfigured() {
+		_ = appendAuditEvent(&auditEvent{Actor: "anonymous", Action: "auth.device.start", Target: "github/oauth-device", Outcome: auditOutcomeDenied, Message: "device flow is not configured"}) //nolint:errcheck // best-effort audit
 		http.Error(w, "GitHub OAuth device flow is not configured", http.StatusServiceUnavailable)
 		return
 	}
 	device, err := s.requestGitHubDeviceCode(r.Context())
 	if err != nil {
+		_ = appendAuditEvent(&auditEvent{Actor: "anonymous", Action: "auth.device.start", Target: "github/oauth-device", Outcome: auditOutcomeFailure, Message: err.Error()}) //nolint:errcheck // best-effort audit
 		http.Error(w, "request GitHub device code: "+err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -277,6 +280,7 @@ func (s *Server) handleAuthDeviceStart(w http.ResponseWriter, r *http.Request) {
 		Interval:                interval,
 		Scope:                   s.auth.OAuthScope,
 	}) //nolint:errcheck // best-effort response
+	_ = appendAuditEvent(&auditEvent{Actor: "anonymous", Action: "auth.device.start", Target: "github/oauth-device", Outcome: auditOutcomeSuccess, Message: "scope=" + s.auth.OAuthScope}) //nolint:errcheck // best-effort audit
 }
 
 func (s *Server) handleAuthDevicePoll(w http.ResponseWriter, r *http.Request) {
@@ -305,11 +309,13 @@ func (s *Server) handleAuthDevicePoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		_ = appendAuditEvent(&auditEvent{Actor: "anonymous", Action: "auth.device.poll", Target: "github/oauth-device", Outcome: auditOutcomeFailure, Message: err.Error()}) //nolint:errcheck // best-effort audit
 		http.Error(w, "exchange GitHub device code: "+err.Error(), http.StatusBadGateway)
 		return
 	}
 	user, err := s.fetchGitHubUser(r.Context(), token)
 	if err != nil {
+		_ = appendAuditEvent(&auditEvent{Actor: "anonymous", Action: "auth.device.poll", Target: "github/oauth-device", Outcome: auditOutcomeFailure, Message: err.Error()}) //nolint:errcheck // best-effort audit
 		http.Error(w, "fetch GitHub user: "+err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -323,8 +329,10 @@ func (s *Server) handleAuthDevicePoll(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, signedCookie(sessionCookieName, string(session), 24*time.Hour, s.auth.SessionSecret))
 	_ = json.NewEncoder(w).Encode(authDevicePollResponse{
 		Status: "authenticated",
+		Scope:  s.auth.OAuthScope,
 		User:   publicAuthUser(user),
 	}) //nolint:errcheck // best-effort response
+	_ = appendAuditEvent(&auditEvent{Actor: user.Login, Action: "auth.device.poll", Target: "github/oauth-device", Outcome: auditOutcomeSuccess, Message: "scope=" + s.auth.OAuthScope}) //nolint:errcheck // best-effort audit
 }
 
 func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
@@ -367,7 +375,9 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
+	user, _ := s.userFromRequest(r)
 	http.SetCookie(w, expiredCookie(sessionCookieName))
+	_ = appendAuditEvent(&auditEvent{Actor: actorLogin(user), Action: "auth.logout", Target: "session", Outcome: auditOutcomeSuccess, Message: "session token removed"}) //nolint:errcheck // best-effort audit
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 

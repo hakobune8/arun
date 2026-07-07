@@ -264,7 +264,7 @@ func organizationFromRepo(repo string) string {
 
 func isTerminalOrchestrationStatus(status string) bool {
 	switch status {
-	case "completed", "failed", "canceled", "pending_approval", "approval_rejected":
+	case "completed", "failed", "canceled", "interrupted", "pending_approval", "approval_rejected":
 		return true
 	default:
 		return false

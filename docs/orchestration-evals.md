@@ -115,7 +115,7 @@ configuration. They are not printed in eval reports. Set
 `ARUN_EVAL_AUTH_E2E_OUT` to capture optional desktop and mobile screenshots
 outside the repository.
 
-Real GitHub writes and Kubernetes rollout checks are separate v1.4.x
+Real GitHub writes and Kubernetes rollout checks are separate opt-in
 operational scenarios. They are not part of the default CI eval suite.
 
 ## Live GitHub Workflow E2E

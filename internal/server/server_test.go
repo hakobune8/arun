@@ -981,6 +981,7 @@ func TestServer_AuthDeviceFlowCreatesSessionWithWorkflowScope(t *testing.T) {
 	}))
 	defer oauth.Close()
 
+	t.Setenv("ARUN_HOME", shortTestDir(t))
 	t.Setenv("ARUN_AUTH_REQUIRED", "true")
 	t.Setenv("ARUN_SESSION_SECRET", "test-secret")
 	t.Setenv("GITHUB_OAUTH_CLIENT_ID", "client-id")
@@ -1009,6 +1010,9 @@ func TestServer_AuthDeviceFlowCreatesSessionWithWorkflowScope(t *testing.T) {
 	if !strings.Contains(done.Body.String(), `"status":"authenticated"`) || strings.Contains(done.Body.String(), "device-token") {
 		t.Fatalf("authenticated response = %s", done.Body.String())
 	}
+	if !strings.Contains(done.Body.String(), `"scope":"read:user repo workflow"`) {
+		t.Fatalf("authenticated response = %s, want requested scope", done.Body.String())
+	}
 	if len(done.Result().Cookies()) == 0 {
 		t.Fatal("missing session cookie")
 	}
@@ -1021,6 +1025,52 @@ func TestServer_AuthDeviceFlowCreatesSessionWithWorkflowScope(t *testing.T) {
 	assertStatus(t, w.Code, http.StatusOK)
 	if !strings.Contains(w.Body.String(), `"login":"alice"`) || strings.Contains(w.Body.String(), "device-token") {
 		t.Fatalf("session response = %s", w.Body.String())
+	}
+	events, err := listAuditEvents(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawStart, sawSuccess bool
+	for _, event := range events {
+		if event.Action == "auth.device.start" && event.Outcome == auditOutcomeSuccess && strings.Contains(event.Message, "workflow") {
+			sawStart = true
+		}
+		if event.Action == "auth.device.poll" && event.Actor == "alice" && event.Outcome == auditOutcomeSuccess && strings.Contains(event.Message, "workflow") {
+			sawSuccess = true
+		}
+	}
+	if !sawStart || !sawSuccess {
+		t.Fatalf("audit events = %+v, want device start and success", events)
+	}
+}
+
+func TestServer_AuthLogoutAuditsTokenRemoval(t *testing.T) {
+	t.Setenv("ARUN_HOME", shortTestDir(t))
+	t.Setenv("ARUN_AUTH_REQUIRED", "true")
+	t.Setenv("ARUN_SESSION_SECRET", "test-secret")
+	s := NewServer(0)
+	session, err := json.Marshal(&authUser{
+		Login:       "alice",
+		AccessToken: "secret-token",
+		ExpiresAt:   time.Now().UTC().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/auth/logout", http.NoBody)
+	req.AddCookie(signedCookie(sessionCookieName, string(session), time.Hour, s.auth.SessionSecret))
+	w := httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+	assertStatus(t, w.Code, http.StatusFound)
+	events, err := listAuditEvents(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) == 0 || events[0].Action != "auth.logout" || events[0].Actor != "alice" || !strings.Contains(events[0].Message, "token removed") {
+		t.Fatalf("audit events = %+v, want logout token removal", events)
+	}
+	if strings.Contains(fmt.Sprint(events), "secret-token") {
+		t.Fatalf("audit events leaked token: %+v", events)
 	}
 }
 
@@ -3881,6 +3931,113 @@ func TestServer_CancelOrchestration(t *testing.T) {
 	}
 	if updated.Status != "canceled" || len(updated.Events) != 2 || updated.Events[0].Type != "cancel.requested" || updated.Events[1].Type != "canceled" {
 		t.Fatalf("updated record = %+v", updated)
+	}
+}
+
+func TestServer_CancelPersistedRunningOrchestrationWithoutActiveWorker(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("ARUN_HOME", home)
+	t.Setenv("ARUN_AUTH_REQUIRED", "true")
+	t.Setenv("ARUN_SESSION_SECRET", "test-secret")
+	t.Setenv("ARUN_ADMIN_USERS", "admin")
+	s := NewServer(0)
+
+	record := &orchestrationRecord{
+		ID:        "run-1234567890abcdef",
+		Status:    "running",
+		CreatedAt: time.Now().UTC().Add(-time.Minute),
+		UpdatedAt: time.Now().UTC().Add(-time.Minute),
+	}
+	if err := saveOrchestrationRecord(record); err != nil {
+		t.Fatal(err)
+	}
+
+	w := serveRequestAs(s, "POST", "/api/orchestrates/"+record.ID+"/cancel", nil, &authUser{
+		Login:     "admin",
+		ExpiresAt: time.Now().UTC().Add(time.Hour),
+	})
+	assertStatus(t, w.Code, http.StatusOK)
+	updated, err := readOrchestrationRecord(record.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Status != "canceled" || updated.Error != "canceled" {
+		t.Fatalf("updated record = %+v, want canceled", updated)
+	}
+	if len(updated.Events) != 2 || updated.Events[0].Type != "cancel.requested" || updated.Events[1].Type != "canceled" {
+		t.Fatalf("events = %+v, want cancel requested and canceled", updated.Events)
+	}
+	if updated.Usage.FinishedAt.IsZero() {
+		t.Fatalf("usage = %+v, want finished timestamp", updated.Usage)
+	}
+}
+
+func TestServer_ReconcileInterruptedOrchestrationsMarksStaleRunningRecords(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("ARUN_HOME", home)
+	s := NewServer(0)
+
+	started := time.Now().UTC().Add(-time.Hour)
+	stale := &orchestrationRecord{
+		ID:         "run-1111111111111111",
+		Repo:       "owner/repo",
+		BaseBranch: "main",
+		Task:       "stale",
+		Status:     "running",
+		CreatedAt:  started,
+		UpdatedAt:  started,
+		Subtasks: []orchestrationSubtaskState{{
+			ID:        "sprint-2-helm",
+			Status:    "running",
+			StartedAt: &started,
+		}},
+	}
+	if err := saveOrchestrationRecord(stale); err != nil {
+		t.Fatal(err)
+	}
+	active := &orchestrationRecord{
+		ID:         "run-2222222222222222",
+		Repo:       "owner/repo",
+		BaseBranch: "main",
+		Task:       "active",
+		Status:     "running",
+		CreatedAt:  started,
+		UpdatedAt:  started,
+	}
+	if err := saveOrchestrationRecord(active); err != nil {
+		t.Fatal(err)
+	}
+	s.registerActiveOrchestration(active.ID, func() {})
+
+	if err := s.reconcileInterruptedOrchestrations("test startup"); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := readOrchestrationRecord(stale.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Status != "interrupted" || !strings.Contains(updated.Error, "server restarted") {
+		t.Fatalf("stale record = %+v, want interrupted", updated)
+	}
+	if len(updated.Subtasks) != 1 || updated.Subtasks[0].Status != "interrupted" || updated.Subtasks[0].FinishedAt == nil {
+		t.Fatalf("subtasks = %+v, want interrupted running subtask", updated.Subtasks)
+	}
+	if len(updated.Events) == 0 || updated.Events[len(updated.Events)-1].Type != "interrupted" {
+		t.Fatalf("events = %+v, want interrupted event", updated.Events)
+	}
+	if updated.Usage.FinishedAt.IsZero() {
+		t.Fatalf("usage = %+v, want finished timestamp", updated.Usage)
+	}
+	if count := s.activeOrchestrationsForRepo("owner/repo"); count != 1 {
+		t.Fatalf("active count = %d, want only registered active run", count)
+	}
+	stillActive, err := readOrchestrationRecord(active.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stillActive.Status != "running" {
+		t.Fatalf("active record status = %q, want running", stillActive.Status)
 	}
 }
 

@@ -294,7 +294,7 @@ func notificationTriggersForRecord(record *orchestrationRecord) []string {
 		return triggers
 	case "pending_approval":
 		return []string{notificationTriggerManualIntervention}
-	case "failed", "canceled":
+	case "failed", "canceled", "interrupted":
 		return []string{notificationTriggerFailed}
 	default:
 		return nil
