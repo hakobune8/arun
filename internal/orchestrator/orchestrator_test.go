@@ -1712,6 +1712,7 @@ func TestGeneratedArtifactHygieneRemovesStrayRootHelmChartMetadata(t *testing.T)
 	repo := t.TempDir()
 	files := map[string]string{
 		filepath.Join("charts", "Chart.yaml"):               "apiVersion: v2\nname: arun-test\ntype: application\nversion: 0.1.0\n",
+		filepath.Join("charts", "values.yaml"):              "replicaCount: 1\nimage:\n  repository: arun-test\n  tag: latest\n",
 		filepath.Join("charts", "arun-test", "Chart.yaml"):  "apiVersion: v2\nname: arun-test\ntype: application\nversion: 0.1.0\n",
 		filepath.Join("charts", "arun-test", "values.yaml"): "replicaCount: 1\n",
 		filepath.Join("charts", "arun-test", "templates", "deployment.yaml"): `apiVersion: apps/v1
@@ -1762,6 +1763,9 @@ spec:
 	}
 	if _, err := os.Stat(filepath.Join(repo, "charts", "Chart.yaml")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("stray charts/Chart.yaml still exists or unexpected error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "charts", "values.yaml")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stray charts/values.yaml still exists or unexpected error: %v", err)
 	}
 }
 

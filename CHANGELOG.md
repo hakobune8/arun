@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [v1.5.32] - 2026-07-07
+
+### Fixed
+- Failed generated artifact hygiene when a repository contains a complete chart
+  under `charts/<name>/` but also leaves orphan root chart fragments such as
+  `charts/values.yaml`, `charts/Chart.yaml`, `charts/Chart.lock`, or
+  `charts/.helmignore`.
+- Recovered those orphan chart fragments before checkpoint commits so generated
+  PRs are closer to a human-mergeable state for continued feature work.
+
+### Changed
+- Strengthened the implementation-heavy scrum template to require
+  self-contained Helm charts and reviewer-accurate generated validation docs.
+- Updated deterministic frontend fallback README/testing docs to surface Go,
+  frontend, and Helm validation commands from a fresh-checkout perspective.
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.32.
+
 ## [v1.5.31] - 2026-07-07
 
 ### Fixed
