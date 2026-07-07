@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [v1.5.34] - 2026-07-07
+
+### Fixed
+- Removed empty generated artifacts such as `server/server` during repository
+  hygiene before sprint checkpoint and publish commits, preventing validation
+  commands from adding review noise to generated PRs.
+- Kept compiled binary cleanup in the same final hygiene path so generated
+  repositories are scrubbed consistently before remote branch publication.
+
+### Changed
+- Strengthened the implementation-heavy scrum template to require a repository
+  `.gitignore` for local build outputs such as `server/server`, `tmp/`,
+  `dist/`, and `node_modules/`.
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.34.
+
 ## [v1.5.33] - 2026-07-07
 
 ### Fixed

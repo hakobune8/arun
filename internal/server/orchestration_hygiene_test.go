@@ -27,6 +27,16 @@ func TestScrubRepositoryArtifacts_RemovesBinaryAndPromptBlocks(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "app"), []byte{0x7f, 'E', 'L', 'F', 0x02, 0x01}, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(repo, "server"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	emptyServerBinary := filepath.Join(repo, "server", "server")
+	if err := os.WriteFile(emptyServerBinary, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(emptyServerBinary, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(filepath.Join(repo, "docs"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -43,14 +53,17 @@ func TestScrubRepositoryArtifacts_RemovesBinaryAndPromptBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scrubRepositoryArtifacts() error = %v", err)
 	}
-	if len(result.Removed) != 1 || result.Removed[0] != "app" {
-		t.Fatalf("removed = %+v, want app", result.Removed)
+	if strings.Join(result.Removed, ",") != "app,server/server" {
+		t.Fatalf("removed = %+v, want app and server/server", result.Removed)
 	}
 	if len(result.Updated) != 2 {
 		t.Fatalf("updated = %+v, want two markdown files", result.Updated)
 	}
 	if _, err := os.Stat(filepath.Join(repo, "app")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("binary stat err = %v, want not exist", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "server", "server")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("empty executable stat err = %v, want not exist", err)
 	}
 	for _, file := range []string{"README.md", filepath.Join("docs", "testing.md")} {
 		data, err := os.ReadFile(filepath.Join(repo, file))
