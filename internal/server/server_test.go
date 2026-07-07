@@ -1421,7 +1421,7 @@ func TestServer_OrchestrateTemplates_ReturnsBuiltIns(t *testing.T) {
 	if strings.Contains(heavy.TaskTemplate, "Japanese stakeholder report") {
 		t.Fatalf("implementation-heavy-scrum template should not force a Japanese stakeholder report")
 	}
-	for _, want := range []string{"Go HTTP server", "Helm chart", "Kubernetes manifests", "GitHub Actions CI", "Quality bar", "Acceptance criteria", "repository layout", "duplicated documentation", "product-centered", "source of truth", "Product coherence status"} {
+	for _, want := range []string{"Go HTTP server", "Helm chart", "Kubernetes manifests", "GitHub Actions CI", "Quality bar", "Acceptance criteria", "repository layout", ".gitignore", "duplicated documentation", "product-centered", "source of truth", "Product coherence status"} {
 		if !strings.Contains(heavy.TaskTemplate, want) {
 			t.Fatalf("implementation-heavy-scrum task missing %q", want)
 		}
@@ -1460,7 +1460,7 @@ func TestServer_OrchestrateTemplates_LocalizesBuiltInsForJapaneseUI(t *testing.T
 	if !strings.Contains(heavy.Description, "sandbox リポジトリ") {
 		t.Fatalf("localized heavy description = %q", heavy.Description)
 	}
-	for _, want := range []string{"Quality bar", "acceptance criteria", "Fresh checkout", "repository layout", "重複 documentation", "product-centered", "source of truth", "Product coherence status"} {
+	for _, want := range []string{"Quality bar", "acceptance criteria", "Fresh checkout", "repository layout", ".gitignore", "重複 documentation", "product-centered", "source of truth", "Product coherence status"} {
 		if !strings.Contains(heavy.TaskTemplate, want) {
 			t.Fatalf("localized implementation-heavy-scrum task missing %q", want)
 		}
@@ -1694,6 +1694,16 @@ func TestCommitScrumSprintCheckpoint_ScrubsGeneratedArtifacts(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, binaryName), []byte{0x7f, 'E', 'L', 'F', 0x02, 0x01}, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(repo, "server"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	emptyServerBinary := filepath.Join(repo, "server", "server")
+	if err := os.WriteFile(emptyServerBinary, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(emptyServerBinary, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	readme := "# Product\n\nUseful overview.\n\n## Scenario\n\nParent task:\nmake a game\n\nOperating mode: build-first\n\nQuality bar:\n- good\n\nExpected output:\n- files\n"
 	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte(readme), 0o600); err != nil {
 		t.Fatal(err)
@@ -1715,6 +1725,9 @@ func TestCommitScrumSprintCheckpoint_ScrubsGeneratedArtifacts(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(repo, binaryName)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("binary artifact stat err = %v, want not exist", err)
 	}
+	if _, err := os.Stat(filepath.Join(repo, "server", "server")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("empty generated artifact stat err = %v, want not exist", err)
+	}
 	cleaned, err := os.ReadFile(filepath.Join(repo, "README.md"))
 	if err != nil {
 		t.Fatal(err)
@@ -1726,8 +1739,8 @@ func TestCommitScrumSprintCheckpoint_ScrubsGeneratedArtifacts(t *testing.T) {
 		t.Fatalf("README lost product content:\n%s", cleaned)
 	}
 	show := runGitTestCommand(t, repo, "show", "--name-only", "--format=", "HEAD")
-	if strings.Contains(show, binaryName) {
-		t.Fatalf("checkpoint committed binary artifact:\n%s", show)
+	if strings.Contains(show, binaryName) || strings.Contains(show, "server/server") {
+		t.Fatalf("checkpoint committed generated artifact:\n%s", show)
 	}
 	if len(record.Events) != 2 {
 		t.Fatalf("events = %d, want hygiene plus commit", len(record.Events))

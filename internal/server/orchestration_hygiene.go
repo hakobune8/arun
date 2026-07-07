@@ -55,9 +55,9 @@ func scrubRepositoryArtifacts(root string) (repositoryHygieneResult, error) {
 			return err
 		}
 		rel = filepath.ToSlash(rel)
-		if isCompiledBinaryArtifact(path, entry) {
+		if isGeneratedArtifactNoise(path, entry, rel) {
 			if err := os.Remove(path); err != nil {
-				return fmt.Errorf("remove compiled artifact %s: %w", rel, err)
+				return fmt.Errorf("remove generated artifact %s: %w", rel, err)
 			}
 			result.Removed = append(result.Removed, rel)
 			return nil
@@ -79,6 +79,37 @@ func scrubRepositoryArtifacts(root string) (repositoryHygieneResult, error) {
 		return result, err
 	}
 	return result, nil
+}
+
+func isGeneratedArtifactNoise(path string, entry fs.DirEntry, rel string) bool {
+	if isEmptyGeneratedArtifact(entry, rel) {
+		return true
+	}
+	return isCompiledBinaryArtifact(path, entry)
+}
+
+func isEmptyGeneratedArtifact(entry fs.DirEntry, rel string) bool {
+	info, err := entry.Info()
+	if err != nil || info.IsDir() || info.Size() != 0 {
+		return false
+	}
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	if strings.HasSuffix(rel, "/.gitkeep") || rel == ".gitkeep" {
+		return false
+	}
+	for _, prefix := range []string{
+		"client/",
+		"server/",
+		"charts/",
+		"k8s/",
+		"docs/",
+		".github/workflows/",
+	} {
+		if strings.HasPrefix(rel, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func isCompiledBinaryArtifact(path string, entry fs.DirEntry) bool {
