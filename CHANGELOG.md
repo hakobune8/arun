@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [v1.5.35] - 2026-07-07
+
+### Fixed
+- Added deterministic `.gitignore` recovery during repository hygiene so
+  generated PRs ignore local build outputs such as `server/server`,
+  `node_modules/`, `dist/`, and ARUN run logs even when the planning agent
+  misses the file.
+- Kept fallback sprint-planning recovery from copying internal parent-task and
+  prompt fragments into generated repository documentation.
+
+### Changed
+- Broadened generated repository hygiene detection so early or partially
+  recovered client/server layouts still receive build-output ignore patterns.
+- Updated the Web UI workspace label, Helm chart `version`, chart
+  `appVersion`, and default image tag for v1.5.35.
+
 ## [v1.5.34] - 2026-07-07
 
 ### Fixed
